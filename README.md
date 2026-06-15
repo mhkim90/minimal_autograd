@@ -14,7 +14,7 @@ experiments — not production.
   backward pass (no double-counting of shared nodes).
 - Element-wise ops (`add`, `mul`, `scale`, `sub`, `div_op`), matmul, ReLU,
   broadcast bias-add with correct bias gradient, sum, softmax, log-softmax,
-  transpose, reshape, concat.
+  transpose, reshape, concat, `hcat` (column-wise / channel-dim cat).
 - Activation ops: `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`,
   `silu`, `softplus` — all gradient-checked.
 - Sequence ops: `cumsum` (axis 0 or 1) and `flip` (axis 0 or 1) with
@@ -58,10 +58,10 @@ This produces the static library `libautograd.a` and three test binaries:
 ./test_core        # core op correctness + grad_check
 ./test_nn          # end-to-end net training (XOR with Adam)
 ./test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
-./test_extensions  # 26 grad-checks for the GUDM extension ops
+./test_extensions  # 30 grad-checks for the GUDM extension ops
 ```
 
-The first three print `ALL TESTS PASSED`. `test_extensions` prints `26/26 passed`.
+The first three print `ALL TESTS PASSED`. `test_extensions` prints `30/30 passed`.
 
 ## Quick start
 
@@ -178,6 +178,7 @@ convention and `test/test_conv.cpp` for examples.
 | E6    | `GroupNorm`                        | `GroupNorm(G, C)`, call `forward(x, C, HW)` at inference time. |
 | E7    | `SiLUModule` / `SigmoidModule`     | Activation modules for use inside `Sequential`.          |
 | E8    | Trig + clamp + column ops          | `sin_op`, `cos_op`, `clamp(x, lo, hi)`, `col_slice(x, start, len)`, `split(x)` → `pair`. |
+| E9    | `hcat`                             | `hcat({a, b, c})` — column-wise cat; mirrors `torch.cat(..., dim=1)`. |
 
 ## Limitations
 
