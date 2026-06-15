@@ -152,6 +152,31 @@ static void test_silu_module() {
     check("SiLUModule", grad_check([&](VarPtr v) { return sum(m.forward(v)); }, x));
 }
 
+static void test_sin_cos() {
+    auto x = rand_var(3, 4);
+    check("sin_op", grad_check([](VarPtr v) { return sum(sin_op(v)); }, x));
+    check("cos_op", grad_check([](VarPtr v) { return sum(cos_op(v)); }, x));
+}
+
+static void test_clamp() {
+    auto x = Var::make((Mat(2, 4) <<
+        -1.f, 0.3f, 0.7f, 1.5f,
+         0.1f, 0.5f, 0.9f, 2.0f).finished());
+    check("clamp", grad_check([](VarPtr v) { return sum(clamp(v, 0.f, 1.f)); }, x));
+}
+
+static void test_col_slice() {
+    auto x = rand_var(3, 6);
+    check("col_slice left",  grad_check([](VarPtr v) { return sum(col_slice(v, 0, 3)); }, x));
+    check("col_slice right", grad_check([](VarPtr v) { return sum(col_slice(v, 3, 3)); }, x));
+}
+
+static void test_split() {
+    auto x = rand_var(2, 4);
+    check("split left",  grad_check([](VarPtr v) { return sum(split(v).first);  }, x));
+    check("split right", grad_check([](VarPtr v) { return sum(split(v).second); }, x));
+}
+
 int main() {
     std::printf("=== test_extensions ===\n");
     std::printf("-- Phase 1: activation + arithmetic ops --\n");
@@ -169,6 +194,11 @@ int main() {
     test_groupnorm_forward();
     std::printf("-- Phase 5: SiLUModule --\n");
     test_silu_module();
+    std::printf("-- Missing GUDM ops --\n");
+    test_sin_cos();
+    test_clamp();
+    test_col_slice();
+    test_split();
     std::printf("\n%d/%d passed\n", passed, passed + failed);
     return (failed == 0) ? 0 : 1;
 }

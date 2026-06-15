@@ -8,6 +8,7 @@
 
 #include "autograd/function.h"
 #include "autograd/tensor.h"
+#include <utility>
 #include <vector>
 
 namespace ag {
@@ -347,6 +348,65 @@ struct FlipFn : Function {
     }
 };
 
+struct SinFn : Function {
+    Mat forward(const Mats& in) override {
+        saved = {in[0]};
+        return in[0].array().sin().matrix();
+    }
+    Mats backward(const Mat& g) override {
+        return {(g.array() * saved[0].array().cos()).matrix()};
+    }
+};
+
+struct CosFn : Function {
+    Mat forward(const Mats& in) override {
+        saved = {in[0]};
+        return in[0].array().cos().matrix();
+    }
+    Mats backward(const Mat& g) override {
+        return {(g.array() * (-saved[0].array().sin())).matrix()};
+    }
+};
+
+// clamp(x, lo, hi) — element-wise. Backward is 0 outside [lo,hi], 1 inside.
+struct ClampFn : Function {
+    float lo, hi;
+    ClampFn(float lo, float hi) : lo(lo), hi(hi) {}
+    Mat forward(const Mats& in) override {
+        saved = {in[0]};
+        return in[0].array().max(lo).min(hi).matrix();
+    }
+    Mats backward(const Mat& g) override {
+        Mat mask = ((saved[0].array() >= lo) && (saved[0].array() <= hi))
+                       .cast<float>().matrix();
+        return {g.cwiseProduct(mask)};
+    }
+};
+
+// ColSliceFn — extract columns [start, start+len).
+// Used to implement split/chunk: call twice with start=0 and start=half.
+struct ColSliceFn : Function {
+    int start, len;
+    ColSliceFn(int start, int len) : start(start), len(len) {}
+    Mat forward(const Mats& in) override {
+        saved = {in[0]};
+        return in[0].middleCols(start, len);
+    }
+    Mats backward(const Mat& g) override {
+        Mat grad = Mat::Zero(saved[0].rows(), saved[0].cols());
+        grad.middleCols(start, len) = g;
+        return {grad};
+    }
+};
+VarPtr col_slice(VarPtr a, int start, int len);
+
+// split(x) — splits columns evenly in two. Returns {left, right}.
+// x must have an even number of columns.
+inline std::pair<VarPtr, VarPtr> split(VarPtr a) {
+    int half = a->data.cols() / 2;
+    return {col_slice(a, 0, half), col_slice(a, half, half)};
+}
+
 // --- Free function API: thin wrappers over apply<Fn>. ---
 
 inline VarPtr add(VarPtr a, VarPtr b)            { return apply<AddFn>({a, b}); }
@@ -373,5 +433,10 @@ inline VarPtr sub(VarPtr a, VarPtr b)            { return apply<SubFn>({a, b}); 
 inline VarPtr div_op(VarPtr a, VarPtr b)         { return apply<DivFn>({a, b}); }
 inline VarPtr cumsum(VarPtr a, int axis = 1)     { return apply<CumsumFn>({a}, axis); }
 inline VarPtr flip(VarPtr a, int axis = 1)       { return apply<FlipFn>({a}, axis); }
+
+inline VarPtr sin_op(VarPtr a)                            { return apply<SinFn>({a}); }
+inline VarPtr cos_op(VarPtr a)                            { return apply<CosFn>({a}); }
+inline VarPtr clamp(VarPtr a, float lo, float hi)         { return apply<ClampFn>({a}, lo, hi); }
+inline VarPtr col_slice(VarPtr a, int start, int len)     { return apply<ColSliceFn>({a}, start, len); }
 
 } // namespace ag
