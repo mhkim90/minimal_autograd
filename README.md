@@ -52,16 +52,18 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
 
-This produces the static library `libautograd.a` and three test binaries:
+This produces the static library `libautograd.a` and four test binaries:
 
 ```bash
 ./test_core        # core op correctness + grad_check
 ./test_nn          # end-to-end net training (XOR with Adam)
 ./test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
 ./test_extensions  # 30 grad-checks for the GUDM extension ops
+./test_diffusion   # 17 grad-checks / shape / value assertions for diffusion.h
 ```
 
 The first three print `ALL TESTS PASSED`. `test_extensions` prints `30/30 passed`.
+`test_diffusion` prints `17/17 passed`.
 
 ## Quick start
 
@@ -179,6 +181,59 @@ convention and `test/test_conv.cpp` for examples.
 | E7    | `SiLUModule` / `SigmoidModule`     | Activation modules for use inside `Sequential`.          |
 | E8    | Trig + clamp + column ops          | `sin_op`, `cos_op`, `clamp(x, lo, hi)`, `col_slice(x, start, len)`, `split(x)` → `pair`. |
 | E9    | `hcat`                             | `hcat({a, b, c})` — column-wise cat; mirrors `torch.cat(..., dim=1)`. |
+| E10   | Diffusion primitives               | `randn`, `randn_like`, `sinusoidal_time_embedding`, `q_sample` (in `diffusion.h`). |
+
+## Diffusion Support
+
+`include/autograd/diffusion.h` adds the minimum building blocks every
+DDPM / DDIM / score-based model needs on top of the existing engine.
+All four helpers are header-only inline; no new translation unit.
+
+| Helper | Purpose |
+|--------|---------|
+| `randn(rows, cols, seed=0)` | Leaf `Var` of `rows × cols` standard-normal samples from a seeded `std::mt19937`. No back_fn, no grad contribution. |
+| `randn_like(x, seed=0)`     | Same as `randn` but sized to `x->data`. |
+| `sinusoidal_time_embedding(t, dim)` | Transformer-style positional encoding for timestep `t` → leaf `Var` of shape `(1, dim)`. `dim` must be even. |
+| `q_sample(x0, t, sqrt_alpha_bar, sqrt_one_minus_alpha_bar, noise=nullptr, seed=0)` | Standard DDPM forward step: `x_t = √ᾱ_t·x0 + √(1−ᾱ_t)·noise`. Differentiated w.r.t. `x0` and `noise` via the existing `add` / `scale` chain. |
+
+Because `q_sample` is just `add(scale(x0, a), scale(noise, b))`, its
+gradients are inherited from the existing `AddFn` / `ScaleFn` — no new
+`Function` subclass is required.
+
+### Quick example — DDPM forward step + time embedding
+
+```cpp
+#include "autograd.h"
+using namespace ag;
+
+int main() {
+    int N = 4, dim = 128;
+    auto x0  = Var::make(Mat::Random(N, 3 * 32 * 32));
+    auto t_emb = sinusoidal_time_embedding(/*t=*/250, dim);  // (1, 128)
+
+    // Hand-picked noise (or pass nullptr to let q_sample draw fresh).
+    auto noise = randn_like(x0, /*seed=*/0);
+
+    auto x_t = q_sample(x0, 250,
+                        /*sqrt_alpha_bar=*/0.6f,
+                        /*sqrt_one_minus_ab=*/0.8f,
+                        noise);
+    // x_t and t_emb are both leaves — no autograd graph was built.
+    // Use x_t as input to your U-Net; the graph forms downstream.
+    return 0;
+}
+```
+
+### Tests
+
+```bash
+./test_diffusion       # 17 grad-checks / shape / value assertions
+```
+
+Coverage: `randn` shape, leaf semantics, mean ≈ 0, std ≈ 1, seed
+determinism; `sinusoidal_time_embedding` shape, value range, `sin(t)` /
+`cos(t)` at `i = 0`; `q_sample` shape, analytic-vs-numeric grad check
+through both `x0` and `noise`, and a closed-form zero-noise case.
 
 ## Limitations
 

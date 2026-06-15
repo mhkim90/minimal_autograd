@@ -38,6 +38,10 @@ add_executable(test_extensions test/test_extensions.cpp)
 target_link_libraries(test_extensions autograd)
 target_include_directories(test_extensions PRIVATE test)
 
+add_executable(test_diffusion test/test_diffusion.cpp)
+target_link_libraries(test_diffusion autograd)
+target_include_directories(test_diffusion PRIVATE test)
+
 # Optional: build the README example.
 option(AUTOGRAD_BUILD_EXAMPLES "Build README examples" OFF)
 if(AUTOGRAD_BUILD_EXAMPLES)
