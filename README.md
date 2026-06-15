@@ -60,10 +60,42 @@ This produces the static library `libautograd.a` and four test binaries:
 ./test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
 ./test_extensions  # 30 grad-checks for the GUDM extension ops
 ./test_diffusion   # 17 grad-checks / shape / value assertions for diffusion.h
+./test_smoke       # 35 end-to-end smoke checks (training + inference loops)
 ```
 
 The first three print `ALL TESTS PASSED`. `test_extensions` prints `30/30 passed`.
-`test_diffusion` prints `17/17 passed`.
+`test_diffusion` prints `17/17 passed`. `test_smoke` prints `35/35 passed`.
+
+### Smoke test (`test_smoke`)
+
+`test/test_smoke.cpp` is a single-file end-to-end smoke test that exercises
+every op needed by a Gaussian-Unified Diffusion Model through both a real
+**training loop** (forward → loss → backward → Adam step, repeated until
+convergence) and a **forward-only inference loop**. It is the fastest
+sanity check that the library can still be wired into a working model.
+
+| # | Group                       | Mode                              | Ops exercised                                                                 |
+|---|-----------------------------|-----------------------------------|--------------------------------------------------------------------------------|
+| 1 | sigma schedule convergence  | **training loop** (200 steps)     | `softmax`, `cumsum`, `scale`, `sub`, `mul`, `sum`, `Adam`                     |
+| 2 | beta schedule convergence   | **training loop** (200 steps)     | `tanh_op`, `scale`, `sub`, `mul`, `sum`, `Adam`                               |
+| 3 | spatial forward             | forward-only                      | `Conv2d`, `AvgPool2d`, `NearestUpsample2d`, `hcat`                            |
+| 4 | GroupNorm + SiLU            | forward-only                      | `GroupNorm` (mean≈0, var≈1 per group), `silu`                                 |
+| 5 | embedding consistency       | forward-only                      | `sinusoidal_time_embedding` vs manual `sin_op`+`cos_op`+`hcat`, `split` round-trip |
+| 6 | randn stats                 | forward-only                      | `randn`, `randn_like` (diffusion.h): mean≈0, std≈1, determinism, leaf-ness    |
+| 7 | mini inference loop         | **inference loop** (10 steps)     | All of the above + `clamp`, `Linear`, `broadcast_add`, `replicate`             |
+
+The training-loop tests deliberately avoid `GroupNorm` in the backward path
+since its backward is inference-only. The mini inference loop simulates a
+DDIM-style reverse step with a small `Linear` "model" and verifies that
+all outputs stay finite and properly clamped to `[0, 1]`.
+
+Build and run:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j1
+./build/test_smoke
+```
 
 ## Quick start
 
