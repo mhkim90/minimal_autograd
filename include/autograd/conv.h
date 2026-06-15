@@ -110,4 +110,97 @@ struct MaxPool2d : Module {
     std::vector<VarPtr> parameters() override { return {}; }
 };
 
+// --- AvgPool2d ---
+
+struct AvgPool2dFn : Function {
+    int N = 0, C = 0, H = 0, W = 0, kH = 0, kW = 0, stride = 0;
+    int oH = 0, oW = 0;
+
+    Mat forward(const Mats& in) override;
+    Mats backward(const Mat& grad) override;
+};
+
+VarPtr avgpool2d_op(VarPtr input,
+                    int N, int C, int H, int W,
+                    int kH, int kW, int stride);
+
+struct AvgPool2d : Module {
+    int kH, kW, stride;
+
+    AvgPool2d(int kH, int kW, int stride = -1)
+        : kH(kH), kW(kW), stride(stride < 0 ? kH : stride) {}
+
+    VarPtr forward(VarPtr x, int H, int W);
+
+    VarPtr forward(VarPtr x) override {
+        assert(false && "AvgPool2d requires forward(x, H, W)");
+        return nullptr;
+    }
+
+    std::vector<VarPtr> parameters() override { return {}; }
+};
+
+// --- NearestUpsample2d ---
+
+struct NearestUpsample2dFn : Function {
+    int N = 0, C = 0, H = 0, W = 0, scale = 0;
+
+    Mat forward(const Mats& in) override;
+    Mats backward(const Mat& grad) override;
+};
+
+VarPtr nearest_upsample2d_op(VarPtr input,
+                              int N, int C, int H, int W, int scale);
+
+struct NearestUpsample2d : Module {
+    int scale;
+    explicit NearestUpsample2d(int scale) : scale(scale) {}
+
+    VarPtr forward(VarPtr x, int H, int W);
+
+    VarPtr forward(VarPtr x) override {
+        assert(false && "NearestUpsample2d requires forward(x, H, W)");
+        return nullptr;
+    }
+
+    std::vector<VarPtr> parameters() override { return {}; }
+};
+
+// --- DepthwiseConv2d (groups = in_channels = out_channels) ---
+
+struct DepthwiseConv2dFn : Function {
+    int N = 0, C = 0, H = 0, W = 0;
+    int kH = 0, kW = 0, stride = 0, pad = 0;
+    int oH = 0, oW = 0;
+
+    Mat forward(const Mats& in) override;
+    Mats backward(const Mat& grad) override;
+};
+
+// in[0]: input  (N, C*H*W)
+// in[1]: weight (C, kH*kW)    — one filter per input channel
+// in[2]: bias   (1, C)
+VarPtr depthwise_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
+                            int N, int C, int H, int W,
+                            int kH, int kW, int stride, int pad);
+
+struct DepthwiseConv2d : Module {
+    VarPtr W;   // (C, kH*kW)
+    VarPtr b;   // (1, C)
+
+    int channels, kH, kW, stride, pad;
+
+    DepthwiseConv2d(int channels, int kH, int kW,
+                    int stride = 1, int pad = 0);
+
+    VarPtr forward(VarPtr x, int H, int W);
+
+    VarPtr forward(VarPtr x) override {
+        assert(false && "DepthwiseConv2d requires forward(x, H, W)");
+        return nullptr;
+    }
+
+    std::vector<VarPtr> parameters() override { return {W, b}; }
+};
+
 } // namespace ag
