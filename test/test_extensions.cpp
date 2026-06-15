@@ -177,6 +177,21 @@ static void test_split() {
     check("split right", grad_check([](VarPtr v) { return sum(split(v).second); }, x));
 }
 
+static void test_hcat() {
+    auto a = rand_var(3, 4);
+    auto b = rand_var(3, 2);
+    auto c = rand_var(3, 5);
+    check("hcat grad a", grad_check(
+        [&](VarPtr v) { return sum(hcat({v, b, c})); }, a));
+    check("hcat grad b", grad_check(
+        [&](VarPtr v) { return sum(hcat({a, v, c})); }, b));
+    check("hcat grad c", grad_check(
+        [&](VarPtr v) { return sum(hcat({a, b, v})); }, c));
+    auto out = hcat({a, b, c});
+    assert(out->data.rows() == 3 && out->data.cols() == 11);
+    check("hcat shape", true);
+}
+
 int main() {
     std::printf("=== test_extensions ===\n");
     std::printf("-- Phase 1: activation + arithmetic ops --\n");
@@ -199,6 +214,8 @@ int main() {
     test_clamp();
     test_col_slice();
     test_split();
+    std::printf("-- hcat --\n");
+    test_hcat();
     std::printf("\n%d/%d passed\n", passed, passed + failed);
     return (failed == 0) ? 0 : 1;
 }

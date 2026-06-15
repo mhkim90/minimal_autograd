@@ -407,6 +407,35 @@ inline std::pair<VarPtr, VarPtr> split(VarPtr a) {
     return {col_slice(a, 0, half), col_slice(a, half, half)};
 }
 
+// Horizontal concatenation — stacks inputs column-wise.
+// All inputs must have the same number of rows (same N).
+// Mirrors torch.cat(tensors, dim=-1) / torch.cat(tensors, dim=1) in 2D layout.
+struct HCatFn : Function {
+    Mat forward(const Mats& in) override {
+        int rows = in[0].rows();
+        int total_cols = 0;
+        for (auto& m : in) { assert(m.rows() == rows); total_cols += m.cols(); }
+        Mat out(rows, total_cols);
+        int off = 0;
+        for (auto& m : in) {
+            out.middleCols(off, m.cols()) = m;
+            off += m.cols();
+        }
+        saved = in;
+        return out;
+    }
+    Mats backward(const Mat& g) override {
+        Mats grads;
+        grads.reserve(saved.size());
+        int off = 0;
+        for (auto& m : saved) {
+            grads.push_back(g.middleCols(off, m.cols()));
+            off += m.cols();
+        }
+        return grads;
+    }
+};
+
 // --- Free function API: thin wrappers over apply<Fn>. ---
 
 inline VarPtr add(VarPtr a, VarPtr b)            { return apply<AddFn>({a, b}); }
@@ -421,6 +450,7 @@ inline VarPtr log_softmax(VarPtr a)              { return apply<LogSoftmaxFn>({a
 inline VarPtr transpose(VarPtr a)                { return apply<TransposeFn>({a}); }
 inline VarPtr reshape(VarPtr a, int r, int c)    { return apply<ReshapeFn>({a}, r, c); }
 inline VarPtr concat(std::vector<VarPtr> inputs) { return apply<ConcatFn>(inputs); }
+inline VarPtr hcat(std::vector<VarPtr> inputs)   { return apply<HCatFn>(inputs); }
 
 inline VarPtr sigmoid(VarPtr a)                  { return apply<SigmoidFn>({a}); }
 inline VarPtr tanh_op(VarPtr a)                  { return apply<TanhFn>({a}); }
