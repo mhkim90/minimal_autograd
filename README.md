@@ -19,6 +19,11 @@ experiments — not production.
   `silu`, `softplus` — all gradient-checked.
 - Sequence ops: `cumsum` (axis 0 or 1) and `flip` (axis 0 or 1) with
   correct suffix-sum / reverse backward passes.
+- Trig / clamp ops: `sin_op`, `cos_op` (sinusoidal embeddings), `clamp`
+  (element-wise with zero gradient at the boundary).
+- Column ops: `col_slice(x, start, len)` and `split(x)` (even column
+  split returning `std::pair<VarPtr, VarPtr>`) — used for AdaGN
+  scale+shift decomposition.
 - Module system with `Linear` (Xavier init), `ReLUModule`, `SiLUModule`,
   `SigmoidModule`, `Sequential`.
 - Losses: `mse_loss`, `cross_entropy`.
@@ -53,10 +58,10 @@ This produces the static library `libautograd.a` and three test binaries:
 ./test_core        # core op correctness + grad_check
 ./test_nn          # end-to-end net training (XOR with Adam)
 ./test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
-./test_extensions  # 19 grad-checks for the GUDM extension ops
+./test_extensions  # 26 grad-checks for the GUDM extension ops
 ```
 
-The first three print `ALL TESTS PASSED`. `test_extensions` prints `19/19 passed`.
+The first three print `ALL TESTS PASSED`. `test_extensions` prints `26/26 passed`.
 
 ## Quick start
 
@@ -172,6 +177,7 @@ convention and `test/test_conv.cpp` for examples.
 | E5    | `DepthwiseConv2d`                  | `DepthwiseConv2d(C, kH, kW, stride, pad)` — one filter per channel. |
 | E6    | `GroupNorm`                        | `GroupNorm(G, C)`, call `forward(x, C, HW)` at inference time. |
 | E7    | `SiLUModule` / `SigmoidModule`     | Activation modules for use inside `Sequential`.          |
+| E8    | Trig + clamp + column ops          | `sin_op`, `cos_op`, `clamp(x, lo, hi)`, `col_slice(x, start, len)`, `split(x)` → `pair`. |
 
 ## Limitations
 
