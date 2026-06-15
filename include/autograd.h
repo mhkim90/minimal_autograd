@@ -10,3 +10,4 @@
 #include "autograd/loss.h"
 #include "autograd/optim.h"
 #include "autograd/conv.h"
+#include "autograd/norm.h"

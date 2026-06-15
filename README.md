@@ -3,22 +3,31 @@
 A small reverse-mode automatic differentiation library in C++17, built on top
 of [Eigen3](https://eigen.tuxfamily.org/). The library implements a tape-based
 autograd engine, a small module system (`Linear`, `Sequential`, `Conv2d`,
-`MaxPool2d`), a few losses (`mse_loss`, `cross_entropy`), and two optimizers
-(`SGD`, `Adam`). It is single-threaded, CPU-only, and is intended for teaching
-and small experiments — not production.
+`MaxPool2d`, `AvgPool2d`, `DepthwiseConv2d`, `NearestUpsample2d`, `GroupNorm`),
+a few losses (`mse_loss`, `cross_entropy`), and two optimizers (`SGD`, `Adam`).
+It is single-threaded, CPU-only, and is intended for teaching and small
+experiments — not production.
 
 ## Features
 
 - Reverse-mode autograd via a shared-`Var` graph with a topological-sort
   backward pass (no double-counting of shared nodes).
-- Element-wise ops (`add`, `mul`, `scale`), matmul, ReLU, broadcast bias-add
-  with correct bias gradient, sum, softmax, log-softmax, transpose, reshape,
-  concat.
-- Module system with `Linear` (Xavier init), `ReLUModule`, `Sequential`.
+- Element-wise ops (`add`, `mul`, `scale`, `sub`, `div_op`), matmul, ReLU,
+  broadcast bias-add with correct bias gradient, sum, softmax, log-softmax,
+  transpose, reshape, concat.
+- Activation ops: `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`,
+  `silu`, `softplus` — all gradient-checked.
+- Sequence ops: `cumsum` (axis 0 or 1) and `flip` (axis 0 or 1) with
+  correct suffix-sum / reverse backward passes.
+- Module system with `Linear` (Xavier init), `ReLUModule`, `SiLUModule`,
+  `SigmoidModule`, `Sequential`.
 - Losses: `mse_loss`, `cross_entropy`.
 - Optimizers: `SGD`, `Adam` (with bias correction).
 - 2D conv stack: `im2col` / `col2im` (with correct overlap accumulation),
-  `Conv2d` (Kaiming uniform init), `MaxPool2d`, gradient-checked.
+  `Conv2d` (Kaiming uniform init), `MaxPool2d`, `AvgPool2d`,
+  `DepthwiseConv2d` (groups = channels), `NearestUpsample2d` — all
+  gradient-checked.
+- Normalisation: `GroupNorm` (inference-only; normalises over C/G × HW groups).
 - Numerical `grad_check` helper (central finite differences).
 - Single static library, no runtime dependencies beyond Eigen.
 
@@ -41,12 +50,13 @@ make -j$(nproc)
 This produces the static library `libautograd.a` and three test binaries:
 
 ```bash
-./test_core    # core op correctness + grad_check
-./test_nn      # end-to-end net training (XOR with Adam)
-./test_conv    # im2col / col2im / Conv2d / MaxPool2d + grad_check
+./test_core        # core op correctness + grad_check
+./test_nn          # end-to-end net training (XOR with Adam)
+./test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
+./test_extensions  # 19 grad-checks for the GUDM extension ops
 ```
 
-All three should print `ALL TESTS PASSED`.
+The first three print `ALL TESTS PASSED`. `test_extensions` prints `19/19 passed`.
 
 ## Quick start
 
@@ -121,7 +131,7 @@ how to push its own gradient back into its parents' gradients).
                                                   parameters with .grad
 ```
 
-`Function` subclasses (`AddFn`, `MatMulFn`, `Conv2dFn`, …) implement
+`Function` subclasses (`AddFn`, `MatMulFn`, `Conv2dFn`, `SiLUFn`, …) implement
 `forward(Mats)` and `backward(Mat)`. The free template `apply<Fn>(inputs,
 extra_args...)` wraps them: it constructs the function, runs forward, and
 captures a `back_fn` lambda that holds a `shared_ptr<Fn>` and the parent
@@ -143,9 +153,6 @@ convention and `test/test_conv.cpp` for examples.
 
 ## Phase-by-phase feature table
 
-This table mirrors the implementation order in the design plan, but written
-for someone using the library.
-
 | Phase | Capability                         | How to use it                                            |
 |-------|------------------------------------|----------------------------------------------------------|
 | 1     | Core ops                           | `add`, `mul`, `matmul`, `relu`, `sum` — free functions.  |
@@ -158,6 +165,13 @@ for someone using the library.
 | 6a    | `im2col` / `col2im`                | Pure functions in `conv.h`; overlap patches accumulate. |
 | 6b    | `Conv2dFn`                         | `conv2d_op(input, weight, bias, N, C, H, W, kH, kW, stride, pad)`. |
 | 6c    | `Conv2d` / `MaxPool2d` modules     | `Conv2d(in_ch, out_ch, kH, kW, stride, pad)`, `MaxPool2d(kH, kW)`. |
+| E1    | Activation + arithmetic ops        | `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`. |
+| E2    | Sequence ops                       | `cumsum(x, axis)`, `flip(x, axis)` — axis 0 or 1.       |
+| E3    | `AvgPool2d`                        | `AvgPool2d(kH, kW, stride)`, or `avgpool2d_op(...)`.    |
+| E4    | `NearestUpsample2d`                | `NearestUpsample2d(scale)`, or `nearest_upsample2d_op(...)`. |
+| E5    | `DepthwiseConv2d`                  | `DepthwiseConv2d(C, kH, kW, stride, pad)` — one filter per channel. |
+| E6    | `GroupNorm`                        | `GroupNorm(G, C)`, call `forward(x, C, HW)` at inference time. |
+| E7    | `SiLUModule` / `SigmoidModule`     | Activation modules for use inside `Sequential`.          |
 
 ## Limitations
 
@@ -174,9 +188,9 @@ they are scope decisions.
   parameter is fine, but mutating a non-leaf `Var->data` will silently
   invalidate the graph.
 - **No GPU.** `Mat` is `Eigen::MatrixXf`. There is no CUDA path.
-- **No dilated / transposed / depthwise conv.** `Conv2d` is the standard
-  cross-correlation used in mainstream frameworks. Extending it is a matter
-  of adding fields to `Conv2dFn` and the factory.
+- **No dilated / transposed conv.** `Conv2d` is the standard
+  cross-correlation. `DepthwiseConv2d` is available (groups = channels).
+  Dilated or transposed variants are not implemented.
 - **Conv layout is flat (2D).** All conv calls require the caller to track
   `(C, H, W)` separately. `Conv2d::forward(x)` (one-arg) is `assert`-ed
   out; use `forward(x, H, W)`.

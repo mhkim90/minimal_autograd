@@ -67,4 +67,14 @@ struct ReLUModule : Module {
     std::vector<VarPtr> parameters() override { return {}; }
 };
 
+struct SiLUModule : Module {
+    VarPtr forward(VarPtr x) override { return silu(x); }
+    std::vector<VarPtr> parameters() override { return {}; }
+};
+
+struct SigmoidModule : Module {
+    VarPtr forward(VarPtr x) override { return sigmoid(x); }
+    std::vector<VarPtr> parameters() override { return {}; }
+};
+
 } // namespace ag

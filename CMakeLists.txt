@@ -11,6 +11,7 @@ add_library(autograd STATIC
     src/loss.cpp
     src/optim.cpp
     src/conv.cpp
+    src/norm.cpp
 )
 target_include_directories(autograd PUBLIC include)
 target_link_libraries(autograd PUBLIC Eigen3::Eigen)
@@ -32,6 +33,10 @@ target_link_libraries(test_nn autograd)
 add_executable(test_conv test/test_conv.cpp)
 target_link_libraries(test_conv autograd)
 target_include_directories(test_conv PRIVATE test)
+
+add_executable(test_extensions test/test_extensions.cpp)
+target_link_libraries(test_extensions autograd)
+target_include_directories(test_extensions PRIVATE test)
 
 # Optional: build the README example.
 option(AUTOGRAD_BUILD_EXAMPLES "Build README examples" OFF)

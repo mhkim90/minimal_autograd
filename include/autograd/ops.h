@@ -206,6 +206,147 @@ struct ConcatFn : Function {
     }
 };
 
+// --- Activation and arithmetic ops ---
+
+struct SigmoidFn : Function {
+    Mat forward(const Mats& in) override {
+        Mat s = (1.f / (1.f + (-in[0].array()).exp())).matrix();
+        saved = {s};
+        return s;
+    }
+    Mats backward(const Mat& g) override {
+        const auto& s = saved[0].array();
+        return {(g.array() * s * (1.f - s)).matrix()};
+    }
+};
+
+struct TanhFn : Function {
+    Mat forward(const Mats& in) override {
+        Mat t = in[0].array().tanh().matrix();
+        saved = {t};
+        return t;
+    }
+    Mats backward(const Mat& g) override {
+        return {(g.array() * (1.f - saved[0].array().square())).matrix()};
+    }
+};
+
+struct ExpFn : Function {
+    Mat forward(const Mats& in) override {
+        Mat e = in[0].array().exp().matrix();
+        saved = {e};
+        return e;
+    }
+    Mats backward(const Mat& g) override {
+        return {g.cwiseProduct(saved[0])};
+    }
+};
+
+struct LogFn : Function {
+    Mat forward(const Mats& in) override {
+        saved = {in[0]};
+        return in[0].array().log().matrix();
+    }
+    Mats backward(const Mat& g) override {
+        return {(g.array() / saved[0].array()).matrix()};
+    }
+};
+
+struct SqrtFn : Function {
+    Mat forward(const Mats& in) override {
+        Mat s = in[0].array().sqrt().matrix();
+        saved = {s};
+        return s;
+    }
+    Mats backward(const Mat& g) override {
+        return {(g.array() / (2.f * saved[0].array())).matrix()};
+    }
+};
+
+struct SiLUFn : Function {
+    Mat forward(const Mats& in) override {
+        Mat s = (1.f / (1.f + (-in[0].array()).exp())).matrix();
+        saved = {in[0], s};
+        return (in[0].array() * s.array()).matrix();
+    }
+    Mats backward(const Mat& g) override {
+        const auto& x = saved[0].array();
+        const auto& s = saved[1].array();
+        return {(g.array() * (s + x * s * (1.f - s))).matrix()};
+    }
+};
+
+struct SoftplusFn : Function {
+    Mat forward(const Mats& in) override {
+        saved = {in[0]};
+        auto x = in[0].array();
+        return (x.max(0.f) + (1.f + (-x.abs()).exp()).log()).matrix();
+    }
+    Mats backward(const Mat& g) override {
+        const auto& x = saved[0].array();
+        return {(g.array() / (1.f + (-x).exp())).matrix()};
+    }
+};
+
+struct SubFn : Function {
+    Mat forward(const Mats& in) override {
+        saved = in;
+        return in[0] - in[1];
+    }
+    Mats backward(const Mat& g) override { return {g, -g}; }
+};
+
+struct DivFn : Function {
+    Mat forward(const Mats& in) override {
+        saved = in;
+        return in[0].cwiseQuotient(in[1]);
+    }
+    Mats backward(const Mat& g) override {
+        Mat ga = g.cwiseQuotient(saved[1]);
+        Mat gb = -(g.cwiseProduct(saved[0])).cwiseQuotient(
+                    saved[1].cwiseProduct(saved[1]));
+        return {ga, gb};
+    }
+};
+
+// Cumulative sum along axis (0=rows, 1=cols). Backward is suffix sum of g.
+struct CumsumFn : Function {
+    int axis;
+    explicit CumsumFn(int ax) : axis(ax) {}
+    Mat forward(const Mats& in) override {
+        Mat out = in[0];
+        if (axis == 1) {
+            for (int c = 1; c < out.cols(); ++c) out.col(c) += out.col(c - 1);
+        } else {
+            for (int r = 1; r < out.rows(); ++r) out.row(r) += out.row(r - 1);
+        }
+        return out;
+    }
+    Mats backward(const Mat& g) override {
+        Mat grad = g;
+        if (axis == 1) {
+            for (int c = grad.cols() - 2; c >= 0; --c) grad.col(c) += grad.col(c + 1);
+        } else {
+            for (int r = grad.rows() - 2; r >= 0; --r) grad.row(r) += grad.row(r + 1);
+        }
+        return {grad};
+    }
+};
+
+// Flip along axis (0=flip rows, 1=flip cols).
+struct FlipFn : Function {
+    int axis;
+    explicit FlipFn(int ax) : axis(ax) {}
+    Mat forward(const Mats& in) override {
+        if (axis == 1) return in[0].rowwise().reverse();
+        return in[0].colwise().reverse();
+    }
+    Mats backward(const Mat& g) override {
+        if (axis == 1) return {g.rowwise().reverse()};
+        return {g.colwise().reverse()};
+    }
+};
+
 // --- Free function API: thin wrappers over apply<Fn>. ---
 
 inline VarPtr add(VarPtr a, VarPtr b)            { return apply<AddFn>({a, b}); }
@@ -219,7 +360,18 @@ inline VarPtr softmax(VarPtr a)                  { return apply<SoftmaxFn>({a});
 inline VarPtr log_softmax(VarPtr a)              { return apply<LogSoftmaxFn>({a}); }
 inline VarPtr transpose(VarPtr a)                { return apply<TransposeFn>({a}); }
 inline VarPtr reshape(VarPtr a, int r, int c)    { return apply<ReshapeFn>({a}, r, c); }
-
 inline VarPtr concat(std::vector<VarPtr> inputs) { return apply<ConcatFn>(inputs); }
+
+inline VarPtr sigmoid(VarPtr a)                  { return apply<SigmoidFn>({a}); }
+inline VarPtr tanh_op(VarPtr a)                  { return apply<TanhFn>({a}); }
+inline VarPtr exp_op(VarPtr a)                   { return apply<ExpFn>({a}); }
+inline VarPtr log_op(VarPtr a)                   { return apply<LogFn>({a}); }
+inline VarPtr sqrt_op(VarPtr a)                  { return apply<SqrtFn>({a}); }
+inline VarPtr silu(VarPtr a)                     { return apply<SiLUFn>({a}); }
+inline VarPtr softplus(VarPtr a)                 { return apply<SoftplusFn>({a}); }
+inline VarPtr sub(VarPtr a, VarPtr b)            { return apply<SubFn>({a, b}); }
+inline VarPtr div_op(VarPtr a, VarPtr b)         { return apply<DivFn>({a, b}); }
+inline VarPtr cumsum(VarPtr a, int axis = 1)     { return apply<CumsumFn>({a}, axis); }
+inline VarPtr flip(VarPtr a, int axis = 1)       { return apply<FlipFn>({a}, axis); }
 
 } // namespace ag
