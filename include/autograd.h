@@ -11,3 +11,4 @@
 #include "autograd/optim.h"
 #include "autograd/conv.h"
 #include "autograd/norm.h"
+#include "autograd/diffusion.h"
