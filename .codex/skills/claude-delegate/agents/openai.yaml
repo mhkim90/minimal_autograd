@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Delegate"
+  short_description: "Delegate review and reasoning to Claude"
+  default_prompt: "Use $claude-delegate to ask Claude for a concise second opinion."
