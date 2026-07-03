@@ -1,3 +1,8 @@
+---
+name: grilled-me
+description: When planning or reviewing plans — adversarial self-review to stress-test a plan before presenting
+---
+
 # Grilled-Me: Adversarial Plan Self-Review
 
 A self-interrogation technique to stress-test a plan before presenting it to the user or delegating to agents.

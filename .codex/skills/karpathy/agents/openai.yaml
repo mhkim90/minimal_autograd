@@ -1,0 +1,4 @@
+interface:
+  display_name: "Karpathy"
+  short_description: "Surgical, simple coding workflow"
+  default_prompt: "Use $karpathy while making a focused code change."

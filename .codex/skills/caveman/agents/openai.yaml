@@ -1,0 +1,4 @@
+interface:
+  display_name: "Caveman"
+  short_description: "Ultra-compressed technical responses"
+  default_prompt: "Use $caveman to answer with compressed technical accuracy."
