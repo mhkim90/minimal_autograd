@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grilled Me"
+  short_description: "Adversarial plan self-review"
+  default_prompt: "Use $grilled-me to stress-test this plan before acting on it."

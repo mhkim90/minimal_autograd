@@ -1,0 +1,4 @@
+interface:
+  display_name: "Handoff"
+  short_description: "Write continuation handoff notes"
+  default_prompt: "Use $handoff to write a concise HANDOFF.md for the next agent."

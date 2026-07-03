@@ -1,3 +1,8 @@
+---
+name: karpathy
+description: When building/writing code — Karpathy's LLM coding best practices (simplicity, surgical changes, goal-driven execution)
+---
+
 # Karpathy's LLM Coding Best Practices
 
 Behavioral guidelines to reduce common LLM coding mistakes. Derived from Andrej Karpathy's observations on LLM coding pitfalls.
@@ -12,13 +17,13 @@ Behavioral guidelines to reduce common LLM coding mistakes. Derived from Andrej 
 
 Before implementing:
 - State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them — don't pick silently.
+- If multiple interpretations exist, present them - don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
 
 ### Examples
-- ❌ "I'll add the feature." → ✅ "I see two ways to do this: X (simpler), Y (more flexible). Which fits?"
-- ❌ Silently choosing a design. → ✅ "Options: A (minimal), B (extensible). Recommend A for this scope."
+- ❌ "I'll add authentication." → ✅ "I see three ways to add auth: X, Y, Z. Which fits your needs?"
+- ❌ Silently choosing a library. → ✅ "This needs a library. Options: A (simple), B (powerful), C (lightweight)?"
 
 ---
 
@@ -50,7 +55,7 @@ When editing existing code:
 - Don't "improve" adjacent code, comments, or formatting.
 - Don't refactor things that aren't broken.
 - Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it — don't delete it.
+- If you notice unrelated dead code, mention it - don't delete it.
 
 When your changes create orphans:
 - Remove imports/variables/functions that YOUR changes made unused.
@@ -61,7 +66,7 @@ When your changes create orphans:
 ### Bad Patterns
 - ❌ "While I'm here, let me refactor this function..."
 - ❌ Changing formatting in unrelated sections
-- ❌ Updating comments for code you didn't touch
+- ❌ Updating docstrings for code you didn't touch
 
 ---
 
@@ -80,6 +85,8 @@ For multi-step tasks, state a brief plan:
 2. [Step] → verify: [check]
 3. [Step] → verify: [check]
 ```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
 ### Plan Template
 ```

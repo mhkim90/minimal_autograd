@@ -36,8 +36,31 @@ Always load these skills at the start of relevant tasks:
 - **handoff**: When ending a session or switching context — write a HANDOFF.md so the next agent can continue seamlessly
 - **caveman**: When token efficiency is needed — ultra-compressed output (~75% fewer tokens) while keeping full technical accuracy; trigger with `/caveman` or "talk like caveman"
 - Language-aware caveman default: use `full` for English responses and `korean-full` for Korean responses unless the user explicitly requests another level.
+- **opencode-delegate**: Delegate **tedious / mechanical / long-running** work — applying precise edits, sweeps, run→inspect→tweak loops, test runs. Via `mcp__opencode__opencode_run` plus session tools (`opencode_session_new` / `opencode_session_list` / `opencode_session_fork`).
+- **codex-delegate**: Delegate **hard reasoning, adversarial design review, and difficult implementation** (numerical correctness, gradient derivation, autograd engine design, optimizer behavior) to Codex (GPT-5.5). DISCUSS (read-only) for reasoning & second opinions; EXECUTE (workspace-write) for hard multi-file changes. Via `mcp__codex__codex` / `mcp__codex__codex-reply`.
 
-See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKILL.md), [skills/grilled-me/SKILL.md](skills/grilled-me/SKILL.md), [skills/handoff/SKILL.md](skills/handoff/SKILL.md), and [skills/caveman/SKILL.md](skills/caveman/SKILL.md).
+### Delegation model
+
+Claude's role can be to **manage / orchestrate**, not to do all the heavy work
+inline: decompose the goal, write precise cold-context specs, route each piece to the
+right engine, verify results (the relevant test binaries above), decide keep/revert,
+and report.
+
+- **Codex** ← hard reasoning, adversarial review, and implementing *difficult* things.
+- **OpenCode** ← tedious / mechanical / long-running jobs.
+- **Claude** ← routing, verification, and decisions only.
+
+Before doing hard reasoning or a large edit inline, ask "Codex (hard) or OpenCode
+(tedious)?" — default to delegating for tasks that fit either bucket cleanly.
+
+> **MCP availability restriction**: `mcp__opencode__*` and `mcp__codex__*` tools are
+> **only available when Claude is running as a remote-controlled agent (Claude Code Remote / CCR)**.
+> They are NOT accessible in standard local Claude Code sessions. Before invoking
+> either `opencode-delegate` or `codex-delegate`, confirm the session has these MCP
+> tools loaded (they appear in the deferred-tools list). If they are absent, fall
+> back to inline execution.
+
+See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKILL.md), [skills/grilled-me/SKILL.md](skills/grilled-me/SKILL.md), [skills/handoff/SKILL.md](skills/handoff/SKILL.md), [skills/caveman/SKILL.md](skills/caveman/SKILL.md), [skills/opencode-delegate/SKILL.md](skills/opencode-delegate/SKILL.md), and [skills/codex-delegate/SKILL.md](skills/codex-delegate/SKILL.md).
 
 ### Quick Reminders
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenCode Delegate"
+  short_description: "Delegate mechanical work to OpenCode"
+  default_prompt: "Use $opencode-delegate to delegate this mechanical task to OpenCode."

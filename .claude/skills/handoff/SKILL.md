@@ -1,24 +1,18 @@
-# Handoff Document Tool
+---
+name: handoff
+description: Write or update a handoff document so the next agent with fresh context can continue this work.
+---
 
-Creates or updates `HANDOFF.md` to preserve context for the next agent starting with fresh state.
+Write or update a handoff document so the next agent with fresh context can continue this work.
 
-## Process
+Steps:
+1. Check if HANDOFF.md already exists in the project
+2. If it exists, read it first to understand prior context before updating
+3. Create or update the document with:
+   - **Goal**: What we're trying to accomplish
+   - **Current Progress**: What's been done so far
+   - **What Worked**: Approaches that succeeded
+   - **What Didn't Work**: Approaches that failed (so they're not repeated)
+   - **Next Steps**: Clear action items for continuing
 
-1. Check for existing `HANDOFF.md` to avoid losing prior work
-2. Read any existing file before making updates
-3. Write five sections:
-   - **Goal**: What the user is trying to accomplish
-   - **Completed**: Work done so far
-   - **What worked**: Successful strategies and approaches
-   - **What failed**: Approaches tried and abandoned (so they aren't repeated)
-   - **Next actions**: Clear, concrete next steps
-
-## Output
-
-Saves as `HANDOFF.md` in the project root. Provide the file path so the next agent can load it immediately on start.
-
-## Notes
-
-- Keep each section short and scannable — this file is read cold.
-- "What failed" is as important as "What worked" — it prevents repeated mistakes.
-- Next actions should be concrete enough to act on without any conversation history.
+Save as HANDOFF.md in the project root and tell the user the file path so they can start a fresh conversation with just that path.
