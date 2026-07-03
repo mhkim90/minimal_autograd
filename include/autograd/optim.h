@@ -1,6 +1,7 @@
 #pragma once
 // optim.h — SGD, Adam.
 
+#include "autograd/cuda_core.h"
 #include "autograd/variable.h"
 #include <vector>
 
@@ -14,8 +15,15 @@ struct SGD {
         : params(std::move(params)), lr(lr) {}
 
     void step() {
-        for (auto& p : params)
+        for (auto& p : params) {
+#ifdef AUTOGRAD_USE_CUDA
+            if (p->is_cuda()) {
+                cuda_sgd_step(*p, lr);
+                continue;
+            }
+#endif
             p->data -= lr * p->grad;
+        }
     }
 
     void zero_grad() {

@@ -17,9 +17,12 @@ void cuda_fill(float* dst, float value, std::size_t n, int device);
 
 VarPtr cuda_add_op(VarPtr a, VarPtr b);
 VarPtr cuda_mul_op(VarPtr a, VarPtr b);
+VarPtr cuda_matmul_op(VarPtr a, VarPtr b);
+VarPtr cuda_broadcast_add_op(VarPtr a, VarPtr b);
 VarPtr cuda_scale_op(VarPtr a, float s);
 VarPtr cuda_relu_op(VarPtr a);
 VarPtr cuda_sum_op(VarPtr a);
+void cuda_sgd_step(Var& p, float lr);
 
 #endif
 
