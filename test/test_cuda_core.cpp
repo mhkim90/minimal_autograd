@@ -108,6 +108,29 @@ int main() {
     CHECK(lin.W->cpu()->grad.cwiseAbs().maxCoeff() > 0.f);
     CHECK((lin.W->cpu()->data - w_before).cwiseAbs().maxCoeff() > 0.f);
 
+    Mat logits(2, 3);
+    logits << 1.f, 2.f, 3.f,
+              1.f, 0.f, -1.f;
+    Mat target = Mat::Zero(2, 3);
+    target(0, 2) = 1.f;
+    target(1, 0) = 1.f;
+    auto lg = Var::make(logits)->cuda();
+    auto sm = softmax(lg)->cpu();
+    CHECK_NEAR(sm->data.row(0).sum(), 1.f, 1e-4f);
+    CHECK_NEAR(sm->data.row(1).sum(), 1.f, 1e-4f);
+
+    auto ce = cross_entropy(lg, target);
+    CHECK(ce->is_cuda());
+    ce->backward();
+    auto ce_cpu = ce->cpu();
+    auto lg_cpu = lg->cpu();
+    Mat expected_sm = softmax(Var::make(logits))->data;
+    float expected_ce = -std::log(expected_sm(0, 2)) / 2.f
+                        -std::log(expected_sm(1, 0)) / 2.f;
+    CHECK_NEAR(ce_cpu->data(0, 0), expected_ce, 1e-4f);
+    CHECK_NEAR(lg_cpu->grad(0, 2), (expected_sm(0, 2) - 1.f) / 2.f, 1e-4f);
+    CHECK_NEAR(lg_cpu->grad(1, 0), (expected_sm(1, 0) - 1.f) / 2.f, 1e-4f);
+
     std::cout << "ALL CUDA CORE TESTS PASSED\n";
     return 0;
 }

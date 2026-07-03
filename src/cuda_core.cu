@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 
 #include <cassert>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -121,6 +122,71 @@ __global__ void sum_kernel(const float* x, float* out, std::size_t n) {
 __global__ void sum_backward_kernel(float* dx, const float* g, std::size_t n) {
     std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) dx[i] += g[0];
+}
+
+__global__ void softmax_kernel(const float* x, float* out, int rows, int cols) {
+    int r = blockIdx.x;
+    if (r >= rows) return;
+    float mx = x[r];
+    for (int c = 1; c < cols; ++c) {
+        float v = x[r + c * rows];
+        if (v > mx) mx = v;
+    }
+    float denom = 0.f;
+    for (int c = 0; c < cols; ++c) {
+        denom += expf(x[r + c * rows] - mx);
+    }
+    for (int c = 0; c < cols; ++c) {
+        out[r + c * rows] = expf(x[r + c * rows] - mx) / denom;
+    }
+}
+
+__global__ void log_softmax_kernel(const float* x, float* out, int rows, int cols) {
+    int r = blockIdx.x;
+    if (r >= rows) return;
+    float mx = x[r];
+    for (int c = 1; c < cols; ++c) {
+        float v = x[r + c * rows];
+        if (v > mx) mx = v;
+    }
+    float denom = 0.f;
+    for (int c = 0; c < cols; ++c) {
+        denom += expf(x[r + c * rows] - mx);
+    }
+    float logsum = mx + logf(denom);
+    for (int c = 0; c < cols; ++c) {
+        out[r + c * rows] = x[r + c * rows] - logsum;
+    }
+}
+
+__global__ void softmax_backward_kernel(float* dx, const float* g,
+                                        const float* s, int rows, int cols) {
+    int r = blockIdx.x;
+    if (r >= rows) return;
+    float gs = 0.f;
+    for (int c = 0; c < cols; ++c) {
+        int idx = r + c * rows;
+        gs += g[idx] * s[idx];
+    }
+    for (int c = 0; c < cols; ++c) {
+        int idx = r + c * rows;
+        dx[idx] += s[idx] * (g[idx] - gs);
+    }
+}
+
+__global__ void log_softmax_backward_kernel(float* dx, const float* g,
+                                            const float* lsm, int rows, int cols) {
+    int r = blockIdx.x;
+    if (r >= rows) return;
+    float gsum = 0.f;
+    for (int c = 0; c < cols; ++c) {
+        gsum += g[r + c * rows];
+    }
+    for (int c = 0; c < cols; ++c) {
+        int idx = r + c * rows;
+        float sm = expf(lsm[idx]);
+        dx[idx] += g[idx] - sm * gsum;
+    }
 }
 
 void require_cuda(VarPtr v) {
@@ -321,6 +387,42 @@ void cuda_sgd_step(Var& p, float lr) {
     axpy_kernel<<<blocks(n), 256>>>(p.cuda_data(), p.cuda_grad(), -lr, n);
     finish_kernel("cuda_sgd_step");
     p.sync_data_from_cuda();
+}
+
+VarPtr cuda_softmax_op(VarPtr a) {
+    require_cuda(a);
+    const int rows = a->data.rows();
+    const int cols = a->data.cols();
+    auto out = make_cuda_like(a);
+    softmax_kernel<<<rows, 1>>>(a->cuda_data(), out->cuda_data(), rows, cols);
+    finish_kernel("cuda_softmax_op");
+    out->sync_data_from_cuda();
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), rows, cols]() {
+        auto self = wp.lock();
+        softmax_backward_kernel<<<rows, 1>>>(a->cuda_grad(), self->cuda_grad(),
+                                             self->cuda_data(), rows, cols);
+        finish_kernel("cuda_softmax_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_log_softmax_op(VarPtr a) {
+    require_cuda(a);
+    const int rows = a->data.rows();
+    const int cols = a->data.cols();
+    auto out = make_cuda_like(a);
+    log_softmax_kernel<<<rows, 1>>>(a->cuda_data(), out->cuda_data(), rows, cols);
+    finish_kernel("cuda_log_softmax_op");
+    out->sync_data_from_cuda();
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), rows, cols]() {
+        auto self = wp.lock();
+        log_softmax_backward_kernel<<<rows, 1>>>(a->cuda_grad(), self->cuda_grad(),
+                                                 self->cuda_data(), rows, cols);
+        finish_kernel("cuda_log_softmax_backward");
+    };
+    return out;
 }
 
 } // namespace ag
