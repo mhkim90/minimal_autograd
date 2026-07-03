@@ -8,6 +8,7 @@
 
 #include "autograd/function.h"
 #include "autograd/tensor.h"
+#include "autograd/cuda_core.h"
 #include <utility>
 #include <vector>
 
@@ -438,13 +439,38 @@ struct HCatFn : Function {
 
 // --- Free function API: thin wrappers over apply<Fn>. ---
 
-inline VarPtr add(VarPtr a, VarPtr b)            { return apply<AddFn>({a, b}); }
-inline VarPtr mul(VarPtr a, VarPtr b)            { return apply<MulFn>({a, b}); }
+inline VarPtr add(VarPtr a, VarPtr b)            {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda() || b->is_cuda()) return cuda_add_op(a, b);
+#endif
+    return apply<AddFn>({a, b});
+}
+inline VarPtr mul(VarPtr a, VarPtr b)            {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda() || b->is_cuda()) return cuda_mul_op(a, b);
+#endif
+    return apply<MulFn>({a, b});
+}
 inline VarPtr matmul(VarPtr a, VarPtr b)         { return apply<MatMulFn>({a, b}); }
-inline VarPtr relu(VarPtr a)                     { return apply<ReLUFn>({a}); }
-inline VarPtr sum(VarPtr a)                      { return apply<SumFn>({a}); }
+inline VarPtr relu(VarPtr a)                     {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_relu_op(a);
+#endif
+    return apply<ReLUFn>({a});
+}
+inline VarPtr sum(VarPtr a)                      {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_sum_op(a);
+#endif
+    return apply<SumFn>({a});
+}
 inline VarPtr broadcast_add(VarPtr a, VarPtr b)  { return apply<BroadcastAddFn>({a, b}); }
-inline VarPtr scale(VarPtr a, float s)           { return apply<ScaleFn>({a}, s); }
+inline VarPtr scale(VarPtr a, float s)           {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_scale_op(a, s);
+#endif
+    return apply<ScaleFn>({a}, s);
+}
 inline VarPtr softmax(VarPtr a)                  { return apply<SoftmaxFn>({a}); }
 inline VarPtr log_softmax(VarPtr a)              { return apply<LogSoftmaxFn>({a}); }
 inline VarPtr transpose(VarPtr a)                { return apply<TransposeFn>({a}); }

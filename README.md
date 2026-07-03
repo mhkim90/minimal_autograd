@@ -5,13 +5,16 @@ of [Eigen3](https://eigen.tuxfamily.org/). The library implements a tape-based
 autograd engine, a small module system (`Linear`, `Sequential`, `Conv2d`,
 `MaxPool2d`, `AvgPool2d`, `DepthwiseConv2d`, `NearestUpsample2d`, `GroupNorm`),
 a few losses (`mse_loss`, `cross_entropy`), and two optimizers (`SGD`, `Adam`).
-It is single-threaded, CPU-only, and is intended for teaching and small
-experiments — not production.
+It is intended for teaching and small experiments — not production. The default
+build focuses on the beginner CPU core; advanced experimental helpers and the
+minimal CUDA core are opt-in.
 
 ## Features
 
 - Reverse-mode autograd via a shared-`Var` graph with a topological-sort
   backward pass (no double-counting of shared nodes).
+- Lightweight logical shape metadata, including 4D `(N, C, H, W)` views over
+  the existing flat Eigen matrix layout.
 - Element-wise ops (`add`, `mul`, `scale`, `sub`, `div_op`), matmul, ReLU,
   broadcast bias-add with correct bias gradient, sum, softmax, log-softmax,
   transpose, reshape, concat, `hcat` (column-wise / channel-dim cat).
@@ -34,7 +37,8 @@ experiments — not production.
   gradient-checked.
 - Normalisation: `GroupNorm` (inference-only; normalises over C/G × HW groups).
 - Numerical `grad_check` helper (central finite differences).
-- Single static library, no runtime dependencies beyond Eigen.
+- Single static library, no required runtime dependencies beyond Eigen for the
+  default CPU build.
 
 ## Dependencies
 
@@ -42,6 +46,7 @@ experiments — not production.
 - **CMake 3.14+**
 - **C++17** compiler (GCC 9+, Clang 10+ tested)
 - Optional: **OpenMP** (Eigen uses it for parallelism when enabled)
+- Optional: **CUDA Toolkit** for `AUTOGRAD_USE_CUDA=ON`
 
 ## Build
 
@@ -52,16 +57,34 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
 
-This produces the static library `libautograd.a` and four test binaries:
+This produces the static library `libautograd.a` and three core test binaries:
 
 ```bash
 ./test_core        # core op correctness + grad_check
 ./test_nn          # end-to-end net training (XOR with Adam)
 ./test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
+```
+
+Advanced experimental tests are opt-in:
+
+```bash
+cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
+cmake --build build-advanced -j1
 ./test_extensions  # 30 grad-checks for the GUDM extension ops
 ./test_diffusion   # 17 grad-checks / shape / value assertions for diffusion.h
 ./test_smoke       # 35 end-to-end smoke checks (training + inference loops)
 ```
+
+Minimal CUDA core autograd is opt-in and intentionally small:
+
+```bash
+cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_USE_CUDA=ON
+cmake --build build-cuda -j1
+./build-cuda/test_cuda_core
+```
+
+Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `mul`, `scale`,
+`relu`, and `sum`, including backward/gradient accumulation on device.
 
 The first three print `ALL TESTS PASSED`. `test_extensions` prints `30/30 passed`.
 `test_diffusion` prints `17/17 passed`. `test_smoke` prints `35/35 passed`.
@@ -92,9 +115,9 @@ all outputs stay finite and properly clamped to `[0, 1]`.
 Build and run:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j1
-./build/test_smoke
+cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
+cmake --build build-advanced -j1
+./build-advanced/test_smoke
 ```
 
 ## Quick start
@@ -181,14 +204,24 @@ A `Module` is anything with `forward(VarPtr) → VarPtr` and a list of
 `parameters() → vector<VarPtr>`. `Sequential` composes modules; optimizers
 iterate over `parameters()` and call `step()` / `zero_grad()`.
 
-### Flat conv layout
+### Logical 4D Shape
 
 This is important and non-obvious: **`Var::data` is always a 2D
-`Eigen::MatrixXf`** (no 4D tensors). For conv layers a `(N, C, H, W)` batch
-is stored as `Mat(N, C*H*W)`, with channels contiguous along the column axis.
-The shape `(C, H, W)` is passed explicitly into each conv op / module call
-and not encoded in the `Var`. See `include/autograd/conv.h` for the exact
-convention and `test/test_conv.cpp` for examples.
+`Eigen::MatrixXf`**. For conv layers a `(N, C, H, W)` batch is stored as
+`Mat(N, C*H*W)`, with channels contiguous along the column axis. `Var` can now
+carry logical shape metadata, so beginner code can write:
+
+```cpp
+auto x = Var::make4d(Mat::Random(N, C * H * W), N, C, H, W);
+Conv2d conv(C, 4, 3, 3);
+auto y = conv.forward(x);   // infers H and W from x->shape()
+```
+
+The older expert API still works:
+
+```cpp
+auto y = conv.forward(x, H, W);
+```
 
 ## Phase-by-phase feature table
 
@@ -204,6 +237,7 @@ convention and `test/test_conv.cpp` for examples.
 | 6a    | `im2col` / `col2im`                | Pure functions in `conv.h`; overlap patches accumulate. |
 | 6b    | `Conv2dFn`                         | `conv2d_op(input, weight, bias, N, C, H, W, kH, kW, stride, pad)`. |
 | 6c    | `Conv2d` / `MaxPool2d` modules     | `Conv2d(in_ch, out_ch, kH, kW, stride, pad)`, `MaxPool2d(kH, kW)`. |
+| C1    | Minimal CUDA core autograd         | `x->cuda()`, then `add`, `mul`, `scale`, `relu`, `sum`, `backward`, `cpu`. |
 | E1    | Activation + arithmetic ops        | `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`. |
 | E2    | Sequence ops                       | `cumsum(x, axis)`, `flip(x, axis)` — axis 0 or 1.       |
 | E3    | `AvgPool2d`                        | `AvgPool2d(kH, kW, stride)`, or `avgpool2d_op(...)`.    |
@@ -281,13 +315,15 @@ they are scope decisions.
 - **No inplace ops.** Every op allocates a new `Var`. Mutating a leaf
   parameter is fine, but mutating a non-leaf `Var->data` will silently
   invalidate the graph.
-- **No GPU.** `Mat` is `Eigen::MatrixXf`. There is no CUDA path.
+- **Limited CUDA.** CUDA is opt-in and currently covers only the minimal core
+  autograd slice: `add`, `mul`, `scale`, `relu`, and `sum`. Unsupported ops
+  should stay on CPU until explicit CUDA kernels are added.
 - **No dilated / transposed conv.** `Conv2d` is the standard
   cross-correlation. `DepthwiseConv2d` is available (groups = channels).
   Dilated or transposed variants are not implemented.
-- **Conv layout is flat (2D).** All conv calls require the caller to track
-  `(C, H, W)` separately. `Conv2d::forward(x)` (one-arg) is `assert`-ed
-  out; use `forward(x, H, W)`.
+- **Conv storage is flat (2D).** Values still live in `Mat(N, C*H*W)`, but
+  logical 4D metadata lets `Conv2d::forward(x)` infer `(H, W)` when `x` was
+  created with `Var::make4d(...)`. The explicit `forward(x, H, W)` API remains.
 
 ## License
 

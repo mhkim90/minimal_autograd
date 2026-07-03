@@ -159,6 +159,26 @@ int main() {
         CHECK(all_ok, "Conv+Pool+Linear: every parameter got a non-zero gradient");
     }
 
+    // -----------------------------------------------------------------
+    // 4D logical shape: Conv/Pool infer H,W and preserve output metadata
+    // -----------------------------------------------------------------
+    {
+        const int N = 2, C = 1, H = 8, W = 8;
+        Conv2d conv(C, 4, 3, 3, 1, 0);   // -> 4 x 6 x 6
+        MaxPool2d pool(2, 2, 2);          // -> 4 x 3 x 3
+
+        auto x = Var::make4d(Mat::Random(N, C * H * W), N, C, H, W);
+        auto y = conv.forward(x);
+        CHECK(y->is4d(), "Conv2d inferred 4D input and returned 4D metadata");
+        CHECK(y->dim(0) == N && y->dim(1) == 4 && y->dim(2) == 6 && y->dim(3) == 6,
+              "Conv2d output shape metadata is N,OC,oH,oW");
+
+        auto z = pool.forward(y);
+        CHECK(z->is4d(), "MaxPool2d inferred 4D input and returned 4D metadata");
+        CHECK(z->dim(0) == N && z->dim(1) == 4 && z->dim(2) == 3 && z->dim(3) == 3,
+              "MaxPool2d output shape metadata is N,C,oH,oW");
+    }
+
     std::printf("--\n%d passed, %d failed\n", passed, failed);
     return failed == 0 ? 0 : 1;
 }

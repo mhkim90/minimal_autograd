@@ -149,6 +149,26 @@ void test_reshape() {
     std::cout << "[ok] reshape: forward + grad_check ok\n";
 }
 
+void test_logical_4d_shape() {
+    auto x = Var::make4d(Mat::Random(2, 3 * 4 * 5), 2, 3, 4, 5);
+    CHECK(x->is4d());
+    CHECK(x->ndim() == 4);
+    CHECK(x->numel() == 2 * 3 * 4 * 5);
+    CHECK(x->dim(0) == 2);
+    CHECK(x->dim(1) == 3);
+    CHECK(x->dim(2) == 4);
+    CHECK(x->dim(3) == 5);
+
+    auto y = relu(x);
+    CHECK(y->is4d());
+    CHECK(y->dim(0) == 2 && y->dim(1) == 3 && y->dim(2) == 4 && y->dim(3) == 5);
+
+    y->view({2, 3 * 4 * 5});
+    CHECK(y->ndim() == 2);
+    CHECK(y->dim(0) == 2 && y->dim(1) == 60);
+    std::cout << "[ok] logical 4D shape metadata + same-footprint op propagation\n";
+}
+
 void test_concat() {
     auto a = Var::make(Mat::Random(2, 3));
     auto b = Var::make(Mat::Random(4, 3));
@@ -182,6 +202,7 @@ int main() {
     test_log_softmax();
     test_transpose();
     test_reshape();
+    test_logical_4d_shape();
     test_concat();
     test_scale();
     std::cout << "\nALL CORE TESTS PASSED\n";
