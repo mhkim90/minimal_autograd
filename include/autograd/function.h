@@ -12,6 +12,7 @@
 
 #include "autograd/variable.h"
 #include <memory>
+#include <stdexcept>
 #include <vector>
 #include <utility>
 
@@ -29,12 +30,24 @@ struct Function {
 // apply<Fn>(ins): Fn must be default-constructible.
 template<typename Fn>
 VarPtr apply(std::vector<VarPtr> ins) {
+#ifdef AUTOGRAD_USE_CUDA
+    for (auto& v : ins) {
+        if (v->is_cuda()) {
+            throw std::runtime_error("CUDA implementation missing for this op");
+        }
+    }
+#endif
     auto fn = std::make_shared<Fn>();
     Mats in_data;
     in_data.reserve(ins.size());
     for (auto& v : ins) in_data.push_back(v->data);
 
     auto out = Var::make(fn->forward(in_data));
+    if (!ins.empty() &&
+        out->data.rows() == ins[0]->data.rows() &&
+        out->data.cols() == ins[0]->data.cols()) {
+        out->set_shape(ins[0]->shape());
+    }
     out->parents = ins;
 
     out->back_fn = [fn, ins, wp = std::weak_ptr<Var>(out)]() {
@@ -51,12 +64,24 @@ VarPtr apply(std::vector<VarPtr> ins) {
 // (e.g. reshape target shape, concat split sizes) at construction time.
 template<typename Fn, typename... Args>
 VarPtr apply(std::vector<VarPtr> ins, Args... args) {
+#ifdef AUTOGRAD_USE_CUDA
+    for (auto& v : ins) {
+        if (v->is_cuda()) {
+            throw std::runtime_error("CUDA implementation missing for this op");
+        }
+    }
+#endif
     auto fn = std::make_shared<Fn>(std::forward<Args>(args)...);
     Mats in_data;
     in_data.reserve(ins.size());
     for (auto& v : ins) in_data.push_back(v->data);
 
     auto out = Var::make(fn->forward(in_data));
+    if (!ins.empty() &&
+        out->data.rows() == ins[0]->data.rows() &&
+        out->data.cols() == ins[0]->data.cols()) {
+        out->set_shape(ins[0]->shape());
+    }
     out->parents = ins;
 
     out->back_fn = [fn, ins, wp = std::weak_ptr<Var>(out)]() {

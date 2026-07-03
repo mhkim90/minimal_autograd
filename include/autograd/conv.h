@@ -84,11 +84,8 @@ struct Conv2d : Module {
     // x: (N, in_ch * H * W). Caller passes H, W.
     VarPtr forward(VarPtr x, int H, int W);
 
-    // Module::forward(VarPtr) — not directly usable for Conv2d.
-    VarPtr forward(VarPtr x) override {
-        assert(false && "Conv2d requires forward(x, H, W)");
-        return nullptr;
-    }
+    // Uses x logical shape (N, C, H, W), if present.
+    VarPtr forward(VarPtr x) override;
 
     std::vector<VarPtr> parameters() override { return {W, b}; }
 };
@@ -102,10 +99,7 @@ struct MaxPool2d : Module {
 
     VarPtr forward(VarPtr x, int H, int W);
 
-    VarPtr forward(VarPtr x) override {
-        assert(false && "MaxPool2d requires forward(x, H, W)");
-        return nullptr;
-    }
+    VarPtr forward(VarPtr x) override;
 
     std::vector<VarPtr> parameters() override { return {}; }
 };
@@ -132,10 +126,7 @@ struct AvgPool2d : Module {
 
     VarPtr forward(VarPtr x, int H, int W);
 
-    VarPtr forward(VarPtr x) override {
-        assert(false && "AvgPool2d requires forward(x, H, W)");
-        return nullptr;
-    }
+    VarPtr forward(VarPtr x) override;
 
     std::vector<VarPtr> parameters() override { return {}; }
 };
@@ -158,10 +149,7 @@ struct NearestUpsample2d : Module {
 
     VarPtr forward(VarPtr x, int H, int W);
 
-    VarPtr forward(VarPtr x) override {
-        assert(false && "NearestUpsample2d requires forward(x, H, W)");
-        return nullptr;
-    }
+    VarPtr forward(VarPtr x) override;
 
     std::vector<VarPtr> parameters() override { return {}; }
 };
@@ -195,10 +183,7 @@ struct DepthwiseConv2d : Module {
 
     VarPtr forward(VarPtr x, int H, int W);
 
-    VarPtr forward(VarPtr x) override {
-        assert(false && "DepthwiseConv2d requires forward(x, H, W)");
-        return nullptr;
-    }
+    VarPtr forward(VarPtr x) override;
 
     std::vector<VarPtr> parameters() override { return {W, b}; }
 };

@@ -132,6 +132,7 @@ VarPtr conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
 
     Mats in_data = {input->data, weight->data, bias->data};
     auto out = Var::make(fn->forward(in_data));
+    out->set_shape({N, fn->out_ch, fn->oH, fn->oW});
     out->parents = {input, weight, bias};
     out->back_fn = [fn, ins = std::vector<VarPtr>{input, weight, bias},
                     wp = std::weak_ptr<Var>(out)]() {
@@ -203,6 +204,7 @@ VarPtr maxpool2d_op(VarPtr input,
 
     Mats in_data = {input->data};
     auto out = Var::make(fn->forward(in_data));
+    out->set_shape({N, C, fn->oH, fn->oW});
     out->parents = {input};
     out->back_fn = [fn, ins = std::vector<VarPtr>{input},
                     wp = std::weak_ptr<Var>(out)]() {
@@ -233,10 +235,21 @@ VarPtr Conv2d::forward(VarPtr x, int H, int W_) {
     return conv2d_op(x, W, b, N, in_ch, H, W_, kH, kW, stride, pad);
 }
 
+VarPtr Conv2d::forward(VarPtr x) {
+    assert(x->is4d() && "Conv2d::forward(x) requires x shape (N,C,H,W)");
+    assert(x->dim(1) == in_ch && "Conv2d::forward: input channels mismatch");
+    return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
+}
+
 VarPtr MaxPool2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
     int C = x->data.cols() / (H * W_);
     return maxpool2d_op(x, N, C, H, W_, kH, kW, stride);
+}
+
+VarPtr MaxPool2d::forward(VarPtr x) {
+    assert(x->is4d() && "MaxPool2d::forward(x) requires x shape (N,C,H,W)");
+    return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
 // =====================================================================
@@ -281,6 +294,7 @@ VarPtr avgpool2d_op(VarPtr input,
 
     Mats in_data = {input->data};
     auto out = Var::make(fn->forward(in_data));
+    out->set_shape({N, C, fn->oH, fn->oW});
     out->parents = {input};
     out->back_fn = [fn, ins = std::vector<VarPtr>{input},
                     wp = std::weak_ptr<Var>(out)]() {
@@ -295,6 +309,11 @@ VarPtr AvgPool2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
     int C = x->data.cols() / (H * W_);
     return avgpool2d_op(x, N, C, H, W_, kH, kW, stride);
+}
+
+VarPtr AvgPool2d::forward(VarPtr x) {
+    assert(x->is4d() && "AvgPool2d::forward(x) requires x shape (N,C,H,W)");
+    return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
 // =====================================================================
@@ -350,6 +369,7 @@ VarPtr depthwise_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
 
     Mats in_data = {input->data, weight->data, bias->data};
     auto out = Var::make(fn->forward(in_data));
+    out->set_shape({N, C, fn->oH, fn->oW});
     out->parents = {input, weight, bias};
     out->back_fn = [fn, ins = std::vector<VarPtr>{input, weight, bias},
                     wp = std::weak_ptr<Var>(out)]() {
@@ -372,6 +392,12 @@ DepthwiseConv2d::DepthwiseConv2d(int channels_, int kH_, int kW_,
 VarPtr DepthwiseConv2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
     return depthwise_conv2d_op(x, W, b, N, channels, H, W_, kH, kW, stride, pad);
+}
+
+VarPtr DepthwiseConv2d::forward(VarPtr x) {
+    assert(x->is4d() && "DepthwiseConv2d::forward(x) requires x shape (N,C,H,W)");
+    assert(x->dim(1) == channels && "DepthwiseConv2d::forward: channel mismatch");
+    return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
 // =====================================================================
@@ -416,6 +442,7 @@ VarPtr nearest_upsample2d_op(VarPtr input,
 
     Mats in_data = {input->data};
     auto out = Var::make(fn->forward(in_data));
+    out->set_shape({N, C, H * scale, W * scale});
     out->parents = {input};
     out->back_fn = [fn, ins = std::vector<VarPtr>{input},
                     wp = std::weak_ptr<Var>(out)]() {
@@ -430,6 +457,11 @@ VarPtr NearestUpsample2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
     int C = x->data.cols() / (H * W_);
     return nearest_upsample2d_op(x, N, C, H, W_, scale);
+}
+
+VarPtr NearestUpsample2d::forward(VarPtr x) {
+    assert(x->is4d() && "NearestUpsample2d::forward(x) requires x shape (N,C,H,W)");
+    return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
 } // namespace ag
