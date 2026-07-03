@@ -34,6 +34,51 @@ __global__ void scale_kernel(const float* a, float s, float* out, std::size_t n)
     if (i < n) out[i] = s * a[i];
 }
 
+__global__ void matmul_kernel(const float* a, const float* b, float* out,
+                              int m, int n, int k) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= m || col >= n) return;
+    float acc = 0.f;
+    for (int p = 0; p < k; ++p) {
+        acc += a[row + p * m] * b[p + col * k];
+    }
+    out[row + col * m] = acc;
+}
+
+__global__ void matmul_grad_a_kernel(float* da, const float* g, const float* b,
+                                     int m, int n, int k) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int p = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= m || p >= k) return;
+    float acc = 0.f;
+    for (int col = 0; col < n; ++col) {
+        acc += g[row + col * m] * b[p + col * k];
+    }
+    da[row + p * m] += acc;
+}
+
+__global__ void matmul_grad_b_kernel(float* db, const float* a, const float* g,
+                                     int m, int n, int k) {
+    int p = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (p >= k || col >= n) return;
+    float acc = 0.f;
+    for (int row = 0; row < m; ++row) {
+        acc += a[row + p * m] * g[row + col * m];
+    }
+    db[p + col * k] += acc;
+}
+
+__global__ void broadcast_add_kernel(const float* a, const float* b, float* out,
+                                     int rows, int cols) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = rows * cols;
+    if (i >= total) return;
+    int col = i / rows;
+    out[i] = a[i] + b[col];
+}
+
 __global__ void relu_kernel(const float* a, float* out, std::size_t n) {
     std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) out[i] = a[i] > 0.f ? a[i] : 0.f;
@@ -51,6 +96,16 @@ __global__ void mul_grad_kernel(float* da, float* db, const float* g,
         da[i] += g[i] * b[i];
         db[i] += g[i] * a[i];
     }
+}
+
+__global__ void broadcast_add_grad_kernel(float* da, float* db, const float* g,
+                                          int rows, int cols) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = rows * cols;
+    if (i >= total) return;
+    int col = i / rows;
+    da[i] += g[i];
+    atomicAdd(&db[col], g[i]);
 }
 
 __global__ void relu_grad_kernel(float* dx, const float* g, const float* x, std::size_t n) {
@@ -160,6 +215,56 @@ VarPtr cuda_mul_op(VarPtr a, VarPtr b) {
     return out;
 }
 
+VarPtr cuda_matmul_op(VarPtr a, VarPtr b) {
+    require_cuda(a); require_cuda(b);
+    assert(a->cuda_device() == b->cuda_device());
+    assert(a->data.cols() == b->data.rows());
+    const int m = a->data.rows();
+    const int k = a->data.cols();
+    const int n = b->data.cols();
+    auto out = Var::make(Mat::Zero(m, n))->cuda(a->cuda_device());
+    dim3 block(16, 16);
+    dim3 grid((n + block.x - 1) / block.x, (m + block.y - 1) / block.y);
+    matmul_kernel<<<grid, block>>>(a->cuda_data(), b->cuda_data(), out->cuda_data(),
+                                   m, n, k);
+    finish_kernel("cuda_matmul_op");
+    out->sync_data_from_cuda();
+    out->parents = {a, b};
+    out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), m, n, k, block]() {
+        auto self = wp.lock();
+        dim3 grid_a((k + block.x - 1) / block.x, (m + block.y - 1) / block.y);
+        dim3 grid_b((n + block.x - 1) / block.x, (k + block.y - 1) / block.y);
+        matmul_grad_a_kernel<<<grid_a, block>>>(a->cuda_grad(), self->cuda_grad(),
+                                                b->cuda_data(), m, n, k);
+        matmul_grad_b_kernel<<<grid_b, block>>>(b->cuda_grad(), a->cuda_data(),
+                                                self->cuda_grad(), m, n, k);
+        finish_kernel("cuda_matmul_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_broadcast_add_op(VarPtr a, VarPtr b) {
+    require_cuda(a); require_cuda(b);
+    assert(a->cuda_device() == b->cuda_device());
+    assert(b->data.rows() == 1 && b->data.cols() == a->data.cols());
+    const int rows = a->data.rows();
+    const int cols = a->data.cols();
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    broadcast_add_kernel<<<blocks(n), 256>>>(a->cuda_data(), b->cuda_data(),
+                                             out->cuda_data(), rows, cols);
+    finish_kernel("cuda_broadcast_add_op");
+    out->sync_data_from_cuda();
+    out->parents = {a, b};
+    out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), rows, cols, n]() {
+        auto self = wp.lock();
+        broadcast_add_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), b->cuda_grad(),
+                                                      self->cuda_grad(), rows, cols);
+        finish_kernel("cuda_broadcast_add_backward");
+    };
+    return out;
+}
+
 VarPtr cuda_scale_op(VarPtr a, float s) {
     require_cuda(a);
     const std::size_t n = static_cast<std::size_t>(a->data.size());
@@ -208,6 +313,14 @@ VarPtr cuda_sum_op(VarPtr a) {
         finish_kernel("cuda_sum_backward");
     };
     return out;
+}
+
+void cuda_sgd_step(Var& p, float lr) {
+    if (!p.is_cuda()) return;
+    const std::size_t n = static_cast<std::size_t>(p.data.size());
+    axpy_kernel<<<blocks(n), 256>>>(p.cuda_data(), p.cuda_grad(), -lr, n);
+    finish_kernel("cuda_sgd_step");
+    p.sync_data_from_cuda();
 }
 
 } // namespace ag

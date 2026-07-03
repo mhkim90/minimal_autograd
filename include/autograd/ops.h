@@ -451,7 +451,12 @@ inline VarPtr mul(VarPtr a, VarPtr b)            {
 #endif
     return apply<MulFn>({a, b});
 }
-inline VarPtr matmul(VarPtr a, VarPtr b)         { return apply<MatMulFn>({a, b}); }
+inline VarPtr matmul(VarPtr a, VarPtr b)         {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda() || b->is_cuda()) return cuda_matmul_op(a, b);
+#endif
+    return apply<MatMulFn>({a, b});
+}
 inline VarPtr relu(VarPtr a)                     {
 #ifdef AUTOGRAD_USE_CUDA
     if (a->is_cuda()) return cuda_relu_op(a);
@@ -464,7 +469,12 @@ inline VarPtr sum(VarPtr a)                      {
 #endif
     return apply<SumFn>({a});
 }
-inline VarPtr broadcast_add(VarPtr a, VarPtr b)  { return apply<BroadcastAddFn>({a, b}); }
+inline VarPtr broadcast_add(VarPtr a, VarPtr b)  {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda() || b->is_cuda()) return cuda_broadcast_add_op(a, b);
+#endif
+    return apply<BroadcastAddFn>({a, b});
+}
 inline VarPtr scale(VarPtr a, float s)           {
 #ifdef AUTOGRAD_USE_CUDA
     if (a->is_cuda()) return cuda_scale_op(a, s);
