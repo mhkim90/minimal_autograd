@@ -62,6 +62,14 @@ int main() {
     }
     CHECK(threw);
 
+    bool shape_threw = false;
+    try {
+        (void)add(a, Var::make(Mat::Constant(1, 2, 1.f))->cuda());
+    } catch (const std::runtime_error&) {
+        shape_threw = true;
+    }
+    CHECK(shape_threw);
+
     Mat A(2, 3);
     A << 1.f, 2.f, 3.f,
          4.f, 5.f, 6.f;
@@ -93,6 +101,11 @@ int main() {
     SGD opt({p}, 0.1f);
     opt.step();
     CHECK_NEAR(p->cpu()->data(0, 0), 0.8f, 1e-4f);
+    opt.zero_grad();
+    CHECK_NEAR(p->cpu()->grad(0, 0), 0.f, 1e-4f);
+    auto loss2 = sum(scale(p, 2.f));
+    loss2->backward();
+    CHECK_NEAR(p->cpu()->grad(0, 0), 2.f, 1e-4f);
 
     Linear lin(3, 2);
     lin.W = lin.W->cuda();
@@ -107,6 +120,8 @@ int main() {
     CHECK(lin.W->is_cuda());
     CHECK(lin.W->cpu()->grad.cwiseAbs().maxCoeff() > 0.f);
     CHECK((lin.W->cpu()->data - w_before).cwiseAbs().maxCoeff() > 0.f);
+    lin.zero_grad();
+    CHECK_NEAR(lin.W->cpu()->grad.cwiseAbs().maxCoeff(), 0.f, 1e-4f);
 
     Mat logits(2, 3);
     logits << 1.f, 2.f, 3.f,
@@ -130,6 +145,24 @@ int main() {
     CHECK_NEAR(ce_cpu->data(0, 0), expected_ce, 1e-4f);
     CHECK_NEAR(lg_cpu->grad(0, 2), (expected_sm(0, 2) - 1.f) / 2.f, 1e-4f);
     CHECK_NEAR(lg_cpu->grad(1, 0), (expected_sm(1, 0) - 1.f) / 2.f, 1e-4f);
+
+    bool adam_threw = false;
+    try {
+        Adam adam({p});
+        adam.step();
+    } catch (const std::runtime_error&) {
+        adam_threw = true;
+    }
+    CHECK(adam_threw);
+
+    bool conv_threw = false;
+    try {
+        Conv2d conv(1, 1, 3, 3);
+        (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5)->cuda());
+    } catch (const std::runtime_error&) {
+        conv_threw = true;
+    }
+    CHECK(conv_threw);
 
     std::cout << "ALL CUDA CORE TESTS PASSED\n";
     return 0;
