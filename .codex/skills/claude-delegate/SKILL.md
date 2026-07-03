@@ -54,9 +54,9 @@ For most calls, prefer:
 
 - `model: "sonnet"`
 - `effort: "low"` or `"medium"` for quick reviews; `"high"` only for hard reasoning.
-- omit `max_budget_usd` for normal second opinions and repo reviews; the server default is `0.50`.
+- omit `max_budget_usd` for normal second opinions and repo reviews; the server default is `2.00`.
 - use `max_budget_usd: 0.05` to `0.10` only for very small, bounded questions.
-- use an explicit higher cap up to the server hard cap when the user asks for deeper work.
+- use an explicit higher cap up to the server hard cap (`5.00`) when the user asks for deeper work.
 - `mode: "safe"` unless there is a clear reason to use `"bare"`.
 
 ## Async Runs
