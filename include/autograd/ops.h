@@ -481,8 +481,18 @@ inline VarPtr scale(VarPtr a, float s)           {
 #endif
     return apply<ScaleFn>({a}, s);
 }
-inline VarPtr softmax(VarPtr a)                  { return apply<SoftmaxFn>({a}); }
-inline VarPtr log_softmax(VarPtr a)              { return apply<LogSoftmaxFn>({a}); }
+inline VarPtr softmax(VarPtr a)                  {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_softmax_op(a);
+#endif
+    return apply<SoftmaxFn>({a});
+}
+inline VarPtr log_softmax(VarPtr a)              {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_log_softmax_op(a);
+#endif
+    return apply<LogSoftmaxFn>({a});
+}
 inline VarPtr transpose(VarPtr a)                { return apply<TransposeFn>({a}); }
 inline VarPtr reshape(VarPtr a, int r, int c)    { return apply<ReshapeFn>({a}, r, c); }
 inline VarPtr concat(std::vector<VarPtr> inputs) { return apply<ConcatFn>(inputs); }

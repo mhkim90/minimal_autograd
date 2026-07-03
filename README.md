@@ -84,8 +84,8 @@ cmake --build build-cuda -j1
 ```
 
 Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `mul`, `matmul`,
-`broadcast_add`, `scale`, `relu`, `sum`, and `SGD`, including
-backward/gradient accumulation on device.
+`broadcast_add`, `scale`, `relu`, `sum`, `softmax`, `log_softmax`,
+`cross_entropy`, and `SGD`, including backward/gradient accumulation on device.
 
 The first three print `ALL TESTS PASSED`. `test_extensions` prints `30/30 passed`.
 `test_diffusion` prints `17/17 passed`. `test_smoke` prints `35/35 passed`.
@@ -239,6 +239,8 @@ auto y = conv.forward(x, H, W);
 | 6b    | `Conv2dFn`                         | `conv2d_op(input, weight, bias, N, C, H, W, kH, kW, stride, pad)`. |
 | 6c    | `Conv2d` / `MaxPool2d` modules     | `Conv2d(in_ch, out_ch, kH, kW, stride, pad)`, `MaxPool2d(kH, kW)`. |
 | C1    | Minimal CUDA core autograd         | `x->cuda()`, then `add`, `mul`, `matmul`, `broadcast_add`, `scale`, `relu`, `sum`, `SGD`, `backward`, `cpu`. |
+| C2    | CUDA softmax / log-softmax         | `softmax`, `log_softmax` on device with backward. |
+| C3    | CUDA cross-entropy                 | `cross_entropy(pred, target)` on device, built on CUDA `log_softmax`. |
 | E1    | Activation + arithmetic ops        | `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`. |
 | E2    | Sequence ops                       | `cumsum(x, axis)`, `flip(x, axis)` — axis 0 or 1.       |
 | E3    | `AvgPool2d`                        | `AvgPool2d(kH, kW, stride)`, or `avgpool2d_op(...)`.    |
@@ -318,8 +320,8 @@ they are scope decisions.
   invalidate the graph.
 - **Limited CUDA.** CUDA is opt-in and currently covers only the minimal core
   autograd slice: `add`, `mul`, `matmul`, `broadcast_add`, `scale`, `relu`,
-  `sum`, and `SGD`. Unsupported ops should stay on CPU until explicit CUDA
-  kernels are added.
+  `sum`, `softmax`, `log_softmax`, `cross_entropy`, and `SGD`. Unsupported ops
+  should stay on CPU until explicit CUDA kernels are added.
 - **No dilated / transposed conv.** `Conv2d` is the standard
   cross-correlation. `DepthwiseConv2d` is available (groups = channels).
   Dilated or transposed variants are not implemented.
