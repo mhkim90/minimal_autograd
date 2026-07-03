@@ -21,7 +21,10 @@ struct Module {
     virtual std::vector<VarPtr> parameters() = 0;
 
     void zero_grad() {
-        for (auto& p : parameters()) p->grad.setZero();
+        for (auto& p : parameters()) {
+            p->grad.setZero();
+            p->cuda_zero_grad();
+        }
     }
 };
 

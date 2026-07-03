@@ -2,6 +2,8 @@
 
 #include "autograd/conv.h"
 
+#include <stdexcept>
+
 namespace ag {
 
 // =====================================================================
@@ -122,6 +124,9 @@ Mats Conv2dFn::backward(const Mat& grad) {
 VarPtr conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
                  int N, int C, int H, int W,
                  int kH, int kW, int stride, int pad) {
+    if (input->is_cuda() || weight->is_cuda() || bias->is_cuda()) {
+        throw std::runtime_error("conv2d_op: CUDA inputs are not supported yet");
+    }
     auto fn = std::make_shared<Conv2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->out_ch = weight->data.rows();
@@ -196,6 +201,9 @@ Mats MaxPool2dFn::backward(const Mat& grad) {
 VarPtr maxpool2d_op(VarPtr input,
                     int N, int C, int H, int W,
                     int kH, int kW, int stride) {
+    if (input->is_cuda()) {
+        throw std::runtime_error("maxpool2d_op: CUDA inputs are not supported yet");
+    }
     auto fn = std::make_shared<MaxPool2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->kH = kH; fn->kW = kW; fn->stride = stride;
@@ -286,6 +294,9 @@ Mats AvgPool2dFn::backward(const Mat& grad) {
 VarPtr avgpool2d_op(VarPtr input,
                     int N, int C, int H, int W,
                     int kH, int kW, int stride) {
+    if (input->is_cuda()) {
+        throw std::runtime_error("avgpool2d_op: CUDA inputs are not supported yet");
+    }
     auto fn = std::make_shared<AvgPool2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->kH = kH; fn->kW = kW; fn->stride = stride;
@@ -361,6 +372,9 @@ Mats DepthwiseConv2dFn::backward(const Mat& grad) {
 VarPtr depthwise_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
                             int N, int C, int H, int W,
                             int kH, int kW, int stride, int pad) {
+    if (input->is_cuda() || weight->is_cuda() || bias->is_cuda()) {
+        throw std::runtime_error("depthwise_conv2d_op: CUDA inputs are not supported yet");
+    }
     auto fn = std::make_shared<DepthwiseConv2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->kH = kH; fn->kW = kW; fn->stride = stride; fn->pad = pad;
@@ -437,6 +451,9 @@ Mats NearestUpsample2dFn::backward(const Mat& grad) {
 
 VarPtr nearest_upsample2d_op(VarPtr input,
                               int N, int C, int H, int W, int scale) {
+    if (input->is_cuda()) {
+        throw std::runtime_error("nearest_upsample2d_op: CUDA inputs are not supported yet");
+    }
     auto fn = std::make_shared<NearestUpsample2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W; fn->scale = scale;
 

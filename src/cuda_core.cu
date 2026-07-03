@@ -193,10 +193,31 @@ void require_cuda(VarPtr v) {
     if (!v->is_cuda()) throw std::runtime_error("cuda op requires CUDA Var input");
 }
 
+void require_same_device(VarPtr a, VarPtr b) {
+    if (a->cuda_device() != b->cuda_device()) {
+        throw std::runtime_error("cuda op requires inputs on the same device");
+    }
+}
+
 void require_same_shape(VarPtr a, VarPtr b) {
-    assert(a->data.rows() == b->data.rows());
-    assert(a->data.cols() == b->data.cols());
-    assert(a->cuda_device() == b->cuda_device());
+    if (a->data.rows() != b->data.rows() || a->data.cols() != b->data.cols()) {
+        throw std::runtime_error("cuda op shape mismatch");
+    }
+    require_same_device(a, b);
+}
+
+void require_matmul_shape(VarPtr a, VarPtr b) {
+    if (a->data.cols() != b->data.rows()) {
+        throw std::runtime_error("cuda_matmul_op: shape mismatch");
+    }
+    require_same_device(a, b);
+}
+
+void require_broadcast_add_shape(VarPtr a, VarPtr b) {
+    if (b->data.rows() != 1 || b->data.cols() != a->data.cols()) {
+        throw std::runtime_error("cuda_broadcast_add_op: shape mismatch");
+    }
+    require_same_device(a, b);
 }
 
 VarPtr make_cuda_like(VarPtr a) {
@@ -283,8 +304,7 @@ VarPtr cuda_mul_op(VarPtr a, VarPtr b) {
 
 VarPtr cuda_matmul_op(VarPtr a, VarPtr b) {
     require_cuda(a); require_cuda(b);
-    assert(a->cuda_device() == b->cuda_device());
-    assert(a->data.cols() == b->data.rows());
+    require_matmul_shape(a, b);
     const int m = a->data.rows();
     const int k = a->data.cols();
     const int n = b->data.cols();
@@ -311,8 +331,7 @@ VarPtr cuda_matmul_op(VarPtr a, VarPtr b) {
 
 VarPtr cuda_broadcast_add_op(VarPtr a, VarPtr b) {
     require_cuda(a); require_cuda(b);
-    assert(a->cuda_device() == b->cuda_device());
-    assert(b->data.rows() == 1 && b->data.cols() == a->data.cols());
+    require_broadcast_add_shape(a, b);
     const int rows = a->data.rows();
     const int cols = a->data.cols();
     const std::size_t n = static_cast<std::size_t>(a->data.size());

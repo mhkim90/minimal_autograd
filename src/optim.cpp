@@ -1,5 +1,6 @@
 #include "autograd/optim.h"
 #include <cmath>
+#include <stdexcept>
 
 namespace ag {
 
@@ -21,6 +22,9 @@ void Adam::step() {
     const float bc2 = 1.f - std::pow(beta2, t);
     for (size_t i = 0; i < params.size(); ++i) {
         auto& p = params[i];
+        if (p->is_cuda()) {
+            throw std::runtime_error("Adam::step(): CUDA parameters are not supported yet");
+        }
         m[i] = beta1 * m[i] + (1.f - beta1) * p->grad;
         v[i] = beta2 * v[i] + (1.f - beta2) * p->grad.cwiseProduct(p->grad);
 
@@ -32,7 +36,10 @@ void Adam::step() {
 }
 
 void Adam::zero_grad() {
-    for (auto& p : params) p->grad.setZero();
+    for (auto& p : params) {
+        p->grad.setZero();
+        p->cuda_zero_grad();
+    }
 }
 
 } // namespace ag
