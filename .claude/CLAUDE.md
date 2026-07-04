@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is a minimal reverse-mode automatic differentiation library in C++17, built on top of Eigen3. It implements a tape-based autograd engine, a small module system (`Linear`, `Sequential`, `Conv2d`, `MaxPool2d`), losses (`mse_loss`, `cross_entropy`), and optimizers (`SGD`, `Adam`). Single-threaded, CPU-only, intended for teaching and small experiments. Use these instructions for all code work in this repo.
+This repository is a minimal reverse-mode automatic differentiation library in C++17, built on top of Eigen3. It implements a tape-based autograd engine, a module system (`Linear`, `Sequential`, `Conv2d`, `MaxPool2d`, `AvgPool2d`, `DepthwiseConv2d`, `NearestUpsample2d`, `GroupNorm`), losses (`mse_loss`, `cross_entropy`), optimizers (`SGD`, `Adam`), and diffusion-model primitives (`randn`, `sinusoidal_time_embedding`, `q_sample`). CPU (Eigen, optionally OpenMP) is the default backend; an optional CUDA backend (`-DAUTOGRAD_USE_CUDA=ON`) mirrors core ops, `Linear`, losses, `Conv2d`, and `MaxPool2d` via `.cuda()`/`.cpu()` on `Var`. Intended for teaching and small experiments. Use these instructions for all code work in this repo.
 
 ## General Rules
 
@@ -16,7 +16,9 @@ This repository is a minimal reverse-mode automatic differentiation library in C
 ## Build, Test, and Validation
 
 - Build with CMake: `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$(nproc)`
-- Three test binaries: `./test_core`, `./test_nn`, `./test_conv` — all should print `ALL TESTS PASSED`.
+- Core test binaries: `./test_core`, `./test_nn`, `./test_conv` — all should print `ALL TESTS PASSED`.
+- Optional CUDA backend: configure with `-DAUTOGRAD_USE_CUDA=ON` (needs CMake 3.18+ and a CUDA toolkit; use the `cuda` symlink, e.g. `PATH=/usr/local/cuda/bin:$PATH`, if a versioned `cuda-X.Y` path isn't directly accessible). Adds `./test_cuda_core`, which should print `ALL CUDA CORE TESTS PASSED`. CUDA `Conv2d`/`MaxPool2d` are cross-checked against the CPU path in that test — keep both numerically consistent when touching either.
+- Optional extended ops/tests: configure with `-DAUTOGRAD_BUILD_ADVANCED_OPS=ON` to build `./test_extensions`, `./test_diffusion`, `./test_smoke`.
 - If a change affects a single op or module, run only the relevant test binary.
 - Do not introduce new tooling unless it is clearly needed.
 
@@ -59,6 +61,10 @@ Before doing hard reasoning or a large edit inline, ask "Codex (hard) or OpenCod
 > either `opencode-delegate` or `codex-delegate`, confirm the session has these MCP
 > tools loaded (they appear in the deferred-tools list). If they are absent, fall
 > back to inline execution.
+> Also note: the Codex MCP environment does **not** provide GPU access. Do not
+> delegate GPU-dependent builds, CUDA tests, benchmarks, profilers, or device
+> probes to `codex-delegate`; use Codex only for GPU/CUDA reasoning or code edits,
+> then run GPU validation from Claude/OpenCode/local shell where a GPU is available.
 
 See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKILL.md), [skills/grilled-me/SKILL.md](skills/grilled-me/SKILL.md), [skills/handoff/SKILL.md](skills/handoff/SKILL.md), [skills/caveman/SKILL.md](skills/caveman/SKILL.md), [skills/opencode-delegate/SKILL.md](skills/opencode-delegate/SKILL.md), and [skills/codex-delegate/SKILL.md](skills/codex-delegate/SKILL.md).
 
