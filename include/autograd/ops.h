@@ -24,6 +24,7 @@ struct AddFn : Function {
     Mats backward(const Mat& g) override {
         return {g, g};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 VarPtr add(VarPtr a, VarPtr b);
 
@@ -36,6 +37,7 @@ struct MulFn : Function {
         // d/da (a*b) = b, d/db (a*b) = a
         return {g.cwiseProduct(saved[1]), g.cwiseProduct(saved[0])};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 VarPtr mul(VarPtr a, VarPtr b);
 
@@ -61,6 +63,7 @@ struct ReLUFn : Function {
         Mat mask = (saved[0].array() > 0.f).cast<float>();
         return {g.cwiseProduct(mask)};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 VarPtr relu(VarPtr a);
 
@@ -94,6 +97,7 @@ struct BroadcastAddFn : Function {
         bias_grad.row(0) = g.colwise().sum();
         return {g, bias_grad};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 VarPtr broadcast_add(VarPtr a, VarPtr b);
 
@@ -108,6 +112,7 @@ struct ScaleFn : Function {
     Mats backward(const Mat& g) override {
         return {s * g};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 VarPtr scale(VarPtr a, float s);
 
@@ -129,6 +134,7 @@ struct SoftmaxFn : Function {
         Mat gs = (g.cwiseProduct(s)).rowwise().sum().replicate(1, s.cols());
         return {s.cwiseProduct(g - gs)};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 VarPtr softmax(VarPtr a);
 
@@ -151,6 +157,7 @@ struct LogSoftmaxFn : Function {
         Mat gs = g.rowwise().sum().replicate(1, g.cols());
         return {g - sm.cwiseProduct(gs)};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 VarPtr log_softmax(VarPtr a);
 
@@ -220,6 +227,7 @@ struct SigmoidFn : Function {
         const auto& s = saved[0].array();
         return {(g.array() * s * (1.f - s)).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct TanhFn : Function {
@@ -231,6 +239,7 @@ struct TanhFn : Function {
     Mats backward(const Mat& g) override {
         return {(g.array() * (1.f - saved[0].array().square())).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct ExpFn : Function {
@@ -242,6 +251,7 @@ struct ExpFn : Function {
     Mats backward(const Mat& g) override {
         return {g.cwiseProduct(saved[0])};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct LogFn : Function {
@@ -252,6 +262,7 @@ struct LogFn : Function {
     Mats backward(const Mat& g) override {
         return {(g.array() / saved[0].array()).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct SqrtFn : Function {
@@ -263,6 +274,7 @@ struct SqrtFn : Function {
     Mats backward(const Mat& g) override {
         return {(g.array() / (2.f * saved[0].array())).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct SiLUFn : Function {
@@ -276,6 +288,7 @@ struct SiLUFn : Function {
         const auto& s = saved[1].array();
         return {(g.array() * (s + x * s * (1.f - s))).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct SoftplusFn : Function {
@@ -288,6 +301,7 @@ struct SoftplusFn : Function {
         const auto& x = saved[0].array();
         return {(g.array() / (1.f + (-x).exp())).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct SubFn : Function {
@@ -296,6 +310,7 @@ struct SubFn : Function {
         return in[0] - in[1];
     }
     Mats backward(const Mat& g) override { return {g, -g}; }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct DivFn : Function {
@@ -309,6 +324,7 @@ struct DivFn : Function {
                     saved[1].cwiseProduct(saved[1]));
         return {ga, gb};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 // Cumulative sum along axis (0=rows, 1=cols). Backward is suffix sum of g.
@@ -333,6 +349,7 @@ struct CumsumFn : Function {
         }
         return {grad};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 // Flip along axis (0=flip rows, 1=flip cols).
@@ -347,6 +364,7 @@ struct FlipFn : Function {
         if (axis == 1) return {g.rowwise().reverse()};
         return {g.colwise().reverse()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct SinFn : Function {
@@ -357,6 +375,7 @@ struct SinFn : Function {
     Mats backward(const Mat& g) override {
         return {(g.array() * saved[0].array().cos()).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 struct CosFn : Function {
@@ -367,6 +386,7 @@ struct CosFn : Function {
     Mats backward(const Mat& g) override {
         return {(g.array() * (-saved[0].array().sin())).matrix()};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 // clamp(x, lo, hi) — element-wise. Backward is 0 outside [lo,hi], 1 inside.
@@ -382,6 +402,7 @@ struct ClampFn : Function {
                        .cast<float>().matrix();
         return {g.cwiseProduct(mask)};
     }
+    bool preserves_input_shape() const noexcept override { return true; }
 };
 
 // ColSliceFn — extract columns [start, start+len).

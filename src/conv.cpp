@@ -3,8 +3,27 @@
 #include "autograd/conv.h"
 
 #include <stdexcept>
+#include <string>
 
 namespace ag {
+namespace {
+
+void require_flat_image_shape(VarPtr x, int C, int H, int W, const char* what) {
+    if (H <= 0 || W <= 0) {
+        throw std::runtime_error(std::string(what) + ": H and W must be positive");
+    }
+    if (x->data.cols() != C * H * W) {
+        throw std::runtime_error(std::string(what) + ": input channel/shape mismatch");
+    }
+}
+
+void require_4d(VarPtr x, const char* what) {
+    if (!x->is4d()) {
+        throw std::runtime_error(std::string(what) + " requires x shape (N,C,H,W)");
+    }
+}
+
+} // namespace
 
 // =====================================================================
 // im2col
@@ -240,23 +259,29 @@ Conv2d::Conv2d(int in_ch_, int out_ch_, int kH_, int kW_,
 
 VarPtr Conv2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
+    require_flat_image_shape(x, in_ch, H, W_, "Conv2d::forward");
     return conv2d_op(x, W, b, N, in_ch, H, W_, kH, kW, stride, pad);
 }
 
 VarPtr Conv2d::forward(VarPtr x) {
-    assert(x->is4d() && "Conv2d::forward(x) requires x shape (N,C,H,W)");
-    assert(x->dim(1) == in_ch && "Conv2d::forward: input channels mismatch");
+    require_4d(x, "Conv2d::forward(x)");
+    if (x->dim(1) != in_ch) {
+        throw std::runtime_error("Conv2d::forward: input channels mismatch");
+    }
     return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
 VarPtr MaxPool2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
+    if (H <= 0 || W_ <= 0 || x->data.cols() % (H * W_) != 0) {
+        throw std::runtime_error("MaxPool2d::forward: input shape mismatch");
+    }
     int C = x->data.cols() / (H * W_);
     return maxpool2d_op(x, N, C, H, W_, kH, kW, stride);
 }
 
 VarPtr MaxPool2d::forward(VarPtr x) {
-    assert(x->is4d() && "MaxPool2d::forward(x) requires x shape (N,C,H,W)");
+    require_4d(x, "MaxPool2d::forward(x)");
     return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
@@ -318,12 +343,15 @@ VarPtr avgpool2d_op(VarPtr input,
 
 VarPtr AvgPool2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
+    if (H <= 0 || W_ <= 0 || x->data.cols() % (H * W_) != 0) {
+        throw std::runtime_error("AvgPool2d::forward: input shape mismatch");
+    }
     int C = x->data.cols() / (H * W_);
     return avgpool2d_op(x, N, C, H, W_, kH, kW, stride);
 }
 
 VarPtr AvgPool2d::forward(VarPtr x) {
-    assert(x->is4d() && "AvgPool2d::forward(x) requires x shape (N,C,H,W)");
+    require_4d(x, "AvgPool2d::forward(x)");
     return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
@@ -405,12 +433,15 @@ DepthwiseConv2d::DepthwiseConv2d(int channels_, int kH_, int kW_,
 
 VarPtr DepthwiseConv2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
+    require_flat_image_shape(x, channels, H, W_, "DepthwiseConv2d::forward");
     return depthwise_conv2d_op(x, W, b, N, channels, H, W_, kH, kW, stride, pad);
 }
 
 VarPtr DepthwiseConv2d::forward(VarPtr x) {
-    assert(x->is4d() && "DepthwiseConv2d::forward(x) requires x shape (N,C,H,W)");
-    assert(x->dim(1) == channels && "DepthwiseConv2d::forward: channel mismatch");
+    require_4d(x, "DepthwiseConv2d::forward(x)");
+    if (x->dim(1) != channels) {
+        throw std::runtime_error("DepthwiseConv2d::forward: channel mismatch");
+    }
     return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 
@@ -472,12 +503,15 @@ VarPtr nearest_upsample2d_op(VarPtr input,
 
 VarPtr NearestUpsample2d::forward(VarPtr x, int H, int W_) {
     int N = x->data.rows();
+    if (H <= 0 || W_ <= 0 || x->data.cols() % (H * W_) != 0) {
+        throw std::runtime_error("NearestUpsample2d::forward: input shape mismatch");
+    }
     int C = x->data.cols() / (H * W_);
     return nearest_upsample2d_op(x, N, C, H, W_, scale);
 }
 
 VarPtr NearestUpsample2d::forward(VarPtr x) {
-    assert(x->is4d() && "NearestUpsample2d::forward(x) requires x shape (N,C,H,W)");
+    require_4d(x, "NearestUpsample2d::forward(x)");
     return forward(x, static_cast<int>(x->dim(2)), static_cast<int>(x->dim(3)));
 }
 

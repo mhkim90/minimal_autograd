@@ -90,6 +90,11 @@ void Var::cuda_grad_ones() {
 #endif
 }
 
+void Var::clear_grad() {
+    grad.setZero();
+    cuda_zero_grad();
+}
+
 void Var::_build_topo(std::vector<Var*>& order,
                       std::unordered_set<Var*>& visited) {
     if (visited.count(this)) return;
@@ -101,15 +106,30 @@ void Var::_build_topo(std::vector<Var*>& order,
 void Var::backward() {
     assert(data.rows() == 1 && data.cols() == 1 &&
            "backward() requires a scalar (1x1) loss");
-    grad = Mat::Ones(1, 1);
-    cuda_grad_ones();
 
     std::vector<Var*> topo;
     std::unordered_set<Var*> visited;
     _build_topo(topo, visited);
 
-    for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
-        if ((*it)->back_fn) (*it)->back_fn();
+    std::vector<Mat> saved_grads;
+    saved_grads.reserve(topo.size());
+    for (auto* v : topo) saved_grads.push_back(v->grad);
+
+    try {
+        grad = Mat::Ones(1, 1);
+        cuda_grad_ones();
+
+        for (auto it = topo.rbegin(); it != topo.rend(); ++it) {
+            if ((*it)->back_fn) (*it)->back_fn();
+        }
+    } catch (...) {
+        for (size_t i = 0; i < topo.size(); ++i) {
+            topo[i]->grad = saved_grads[i];
+            try {
+                topo[i]->sync_grad_to_cuda();
+            } catch (...) {}
+        }
+        throw;
     }
 }
 
@@ -117,10 +137,7 @@ void Var::zero_grad() {
     std::vector<Var*> topo;
     std::unordered_set<Var*> visited;
     _build_topo(topo, visited);
-    for (auto* v : topo) {
-        v->grad.setZero();
-        v->cuda_zero_grad();
-    }
+    for (auto* v : topo) v->clear_grad();
 }
 
 } // namespace ag

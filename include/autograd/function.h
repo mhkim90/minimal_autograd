@@ -25,6 +25,7 @@ struct Function {
     virtual ~Function() = default;
     virtual Mat forward(const Mats& in) = 0;
     virtual Mats backward(const Mat& grad) = 0;
+    virtual bool preserves_input_shape() const noexcept { return false; }
 };
 
 // apply<Fn>(ins): Fn must be default-constructible.
@@ -43,7 +44,7 @@ VarPtr apply(std::vector<VarPtr> ins) {
     for (auto& v : ins) in_data.push_back(v->data);
 
     auto out = Var::make(fn->forward(in_data));
-    if (!ins.empty() &&
+    if (fn->preserves_input_shape() && !ins.empty() &&
         out->data.rows() == ins[0]->data.rows() &&
         out->data.cols() == ins[0]->data.cols()) {
         out->set_shape(ins[0]->shape());
@@ -77,7 +78,7 @@ VarPtr apply(std::vector<VarPtr> ins, Args... args) {
     for (auto& v : ins) in_data.push_back(v->data);
 
     auto out = Var::make(fn->forward(in_data));
-    if (!ins.empty() &&
+    if (fn->preserves_input_shape() && !ins.empty() &&
         out->data.rows() == ins[0]->data.rows() &&
         out->data.cols() == ins[0]->data.cols()) {
         out->set_shape(ins[0]->shape());

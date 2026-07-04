@@ -87,6 +87,7 @@ struct Var {
     void sync_grad_to_cuda();
     void cuda_zero_grad();
     void cuda_grad_ones();
+    void clear_grad();
 
     // Call on a scalar (1x1) loss node. Builds topo order, then runs
     // back_fn in reverse. Safe to call once per forward pass.

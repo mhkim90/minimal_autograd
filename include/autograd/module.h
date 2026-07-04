@@ -22,8 +22,7 @@ struct Module {
 
     void zero_grad() {
         for (auto& p : parameters()) {
-            p->grad.setZero();
-            p->cuda_zero_grad();
+            p->clear_grad();
         }
     }
 };
