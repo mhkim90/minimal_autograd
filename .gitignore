@@ -67,3 +67,6 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Datasets (downloaded separately, e.g. MNIST into data/).
+data/

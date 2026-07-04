@@ -150,9 +150,16 @@ Mats Conv2dFn::backward(const Mat& grad) {
 VarPtr conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
                  int N, int C, int H, int W,
                  int kH, int kW, int stride, int pad) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (input->is_cuda() || weight->is_cuda() || bias->is_cuda()) {
+        return cuda_conv2d_op(input, weight, bias,
+                              N, C, H, W, kH, kW, stride, pad);
+    }
+#else
     if (input->is_cuda() || weight->is_cuda() || bias->is_cuda()) {
         throw std::runtime_error("conv2d_op: CUDA inputs are not supported yet");
     }
+#endif
     auto fn = std::make_shared<Conv2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->out_ch = weight->data.rows();
@@ -225,9 +232,15 @@ Mats MaxPool2dFn::backward(const Mat& grad) {
 VarPtr maxpool2d_op(VarPtr input,
                     int N, int C, int H, int W,
                     int kH, int kW, int stride) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (input->is_cuda()) {
+        return cuda_maxpool2d_op(input, N, C, H, W, kH, kW, stride);
+    }
+#else
     if (input->is_cuda()) {
         throw std::runtime_error("maxpool2d_op: CUDA inputs are not supported yet");
     }
+#endif
     auto fn = std::make_shared<MaxPool2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->kH = kH; fn->kW = kW; fn->stride = stride;
