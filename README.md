@@ -46,49 +46,50 @@ minimal CUDA core are opt-in.
 - **CMake 3.14+**
 - **C++17** compiler (GCC 9+, Clang 10+ tested)
 - Optional: **OpenMP** (Eigen uses it for parallelism when enabled)
-- Optional: **CUDA Toolkit** for `AUTOGRAD_USE_CUDA=ON`
+- Optional: **CUDA Toolkit** and CMake 3.18+ for `AUTOGRAD_USE_CUDA=ON`
 
 ## Build
 
 ```bash
-cd autograd
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
 
 This produces the static library `libautograd.a` and three core test binaries:
 
 ```bash
-./test_core        # core op correctness + grad_check
-./test_nn          # end-to-end net training (XOR with Adam)
-./test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
+./build/test_core        # core op correctness + grad_check
+./build/test_nn          # end-to-end net training (XOR with Adam)
+./build/test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
 ```
 
 Advanced experimental tests are opt-in:
 
 ```bash
 cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
-cmake --build build-advanced -j1
-./test_extensions  # 30 grad-checks for the GUDM extension ops
-./test_diffusion   # 17 grad-checks / shape / value assertions for diffusion.h
-./test_smoke       # 35 end-to-end smoke checks (training + inference loops)
+cmake --build build-advanced --parallel
+./build-advanced/test_extensions  # 30 grad-checks for the extension ops
+./build-advanced/test_diffusion   # 17 grad-checks / shape / value assertions
+./build-advanced/test_smoke       # 35 end-to-end smoke checks
 ```
 
 Minimal CUDA core autograd is opt-in and intentionally small:
 
 ```bash
 cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_USE_CUDA=ON
-cmake --build build-cuda -j1
+cmake --build build-cuda --parallel
 ./build-cuda/test_cuda_core
 ```
 
 Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `mul`, `matmul`,
 `broadcast_add`, `scale`, `relu`, `sum`, `softmax`, `log_softmax`,
 `cross_entropy`, and `SGD`, including backward/gradient accumulation on device.
+Unsupported CUDA ops throw instead of silently falling back to stale host data.
 
-The first three print `ALL TESTS PASSED`. `test_extensions` prints `30/30 passed`.
-`test_diffusion` prints `17/17 passed`. `test_smoke` prints `35/35 passed`.
+`test_core`, `test_nn`, and `test_cuda_core` print `ALL ... TESTS PASSED`.
+`test_conv` prints `21 passed, 0 failed`. `test_extensions` prints
+`30/30 passed`, `test_diffusion` prints `17/17 passed`, and `test_smoke`
+prints `35/35 passed`.
 
 ### Smoke test (`test_smoke`)
 
@@ -117,15 +118,22 @@ Build and run:
 
 ```bash
 cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
-cmake --build build-advanced -j1
+cmake --build build-advanced --parallel
 ./build-advanced/test_smoke
 ```
 
 ## Quick start
 
-Train a 2-layer ReLU MLP to fit a tiny linear function `y = 2*x1 + 3*x2` with
-Adam. Drop this into `examples/linear_regression.cpp`, add an executable
-target to `CMakeLists.txt`, and run.
+The default build always creates the README example executable:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target example --parallel
+./build/example
+```
+
+It trains a 2-layer ReLU MLP to fit `y = 2*x1 + 3*x2` with Adam. The source is
+`examples/linear_regression.cpp`:
 
 ```cpp
 #include "autograd.h"
@@ -160,7 +168,7 @@ int main() {
 Expected end-of-training output is approximately:
 
 ```
-epoch 0    loss=2.5-ish
+epoch 0    loss=<initial value>
 epoch 50   loss=...
 ...
 final pred: ~[[5], [2], [3], [0]]
@@ -204,6 +212,8 @@ topo-sort, then invokes each captured `back_fn` in reverse order.
 A `Module` is anything with `forward(VarPtr) → VarPtr` and a list of
 `parameters() → vector<VarPtr>`. `Sequential` composes modules; optimizers
 iterate over `parameters()` and call `step()` / `zero_grad()`.
+`zero_grad()` clears both CPU gradients and CUDA device gradients when CUDA is
+enabled.
 
 ### Logical 4D Shape
 
@@ -287,8 +297,8 @@ int main() {
                         /*sqrt_alpha_bar=*/0.6f,
                         /*sqrt_one_minus_ab=*/0.8f,
                         noise);
-    // x_t and t_emb are both leaves — no autograd graph was built.
-    // Use x_t as input to your U-Net; the graph forms downstream.
+    // t_emb and random noise are leaves. x_t is differentiable with respect
+    // to x0 and noise through the scale/add chain.
     return 0;
 }
 ```
@@ -296,7 +306,7 @@ int main() {
 ### Tests
 
 ```bash
-./test_diffusion       # 17 grad-checks / shape / value assertions
+./build-advanced/test_diffusion       # 17 grad-checks / shape / value assertions
 ```
 
 Coverage: `randn` shape, leaf semantics, mean ≈ 0, std ≈ 1, seed
@@ -314,7 +324,9 @@ they are scope decisions.
   picks up OpenMP automatically when available.
 - **No `retain_graph`.** Each forward pass may be backwarded exactly once.
   If you call `backward()` twice on the same graph, gradients will
-  accumulate on top of the previous run.
+  accumulate on top of the previous run. If a `back_fn` throws during
+  `backward()`, gradients touched by that backward attempt are restored before
+  the exception is rethrown.
 - **No inplace ops.** Every op allocates a new `Var`. Mutating a leaf
   parameter is fine, but mutating a non-leaf `Var->data` will silently
   invalidate the graph.
@@ -328,6 +340,8 @@ they are scope decisions.
 - **Conv storage is flat (2D).** Values still live in `Mat(N, C*H*W)`, but
   logical 4D metadata lets `Conv2d::forward(x)` infer `(H, W)` when `x` was
   created with `Var::make4d(...)`. The explicit `forward(x, H, W)` API remains.
+- **GroupNorm is inference-only.** Use `GroupNorm::forward(x, C, HW)`.
+  Backward is not implemented.
 
 ## License
 
