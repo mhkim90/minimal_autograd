@@ -197,10 +197,10 @@ __global__ void conv2d_forward_kernel(const float* input, const float* weight,
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= total) return;
     int spatial = oH * oW;
-    int oc = i % out_ch;
-    int col_idx = i / out_ch;
-    int n = col_idx / spatial;
-    int pos = col_idx - n * spatial;
+    int n = i % N;
+    int out_flat = i / N;
+    int oc = out_flat / spatial;
+    int pos = out_flat - oc * spatial;
     int oh = pos / oW;
     int ow = pos - oh * oW;
 
@@ -249,9 +249,9 @@ __global__ void conv2d_grad_input_kernel(float* dx, const float* grad_out,
                 int ow = ow_num / stride;
                 if (ow < 0 || ow >= oW) continue;
                 int w_flat = (c * kH + kh) * kW + kw;
-                int col_idx = n * spatial + oh * oW + ow;
+                int pos = oh * oW + ow;
                 acc += weight[oc + w_flat * out_ch] *
-                       grad_out[oc + col_idx * out_ch];
+                       grad_out[n + (oc * spatial + pos) * N];
             }
         }
     }
@@ -282,8 +282,8 @@ __global__ void conv2d_grad_weight_kernel(float* dw, const float* grad_out,
                 int iw = ow * stride + kw - pad;
                 if (iw < 0 || iw >= W) continue;
                 int in_flat = c * H * W + ih * W + iw;
-                int col_idx = n * spatial + oh * oW + ow;
-                acc += grad_out[oc + col_idx * out_ch] *
+                int pos = oh * oW + ow;
+                acc += grad_out[n + (oc * spatial + pos) * N] *
                        input[n + in_flat * N];
             }
         }
@@ -292,12 +292,14 @@ __global__ void conv2d_grad_weight_kernel(float* dw, const float* grad_out,
 }
 
 __global__ void conv2d_grad_bias_kernel(float* db, const float* grad_out,
-                                        int out_ch, int cols) {
+                                        int N, int out_ch, int spatial) {
     int oc = blockIdx.x * blockDim.x + threadIdx.x;
     if (oc >= out_ch) return;
     float acc = 0.f;
-    for (int col = 0; col < cols; ++col) {
-        acc += grad_out[oc + col * out_ch];
+    for (int n = 0; n < N; ++n) {
+        for (int pos = 0; pos < spatial; ++pos) {
+            acc += grad_out[n + (oc * spatial + pos) * N];
+        }
     }
     db[oc] += acc;
 }
@@ -311,12 +313,13 @@ __global__ void maxpool2d_forward_kernel(const float* input, float* out,
     if (i >= total) return;
     int spatial = oH * oW;
     int ksz = kH * kW;
-    int c = i % C;
-    int col_idx = i / C;
-    int n = col_idx / spatial;
-    int pos = col_idx - n * spatial;
+    int n = i % N;
+    int out_flat = i / N;
+    int c = out_flat / spatial;
+    int pos = out_flat - c * spatial;
     int oh = pos / oW;
     int ow = pos - oh * oW;
+    int col_idx = n * spatial + pos;
 
     int best_k = 0;
     int ih0 = oh * stride;
@@ -364,10 +367,11 @@ __global__ void maxpool2d_backward_kernel(float* dx, const float* grad_out,
             if (ow_num < 0 || ow_num % stride != 0) continue;
             int ow = ow_num / stride;
             if (ow < 0 || ow >= oW) continue;
-            int col_idx = n * spatial + oh * oW + ow;
+            int pos = oh * oW + ow;
+            int col_idx = n * spatial + pos;
             int mask_row = c * ksz + kh * kW + kw;
             acc += mask[mask_row + col_idx * (C * ksz)] *
-                   grad_out[c + col_idx * C];
+                   grad_out[n + (c * spatial + pos) * N];
         }
     }
     dx[i] += acc;
@@ -666,7 +670,7 @@ VarPtr cuda_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
         auto self = wp.lock();
         const int input_total = N * C * H * W;
         const int weight_total = out_ch * C * kH * kW;
-        const int grad_cols = N * oH * oW;
+        const int spatial = oH * oW;
         conv2d_grad_input_kernel<<<blocks(input_total), 256>>>(
             input->cuda_grad(), self->cuda_grad(), weight->cuda_data(),
             input_total, N, C, H, W, out_ch, kH, kW, stride, pad, oH, oW);
@@ -676,7 +680,7 @@ VarPtr cuda_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
             weight_total, N, C, H, W, out_ch, kH, kW, stride, pad, oH, oW);
         finish_kernel("cuda_conv2d_grad_weight");
         conv2d_grad_bias_kernel<<<blocks(out_ch), 256>>>(
-            bias->cuda_grad(), self->cuda_grad(), out_ch, grad_cols);
+            bias->cuda_grad(), self->cuda_grad(), N, out_ch, spatial);
         finish_kernel("cuda_conv2d_grad_bias");
     };
     return out;
