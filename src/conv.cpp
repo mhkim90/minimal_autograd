@@ -34,6 +34,30 @@ void require_4d(VarPtr x, const char* what) {
     }
 }
 
+Mat image_rows_from_channel_matrix(const Mat& m, int N, int C, int spatial) {
+    Mat out(N, C * spatial);
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int s = 0; s < spatial; ++s) {
+                out(n, c * spatial + s) = m(c, n * spatial + s);
+            }
+        }
+    }
+    return out;
+}
+
+Mat channel_matrix_from_image_rows(const Mat& m, int N, int C, int spatial) {
+    Mat out(C, N * spatial);
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int s = 0; s < spatial; ++s) {
+                out(c, n * spatial + s) = m(n, c * spatial + s);
+            }
+        }
+    }
+    return out;
+}
+
 } // namespace
 
 // =====================================================================
@@ -130,11 +154,11 @@ Mat Conv2dFn::forward(const Mats& in) {
     out.colwise() += in[2].row(0).transpose();   // bias broadcast
 
     saved = {col, in[1]};
-    return out.reshaped(N, out_ch * oH * oW);
+    return image_rows_from_channel_matrix(out, N, out_ch, oH * oW);
 }
 
 Mats Conv2dFn::backward(const Mat& grad) {
-    Mat g_mat = grad.reshaped(out_ch, N * oH * oW);
+    Mat g_mat = channel_matrix_from_image_rows(grad, N, out_ch, oH * oW);
     const Mat& col  = saved[0];
     const Mat& Wmat = saved[1];
 
@@ -212,11 +236,11 @@ Mat MaxPool2dFn::forward(const Mats& in) {
     }
 
     saved = {mask};
-    return out.reshaped(N, C * oH * oW);
+    return image_rows_from_channel_matrix(out, N, C, oH * oW);
 }
 
 Mats MaxPool2dFn::backward(const Mat& grad) {
-    Mat g_mat = grad.reshaped(C, N * oH * oW);
+    Mat g_mat = channel_matrix_from_image_rows(grad, N, C, oH * oW);
     const Mat& mask = saved[0];
     Mat grad_col = Mat::Zero(C * kH * kW, N * oH * oW);
     for (int c = 0; c < C; ++c) {
@@ -318,11 +342,11 @@ Mat AvgPool2dFn::forward(const Mats& in) {
         out.row(c) = col.middleRows(c * ksz, ksz).colwise().mean();
     }
     saved = {col};
-    return out.reshaped(N, C * oH * oW);
+    return image_rows_from_channel_matrix(out, N, C, oH * oW);
 }
 
 Mats AvgPool2dFn::backward(const Mat& grad) {
-    Mat g_mat = grad.reshaped(C, N * oH * oW);
+    Mat g_mat = channel_matrix_from_image_rows(grad, N, C, oH * oW);
     int ksz = kH * kW;
     float inv_k = 1.f / static_cast<float>(ksz);
     Mat grad_col = Mat::Zero(C * ksz, N * oH * oW);
@@ -388,11 +412,11 @@ Mat DepthwiseConv2dFn::forward(const Mats& in) {
     out.colwise() += in[2].row(0).transpose();
 
     saved = {col, in[1]};
-    return out.reshaped(N, C * oH * oW);
+    return image_rows_from_channel_matrix(out, N, C, oH * oW);
 }
 
 Mats DepthwiseConv2dFn::backward(const Mat& grad) {
-    Mat g_mat = grad.reshaped(C, N * oH * oW);
+    Mat g_mat = channel_matrix_from_image_rows(grad, N, C, oH * oW);
     const Mat& col  = saved[0];
     const Mat& Wmat = saved[1];
 
