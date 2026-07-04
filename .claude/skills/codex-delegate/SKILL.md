@@ -25,7 +25,7 @@ mechanical jobs (see [[opencode-delegate]]).
 | **Discuss** | `read-only` | `never` | Second opinion, adversarial review of a plan/root-cause, design forks (e.g. autograd tape design, tensor shape semantics, optimizer updates). Codex reads files and argues — does NOT touch the tree. |
 | **Execute** | `workspace-write` | `never` | Long CLI runs, sweeps, multi-file edits. The Codex twin of opencode-delegate. The sandbox is the safety boundary, so `never` is fine for unattended runs. |
 
-Always set `cwd: /home/mhkim90/workspace/minimal_autograd`.
+Always set `cwd` to the repository root (`<repo-root>`).
 
 ## When to use Codex vs OpenCode
 
@@ -70,7 +70,7 @@ prompt:
   Success criteria: <what done looks like, e.g. which of the three test binaries
     must print ALL TESTS PASSED>.
   Constraints:
-    - Working dir: /home/mhkim90/workspace/minimal_autograd
+    - Working dir: <repo-root>
     - Never commit unless explicitly told
     - Match existing code style
 ```
