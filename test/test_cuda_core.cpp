@@ -23,6 +23,18 @@ using namespace ag;
     } \
 } while(0)
 
+static void check_mat_near(const Mat& a, const Mat& b, float tol, const char* what) {
+    if (a.rows() != b.rows() || a.cols() != b.cols()) {
+        std::cerr << "FAIL: " << what << " shape mismatch\n";
+        std::exit(1);
+    }
+    float diff = (a - b).cwiseAbs().maxCoeff();
+    if (diff > tol) {
+        std::cerr << "FAIL: " << what << " max diff " << diff << "\n";
+        std::exit(1);
+    }
+}
+
 int main() {
     Mat m(2, 3);
     m << 1.f, -2.f, 3.f,
@@ -155,14 +167,75 @@ int main() {
     }
     CHECK(adam_threw);
 
-    bool conv_threw = false;
-    try {
-        Conv2d conv(1, 1, 3, 3);
-        (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5)->cuda());
-    } catch (const std::runtime_error&) {
-        conv_threw = true;
+    {
+        const int N = 2, C = 2, H = 4, W = 5;
+        const int out_ch = 3, kH = 3, kW = 2, stride = 1, pad = 1;
+        Mat conv_x(N, C * H * W);
+        Mat conv_w(out_ch, C * kH * kW);
+        Mat conv_b(1, out_ch);
+        for (int i = 0; i < conv_x.size(); ++i) {
+            conv_x.data()[i] = 0.03f * static_cast<float>((i % 19) - 9);
+        }
+        for (int i = 0; i < conv_w.size(); ++i) {
+            conv_w.data()[i] = 0.02f * static_cast<float>((i % 17) - 8);
+        }
+        for (int i = 0; i < conv_b.size(); ++i) {
+            conv_b.data()[i] = 0.05f * static_cast<float>(i - 1);
+        }
+
+        Conv2d conv_cpu(C, out_ch, kH, kW, stride, pad);
+        conv_cpu.W = Var::make(conv_w);
+        conv_cpu.b = Var::make(conv_b);
+        auto cx = Var::make4d(conv_x, N, C, H, W);
+        auto cy = conv_cpu.forward(cx);
+        sum(cy)->backward();
+
+        Conv2d conv_cuda(C, out_ch, kH, kW, stride, pad);
+        conv_cuda.W = Var::make(conv_w)->cuda();
+        conv_cuda.b = Var::make(conv_b)->cuda();
+        auto gx = Var::make4d(conv_x, N, C, H, W)->cuda();
+        auto gy = conv_cuda.forward(gx);
+        CHECK(gy->is_cuda());
+        CHECK(gy->is4d());
+        sum(gy)->backward();
+
+        check_mat_near(gy->cpu()->data, cy->data, 1e-4f, "cuda Conv2d forward");
+        check_mat_near(gx->cpu()->grad, cx->grad, 1e-4f, "cuda Conv2d grad input");
+        check_mat_near(conv_cuda.W->cpu()->grad, conv_cpu.W->grad, 1e-4f,
+                       "cuda Conv2d grad weight");
+        check_mat_near(conv_cuda.b->cpu()->grad, conv_cpu.b->grad, 1e-4f,
+                       "cuda Conv2d grad bias");
     }
-    CHECK(conv_threw);
+
+    {
+        const int N = 2, C = 2, H = 4, W = 4;
+        Mat pool_x(N, C * H * W);
+        for (int n = 0; n < N; ++n) {
+            for (int c = 0; c < C; ++c) {
+                for (int h = 0; h < H; ++h) {
+                    for (int w = 0; w < W; ++w) {
+                        pool_x(n, c * H * W + h * W + w) =
+                            static_cast<float>(c * H * W + h * W + w) +
+                            0.01f * static_cast<float>(n);
+                    }
+                }
+            }
+        }
+
+        MaxPool2d pool(2, 2, 1);
+        auto px = Var::make4d(pool_x, N, C, H, W);
+        auto py = pool.forward(px);
+        sum(py)->backward();
+
+        auto pgx = Var::make4d(pool_x, N, C, H, W)->cuda();
+        auto pgy = pool.forward(pgx);
+        CHECK(pgy->is_cuda());
+        CHECK(pgy->is4d());
+        sum(pgy)->backward();
+
+        check_mat_near(pgy->cpu()->data, py->data, 1e-4f, "cuda MaxPool2d forward");
+        check_mat_near(pgx->cpu()->grad, px->grad, 1e-4f, "cuda MaxPool2d grad input");
+    }
 
     std::cout << "ALL CUDA CORE TESTS PASSED\n";
     return 0;

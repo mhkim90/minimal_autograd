@@ -24,6 +24,12 @@ VarPtr cuda_relu_op(VarPtr a);
 VarPtr cuda_sum_op(VarPtr a);
 VarPtr cuda_softmax_op(VarPtr a);
 VarPtr cuda_log_softmax_op(VarPtr a);
+VarPtr cuda_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
+                      int N, int C, int H, int W,
+                      int kH, int kW, int stride, int pad);
+VarPtr cuda_maxpool2d_op(VarPtr input,
+                         int N, int C, int H, int W,
+                         int kH, int kW, int stride);
 void cuda_sgd_step(Var& p, float lr);
 
 #endif
