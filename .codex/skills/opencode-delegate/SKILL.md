@@ -53,7 +53,7 @@ Success criteria:
 - <commands to run or outputs to check>
 
 Constraints:
-- Working dir: /home/mhkim90/workspace/minimal_autograd
+- Working dir: <repo-root>
 - Never commit unless explicitly told
 - Match existing code style
 - Keep changes small and surgical

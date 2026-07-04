@@ -45,7 +45,7 @@ Success criteria:
 - <any output to produce or check, e.g. which test binary must print ALL TESTS PASSED>
 
   Constraints:
-    - Working dir: /home/mhkim90/workspace/minimal_autograd
+    - Working dir: <repo-root>
 - Never commit unless explicitly told
 - Match existing code style
 ```
