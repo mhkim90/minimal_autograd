@@ -93,11 +93,11 @@ prints `35/35 passed`.
 
 ### Smoke test (`test_smoke`)
 
-`test/test_smoke.cpp` is a single-file end-to-end smoke test that exercises
-every op needed by a Gaussian-Unified Diffusion Model through both a real
-**training loop** (forward → loss → backward → Adam step, repeated until
-convergence) and a **forward-only inference loop**. It is the fastest
-sanity check that the library can still be wired into a working model.
+`test/test_smoke.cpp` is a single-file end-to-end smoke test that exercises the
+advanced op set through both real **training loops** (forward → loss → backward
+→ Adam step, repeated until convergence) and a **forward-only inference loop**.
+It is the fastest sanity check that the advanced operators can still be wired
+into a working model.
 
 | # | Group                       | Mode                              | Ops exercised                                                                 |
 |---|-----------------------------|-----------------------------------|--------------------------------------------------------------------------------|
@@ -107,7 +107,7 @@ sanity check that the library can still be wired into a working model.
 | 4 | GroupNorm + SiLU            | forward-only                      | `GroupNorm` (mean≈0, var≈1 per group), `silu`                                 |
 | 5 | embedding consistency       | forward-only                      | `sinusoidal_time_embedding` vs manual `sin_op`+`cos_op`+`hcat`, `split` round-trip |
 | 6 | randn stats                 | forward-only                      | `randn`, `randn_like` (diffusion.h): mean≈0, std≈1, determinism, leaf-ness    |
-| 7 | mini inference loop         | **inference loop** (10 steps)     | All of the above + `clamp`, `Linear`, `broadcast_add`, `replicate`             |
+| 7 | mini inference loop         | **inference loop** (10 steps)     | `Linear`, `hcat`, `clamp`, `randn`, `scale`, `add`, sinusoidal embeddings     |
 
 The training-loop tests deliberately avoid `GroupNorm` in the backward path
 since its backward is inference-only. The mini inference loop simulates a
@@ -234,33 +234,24 @@ The older expert API still works:
 auto y = conv.forward(x, H, W);
 ```
 
-## Phase-by-phase feature table
+## Public API Overview
 
-| Phase | Capability                         | How to use it                                            |
-|-------|------------------------------------|----------------------------------------------------------|
-| 1     | Core ops                           | `add`, `mul`, `matmul`, `relu`, `sum` — free functions.  |
-| 2a    | Topo-sort backward                 | Any `Var` graph; `x + x` no longer double-counts.        |
-| 2c    | Broadcast bias-add                 | `broadcast_add(Var, Var)`; bias grad sums over batch.    |
-| 2d    | `grad_check` utility               | `#include "grad_check.h"`; pass closure + leaf Var.      |
-| 3     | Softmax / log-softmax / shape ops  | `softmax`, `log_softmax`, `transpose`, `reshape`, `concat`. |
-| 4     | Module system                      | `Linear(in, out)`, `ReLUModule`, `Sequential`.           |
-| 5     | Training utilities                 | `mse_loss`, `cross_entropy`, `SGD`, `Adam`.              |
-| 6a    | `im2col` / `col2im`                | Pure functions in `conv.h`; overlap patches accumulate. |
-| 6b    | `Conv2dFn`                         | `conv2d_op(input, weight, bias, N, C, H, W, kH, kW, stride, pad)`. |
-| 6c    | `Conv2d` / `MaxPool2d` modules     | `Conv2d(in_ch, out_ch, kH, kW, stride, pad)`, `MaxPool2d(kH, kW)`. |
-| C1    | Minimal CUDA core autograd         | `x->cuda()`, then `add`, `mul`, `matmul`, `broadcast_add`, `scale`, `relu`, `sum`, `SGD`, `backward`, `cpu`. |
-| C2    | CUDA softmax / log-softmax         | `softmax`, `log_softmax` on device with backward. |
-| C3    | CUDA cross-entropy                 | `cross_entropy(pred, target)` on device, built on CUDA `log_softmax`. |
-| E1    | Activation + arithmetic ops        | `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`. |
-| E2    | Sequence ops                       | `cumsum(x, axis)`, `flip(x, axis)` — axis 0 or 1.       |
-| E3    | `AvgPool2d`                        | `AvgPool2d(kH, kW, stride)`, or `avgpool2d_op(...)`.    |
-| E4    | `NearestUpsample2d`                | `NearestUpsample2d(scale)`, or `nearest_upsample2d_op(...)`. |
-| E5    | `DepthwiseConv2d`                  | `DepthwiseConv2d(C, kH, kW, stride, pad)` — one filter per channel. |
-| E6    | `GroupNorm`                        | `GroupNorm(G, C)`, call `forward(x, C, HW)` at inference time. |
-| E7    | `SiLUModule` / `SigmoidModule`     | Activation modules for use inside `Sequential`.          |
-| E8    | Trig + clamp + column ops          | `sin_op`, `cos_op`, `clamp(x, lo, hi)`, `col_slice(x, start, len)`, `split(x)` → `pair`. |
-| E9    | `hcat`                             | `hcat({a, b, c})` — column-wise cat; mirrors `torch.cat(..., dim=1)`. |
-| E10   | Diffusion primitives               | `randn`, `randn_like`, `sinusoidal_time_embedding`, `q_sample` (in `diffusion.h`). |
+Most users can include `autograd.h`, which re-exports the public headers below.
+
+| Header | Public surface |
+|--------|----------------|
+| `variable.h` | `Var`, `VarPtr`, `Var::make`, `Var::make4d`, logical shape helpers, `backward()`, `zero_grad()`, `cuda()`, `cpu()` |
+| `ops.h` | `add`, `mul`, `matmul`, `relu`, `sum`, `broadcast_add`, `scale`, `softmax`, `log_softmax`, `transpose`, `reshape`, `concat`, `hcat`, `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`, `cumsum`, `flip`, `sin_op`, `cos_op`, `clamp`, `col_slice`, `split` |
+| `module.h` | `Module`, `Linear`, `Sequential`, `ReLUModule`, `SiLUModule`, `SigmoidModule` |
+| `loss.h` | `mse_loss`, `cross_entropy` |
+| `optim.h` | `SGD`, `Adam` |
+| `conv.h` | `im2col`, `col2im`, `conv2d_op`, `maxpool2d_op`, `avgpool2d_op`, `nearest_upsample2d_op`, `depthwise_conv2d_op`, `Conv2d`, `MaxPool2d`, `AvgPool2d`, `NearestUpsample2d`, `DepthwiseConv2d` |
+| `norm.h` | `GroupNorm` |
+| `diffusion.h` | `randn`, `randn_like`, `sinusoidal_time_embedding`, `q_sample` |
+
+CUDA support is intentionally exposed through the same high-level ops where it
+exists. Move a `Var` to device with `x->cuda()`, run supported ops, and call
+`cpu()` when host data is needed.
 
 ## Diffusion Support
 
