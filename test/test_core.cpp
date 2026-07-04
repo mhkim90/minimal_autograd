@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <functional>
+#include <stdexcept>
 
 using namespace ag;
 
@@ -202,6 +203,33 @@ void test_scale() {
     std::cout << "[ok] scale: grad_check ok\n";
 }
 
+void test_backward_exception_rolls_back_grads() {
+    auto x = Var::make(Mat::Constant(2, 2, 1.f));
+    auto y = Var::make(Mat::Constant(1, 1, 0.f));
+    x->grad = Mat::Constant(2, 2, 7.f);
+    y->grad = Mat::Constant(1, 1, 3.f);
+    const Mat x_before = x->grad;
+    const Mat y_before = y->grad;
+
+    y->parents = {x};
+    y->back_fn = [x]() {
+        x->grad.array() += 5.f;
+        throw std::runtime_error("intentional backward failure");
+    };
+
+    bool threw = false;
+    try {
+        y->backward();
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+
+    CHECK(threw);
+    CHECK_EQ_MAT(x->grad, x_before);
+    CHECK_EQ_MAT(y->grad, y_before);
+    std::cout << "[ok] backward exception restores prior grads\n";
+}
+
 int main() {
     test_shared_x_plus_x();
     test_shared_x_cubed();
@@ -214,6 +242,7 @@ int main() {
     test_logical_4d_shape();
     test_concat();
     test_scale();
+    test_backward_exception_rolls_back_grads();
     std::cout << "\nALL CORE TESTS PASSED\n";
     return 0;
 }

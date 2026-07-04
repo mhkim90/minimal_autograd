@@ -8,6 +8,17 @@
 namespace ag {
 namespace {
 
+int output_extent(int input, int kernel, int stride, int pad, const char* what) {
+    if (input <= 0 || kernel <= 0 || stride <= 0 || pad < 0) {
+        throw std::runtime_error(std::string(what) + ": invalid kernel geometry");
+    }
+    const int span = input + 2 * pad - kernel;
+    if (span < 0 || span % stride != 0) {
+        throw std::runtime_error(std::string(what) + ": kernel/stride geometry mismatch");
+    }
+    return span / stride + 1;
+}
+
 void require_flat_image_shape(VarPtr x, int C, int H, int W, const char* what) {
     if (H <= 0 || W <= 0) {
         throw std::runtime_error(std::string(what) + ": H and W must be positive");
@@ -36,10 +47,8 @@ Mat im2col(const Mat& input,
            int N, int C, int H, int W,
            int kH, int kW,
            int stride, int pad) {
-    int oH = (H + 2 * pad - kH) / stride + 1;
-    int oW = (W + 2 * pad - kW) / stride + 1;
-    assert((H + 2 * pad - kH) % stride == 0);
-    assert((W + 2 * pad - kW) % stride == 0);
+    int oH = output_extent(H, kH, stride, pad, "im2col");
+    int oW = output_extent(W, kW, stride, pad, "im2col");
 
     Mat col = Mat::Zero(C * kH * kW, N * oH * oW);
 
@@ -80,8 +89,8 @@ Mat col2im(const Mat& col,
            int N, int C, int H, int W,
            int kH, int kW,
            int stride, int pad) {
-    int oH = (H + 2 * pad - kH) / stride + 1;
-    int oW = (W + 2 * pad - kW) / stride + 1;
+    int oH = output_extent(H, kH, stride, pad, "col2im");
+    int oW = output_extent(W, kW, stride, pad, "col2im");
 
     Mat out = Mat::Zero(N, C * H * W);
 
@@ -113,10 +122,8 @@ Mat col2im(const Mat& col,
 // =====================================================================
 
 Mat Conv2dFn::forward(const Mats& in) {
-    oH = (H + 2 * pad - kH) / stride + 1;
-    oW = (W + 2 * pad - kW) / stride + 1;
-    assert((H + 2 * pad - kH) % stride == 0);
-    assert((W + 2 * pad - kW) % stride == 0);
+    oH = output_extent(H, kH, stride, pad, "Conv2dFn::forward");
+    oW = output_extent(W, kW, stride, pad, "Conv2dFn::forward");
 
     Mat col = im2col(in[0], N, C, H, W, kH, kW, stride, pad);
     Mat out = in[1] * col;                       // (out_ch, N*oH*oW)
@@ -151,8 +158,8 @@ VarPtr conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
     fn->out_ch = weight->data.rows();
     fn->kH = kH; fn->kW = kW;
     fn->stride = stride; fn->pad = pad;
-    fn->oH = (H + 2 * pad - kH) / stride + 1;
-    fn->oW = (W + 2 * pad - kW) / stride + 1;
+    fn->oH = output_extent(H, kH, stride, pad, "conv2d_op");
+    fn->oW = output_extent(W, kW, stride, pad, "conv2d_op");
 
     Mats in_data = {input->data, weight->data, bias->data};
     auto out = Var::make(fn->forward(in_data));
@@ -172,10 +179,8 @@ VarPtr conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
 // =====================================================================
 
 Mat MaxPool2dFn::forward(const Mats& in) {
-    oH = (H - kH) / stride + 1;
-    oW = (W - kW) / stride + 1;
-    assert((H - kH) % stride == 0);
-    assert((W - kW) % stride == 0);
+    oH = output_extent(H, kH, stride, 0, "MaxPool2dFn::forward");
+    oW = output_extent(W, kW, stride, 0, "MaxPool2dFn::forward");
 
     Mat col = im2col(in[0], N, C, H, W, kH, kW, /*stride=*/stride, /*pad=*/0);
     Mat out = Mat::Zero(C, N * oH * oW);
@@ -226,8 +231,8 @@ VarPtr maxpool2d_op(VarPtr input,
     auto fn = std::make_shared<MaxPool2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->kH = kH; fn->kW = kW; fn->stride = stride;
-    fn->oH = (H - kH) / stride + 1;
-    fn->oW = (W - kW) / stride + 1;
+    fn->oH = output_extent(H, kH, stride, 0, "maxpool2d_op");
+    fn->oW = output_extent(W, kW, stride, 0, "maxpool2d_op");
 
     Mats in_data = {input->data};
     auto out = Var::make(fn->forward(in_data));
@@ -290,10 +295,8 @@ VarPtr MaxPool2d::forward(VarPtr x) {
 // =====================================================================
 
 Mat AvgPool2dFn::forward(const Mats& in) {
-    oH = (H - kH) / stride + 1;
-    oW = (W - kW) / stride + 1;
-    assert((H - kH) % stride == 0);
-    assert((W - kW) % stride == 0);
+    oH = output_extent(H, kH, stride, 0, "AvgPool2dFn::forward");
+    oW = output_extent(W, kW, stride, 0, "AvgPool2dFn::forward");
 
     Mat col = im2col(in[0], N, C, H, W, kH, kW, stride, 0);
     int ksz = kH * kW;
@@ -325,8 +328,8 @@ VarPtr avgpool2d_op(VarPtr input,
     auto fn = std::make_shared<AvgPool2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->kH = kH; fn->kW = kW; fn->stride = stride;
-    fn->oH = (H - kH) / stride + 1;
-    fn->oW = (W - kW) / stride + 1;
+    fn->oH = output_extent(H, kH, stride, 0, "avgpool2d_op");
+    fn->oW = output_extent(W, kW, stride, 0, "avgpool2d_op");
 
     Mats in_data = {input->data};
     auto out = Var::make(fn->forward(in_data));
@@ -360,10 +363,8 @@ VarPtr AvgPool2d::forward(VarPtr x) {
 // =====================================================================
 
 Mat DepthwiseConv2dFn::forward(const Mats& in) {
-    oH = (H + 2 * pad - kH) / stride + 1;
-    oW = (W + 2 * pad - kW) / stride + 1;
-    assert((H + 2 * pad - kH) % stride == 0);
-    assert((W + 2 * pad - kW) % stride == 0);
+    oH = output_extent(H, kH, stride, pad, "DepthwiseConv2dFn::forward");
+    oW = output_extent(W, kW, stride, pad, "DepthwiseConv2dFn::forward");
 
     Mat col = im2col(in[0], N, C, H, W, kH, kW, stride, pad);
     int ksz = kH * kW;
@@ -406,8 +407,8 @@ VarPtr depthwise_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
     auto fn = std::make_shared<DepthwiseConv2dFn>();
     fn->N = N; fn->C = C; fn->H = H; fn->W = W;
     fn->kH = kH; fn->kW = kW; fn->stride = stride; fn->pad = pad;
-    fn->oH = (H + 2 * pad - kH) / stride + 1;
-    fn->oW = (W + 2 * pad - kW) / stride + 1;
+    fn->oH = output_extent(H, kH, stride, pad, "depthwise_conv2d_op");
+    fn->oW = output_extent(W, kW, stride, pad, "depthwise_conv2d_op");
 
     Mats in_data = {input->data, weight->data, bias->data};
     auto out = Var::make(fn->forward(in_data));

@@ -211,6 +211,53 @@ int main() {
             explicit_threw = true;
         }
         CHECK(explicit_threw, "Conv2d explicit H,W rejects flat shape mismatch");
+
+        bool depthwise_explicit_threw = false;
+        try {
+            DepthwiseConv2d conv(2, 3, 3, 1, 0);
+            (void)conv.forward(Var::make(Mat::Random(1, 25)), 5, 5);
+        } catch (const std::runtime_error&) {
+            depthwise_explicit_threw = true;
+        }
+        CHECK(depthwise_explicit_threw,
+              "DepthwiseConv2d explicit H,W rejects flat shape mismatch");
+
+        bool maxpool_shape_threw = false;
+        try {
+            MaxPool2d pool(2, 2, 2);
+            (void)pool.forward(Var::make(Mat::Random(1, 25)), 4, 4);
+        } catch (const std::runtime_error&) {
+            maxpool_shape_threw = true;
+        }
+        CHECK(maxpool_shape_threw, "MaxPool2d explicit H,W rejects flat shape mismatch");
+
+        bool avgpool_shape_threw = false;
+        try {
+            AvgPool2d pool(2, 2, 2);
+            (void)pool.forward(Var::make(Mat::Random(1, 25)), 4, 4);
+        } catch (const std::runtime_error&) {
+            avgpool_shape_threw = true;
+        }
+        CHECK(avgpool_shape_threw, "AvgPool2d explicit H,W rejects flat shape mismatch");
+
+        bool upsample_shape_threw = false;
+        try {
+            NearestUpsample2d upsample(2);
+            (void)upsample.forward(Var::make(Mat::Random(1, 25)), 4, 4);
+        } catch (const std::runtime_error&) {
+            upsample_shape_threw = true;
+        }
+        CHECK(upsample_shape_threw,
+              "NearestUpsample2d explicit H,W rejects flat shape mismatch");
+
+        bool conv_geometry_threw = false;
+        try {
+            Conv2d conv(1, 1, 2, 2, 2, 0);
+            (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5));
+        } catch (const std::runtime_error&) {
+            conv_geometry_threw = true;
+        }
+        CHECK(conv_geometry_threw, "Conv2d rejects invalid kernel/stride geometry");
     }
 
     std::printf("--\n%d passed, %d failed\n", passed, failed);
