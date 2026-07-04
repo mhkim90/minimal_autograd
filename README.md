@@ -22,7 +22,7 @@ minimal CUDA core are opt-in.
   `silu`, `softplus` — all gradient-checked.
 - Sequence ops: `cumsum` (axis 0 or 1) and `flip` (axis 0 or 1) with
   correct suffix-sum / reverse backward passes.
-- Trig / clamp ops: `sin_op`, `cos_op` (sinusoidal embeddings), `clamp`
+- Trig / clamp ops: `sin_op`, `cos_op`, `clamp`
   (element-wise with zero gradient at the boundary).
 - Column ops: `col_slice(x, start, len)` and `split(x)` (even column
   split returning `std::pair<VarPtr, VarPtr>`) — used for AdaGN
@@ -69,7 +69,6 @@ Advanced experimental tests are opt-in:
 cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
 cmake --build build-advanced --parallel
 ./build-advanced/test_extensions  # 30 grad-checks for the extension ops
-./build-advanced/test_diffusion   # 17 grad-checks / shape / value assertions
 ./build-advanced/test_smoke       # 35 end-to-end smoke checks
 ```
 
@@ -88,8 +87,7 @@ Unsupported CUDA ops throw instead of silently falling back to stale host data.
 
 `test_core`, `test_nn`, and `test_cuda_core` print `ALL ... TESTS PASSED`.
 `test_conv` prints `21 passed, 0 failed`. `test_extensions` prints
-`30/30 passed`, `test_diffusion` prints `17/17 passed`, and `test_smoke`
-prints `35/35 passed`.
+`30/30 passed`, and `test_smoke` prints `35/35 passed`.
 
 ### Smoke test (`test_smoke`)
 
@@ -105,14 +103,13 @@ into a working model.
 | 2 | beta schedule convergence   | **training loop** (200 steps)     | `tanh_op`, `scale`, `sub`, `mul`, `sum`, `Adam`                               |
 | 3 | spatial forward             | forward-only                      | `Conv2d`, `AvgPool2d`, `NearestUpsample2d`, `hcat`                            |
 | 4 | GroupNorm + SiLU            | forward-only                      | `GroupNorm` (mean≈0, var≈1 per group), `silu`                                 |
-| 5 | embedding consistency       | forward-only                      | `sinusoidal_time_embedding` vs manual `sin_op`+`cos_op`+`hcat`, `split` round-trip |
-| 6 | randn stats                 | forward-only                      | `randn`, `randn_like` (diffusion.h): mean≈0, std≈1, determinism, leaf-ness    |
-| 7 | mini inference loop         | **inference loop** (10 steps)     | `Linear`, `hcat`, `clamp`, `randn`, `scale`, `add`, sinusoidal embeddings     |
+| 5 | split consistency           | forward-only                      | `sin_op`, `cos_op`, `hcat`, `split` round-trip                                |
+| 6 | mini inference loop         | **inference loop** (10 steps)     | `Linear`, `hcat`, `clamp`, `scale`, `add`                                     |
 
 The training-loop tests deliberately avoid `GroupNorm` in the backward path
-since its backward is inference-only. The mini inference loop simulates a
-DDIM-style reverse step with a small `Linear` "model" and verifies that
-all outputs stay finite and properly clamped to `[0, 1]`.
+since its backward is inference-only. The mini inference loop uses a small
+`Linear` model and verifies that all outputs stay finite and properly clamped
+to `[0, 1]`.
 
 Build and run:
 
@@ -247,63 +244,10 @@ Most users can include `autograd.h`, which re-exports the public headers below.
 | `optim.h` | `SGD`, `Adam` |
 | `conv.h` | `im2col`, `col2im`, `conv2d_op`, `maxpool2d_op`, `avgpool2d_op`, `nearest_upsample2d_op`, `depthwise_conv2d_op`, `Conv2d`, `MaxPool2d`, `AvgPool2d`, `NearestUpsample2d`, `DepthwiseConv2d` |
 | `norm.h` | `GroupNorm` |
-| `diffusion.h` | `randn`, `randn_like`, `sinusoidal_time_embedding`, `q_sample` |
 
 CUDA support is intentionally exposed through the same high-level ops where it
 exists. Move a `Var` to device with `x->cuda()`, run supported ops, and call
 `cpu()` when host data is needed.
-
-## Diffusion Support
-
-`include/autograd/diffusion.h` adds the minimum building blocks every
-DDPM / DDIM / score-based model needs on top of the existing engine.
-All four helpers are header-only inline; no new translation unit.
-
-| Helper | Purpose |
-|--------|---------|
-| `randn(rows, cols, seed=0)` | Leaf `Var` of `rows × cols` standard-normal samples from a seeded `std::mt19937`. No back_fn, no grad contribution. |
-| `randn_like(x, seed=0)`     | Same as `randn` but sized to `x->data`. |
-| `sinusoidal_time_embedding(t, dim)` | Transformer-style positional encoding for timestep `t` → leaf `Var` of shape `(1, dim)`. `dim` must be even. |
-| `q_sample(x0, t, sqrt_alpha_bar, sqrt_one_minus_alpha_bar, noise=nullptr, seed=0)` | Standard DDPM forward step: `x_t = √ᾱ_t·x0 + √(1−ᾱ_t)·noise`. Differentiated w.r.t. `x0` and `noise` via the existing `add` / `scale` chain. |
-
-Because `q_sample` is just `add(scale(x0, a), scale(noise, b))`, its
-gradients are inherited from the existing `AddFn` / `ScaleFn` — no new
-`Function` subclass is required.
-
-### Quick example — DDPM forward step + time embedding
-
-```cpp
-#include "autograd.h"
-using namespace ag;
-
-int main() {
-    int N = 4, dim = 128;
-    auto x0  = Var::make(Mat::Random(N, 3 * 32 * 32));
-    auto t_emb = sinusoidal_time_embedding(/*t=*/250, dim);  // (1, 128)
-
-    // Hand-picked noise (or pass nullptr to let q_sample draw fresh).
-    auto noise = randn_like(x0, /*seed=*/0);
-
-    auto x_t = q_sample(x0, 250,
-                        /*sqrt_alpha_bar=*/0.6f,
-                        /*sqrt_one_minus_ab=*/0.8f,
-                        noise);
-    // t_emb and random noise are leaves. x_t is differentiable with respect
-    // to x0 and noise through the scale/add chain.
-    return 0;
-}
-```
-
-### Tests
-
-```bash
-./build-advanced/test_diffusion       # 17 grad-checks / shape / value assertions
-```
-
-Coverage: `randn` shape, leaf semantics, mean ≈ 0, std ≈ 1, seed
-determinism; `sinusoidal_time_embedding` shape, value range, `sin(t)` /
-`cos(t)` at `i = 0`; `q_sample` shape, analytic-vs-numeric grad check
-through both `x0` and `noise`, and a closed-form zero-noise case.
 
 ## Limitations
 
