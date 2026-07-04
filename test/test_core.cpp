@@ -134,6 +134,11 @@ void test_transpose() {
     CHECK_EQ_MAT(y->data, Mat((Mat(3, 2) << 1, 4, 2, 5, 3, 6).finished()));
     auto f = [](VarPtr x) { return sum(transpose(x)); };
     CHECK(grad_check(f, x));
+
+    auto square4d = Var::make4d(Mat::Random(2, 2), 2, 1, 1, 2);
+    auto transposed = transpose(square4d);
+    CHECK(transposed->ndim() == 2);
+    CHECK(transposed->dim(0) == 2 && transposed->dim(1) == 2);
     std::cout << "[ok] transpose: forward + grad_check ok\n";
 }
 
@@ -166,6 +171,10 @@ void test_logical_4d_shape() {
     y->view({2, 3 * 4 * 5});
     CHECK(y->ndim() == 2);
     CHECK(y->dim(0) == 2 && y->dim(1) == 60);
+
+    auto reshaped = reshape(x, 4, 30);
+    CHECK(reshaped->ndim() == 2);
+    CHECK(reshaped->dim(0) == 4 && reshaped->dim(1) == 30);
     std::cout << "[ok] logical 4D shape metadata + same-footprint op propagation\n";
 }
 

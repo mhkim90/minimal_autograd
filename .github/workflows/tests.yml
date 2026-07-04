@@ -32,3 +32,14 @@ jobs:
           ./test_core
           ./test_nn
           ./test_conv
+      - name: Build advanced tests
+        run: |
+          mkdir build-advanced && cd build-advanced
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
+          make -j$(nproc)
+      - name: Run advanced tests
+        run: |
+          cd build-advanced
+          ./test_extensions
+          ./test_diffusion
+          ./test_smoke

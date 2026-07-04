@@ -228,7 +228,6 @@ VarPtr make_cuda_like(VarPtr a) {
 
 void finish_kernel(const char* what) {
     check(cudaGetLastError(), what);
-    check(cudaDeviceSynchronize(), what);
 }
 
 } // namespace
@@ -273,7 +272,6 @@ VarPtr cuda_add_op(VarPtr a, VarPtr b) {
     auto out = make_cuda_like(a);
     add_kernel<<<blocks(n), 256>>>(a->cuda_data(), b->cuda_data(), out->cuda_data(), n);
     finish_kernel("cuda_add_op");
-    out->sync_data_from_cuda();
     out->parents = {a, b};
     out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), n]() {
         auto self = wp.lock();
@@ -290,7 +288,6 @@ VarPtr cuda_mul_op(VarPtr a, VarPtr b) {
     auto out = make_cuda_like(a);
     mul_kernel<<<blocks(n), 256>>>(a->cuda_data(), b->cuda_data(), out->cuda_data(), n);
     finish_kernel("cuda_mul_op");
-    out->sync_data_from_cuda();
     out->parents = {a, b};
     out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), n]() {
         auto self = wp.lock();
@@ -314,7 +311,6 @@ VarPtr cuda_matmul_op(VarPtr a, VarPtr b) {
     matmul_kernel<<<grid, block>>>(a->cuda_data(), b->cuda_data(), out->cuda_data(),
                                    m, n, k);
     finish_kernel("cuda_matmul_op");
-    out->sync_data_from_cuda();
     out->parents = {a, b};
     out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), m, n, k, block]() {
         auto self = wp.lock();
@@ -339,7 +335,6 @@ VarPtr cuda_broadcast_add_op(VarPtr a, VarPtr b) {
     broadcast_add_kernel<<<blocks(n), 256>>>(a->cuda_data(), b->cuda_data(),
                                              out->cuda_data(), rows, cols);
     finish_kernel("cuda_broadcast_add_op");
-    out->sync_data_from_cuda();
     out->parents = {a, b};
     out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), rows, cols, n]() {
         auto self = wp.lock();
@@ -356,7 +351,6 @@ VarPtr cuda_scale_op(VarPtr a, float s) {
     auto out = make_cuda_like(a);
     scale_kernel<<<blocks(n), 256>>>(a->cuda_data(), s, out->cuda_data(), n);
     finish_kernel("cuda_scale_op");
-    out->sync_data_from_cuda();
     out->parents = {a};
     out->back_fn = [a, wp = std::weak_ptr<Var>(out), s, n]() {
         auto self = wp.lock();
@@ -372,7 +366,6 @@ VarPtr cuda_relu_op(VarPtr a) {
     auto out = make_cuda_like(a);
     relu_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
     finish_kernel("cuda_relu_op");
-    out->sync_data_from_cuda();
     out->parents = {a};
     out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
         auto self = wp.lock();
@@ -390,7 +383,6 @@ VarPtr cuda_sum_op(VarPtr a) {
     cuda_zero(out->cuda_data(), 1, a->cuda_device());
     sum_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
     finish_kernel("cuda_sum_op");
-    out->sync_data_from_cuda();
     out->parents = {a};
     out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
         auto self = wp.lock();
@@ -405,7 +397,6 @@ void cuda_sgd_step(Var& p, float lr) {
     const std::size_t n = static_cast<std::size_t>(p.data.size());
     axpy_kernel<<<blocks(n), 256>>>(p.cuda_data(), p.cuda_grad(), -lr, n);
     finish_kernel("cuda_sgd_step");
-    p.sync_data_from_cuda();
 }
 
 VarPtr cuda_softmax_op(VarPtr a) {
@@ -415,7 +406,6 @@ VarPtr cuda_softmax_op(VarPtr a) {
     auto out = make_cuda_like(a);
     softmax_kernel<<<rows, 1>>>(a->cuda_data(), out->cuda_data(), rows, cols);
     finish_kernel("cuda_softmax_op");
-    out->sync_data_from_cuda();
     out->parents = {a};
     out->back_fn = [a, wp = std::weak_ptr<Var>(out), rows, cols]() {
         auto self = wp.lock();
@@ -433,7 +423,6 @@ VarPtr cuda_log_softmax_op(VarPtr a) {
     auto out = make_cuda_like(a);
     log_softmax_kernel<<<rows, 1>>>(a->cuda_data(), out->cuda_data(), rows, cols);
     finish_kernel("cuda_log_softmax_op");
-    out->sync_data_from_cuda();
     out->parents = {a};
     out->back_fn = [a, wp = std::weak_ptr<Var>(out), rows, cols]() {
         auto self = wp.lock();

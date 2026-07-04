@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cassert>
 #include <cmath>
+#include <stdexcept>
 
 using namespace ag;
 
@@ -177,6 +178,39 @@ int main() {
         CHECK(z->is4d(), "MaxPool2d inferred 4D input and returned 4D metadata");
         CHECK(z->dim(0) == N && z->dim(1) == 4 && z->dim(2) == 3 && z->dim(3) == 3,
               "MaxPool2d output shape metadata is N,C,oH,oW");
+    }
+
+    // -----------------------------------------------------------------
+    // Release builds: Conv modules validate channel/shape mismatches
+    // -----------------------------------------------------------------
+    {
+        bool conv_threw = false;
+        try {
+            Conv2d conv(2, 4, 3, 3, 1, 0);
+            (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5));
+        } catch (const std::runtime_error&) {
+            conv_threw = true;
+        }
+        CHECK(conv_threw, "Conv2d rejects 4D input channel mismatch without assert");
+
+        bool depthwise_threw = false;
+        try {
+            DepthwiseConv2d conv(2, 3, 3, 1, 0);
+            (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5));
+        } catch (const std::runtime_error&) {
+            depthwise_threw = true;
+        }
+        CHECK(depthwise_threw,
+              "DepthwiseConv2d rejects 4D input channel mismatch without assert");
+
+        bool explicit_threw = false;
+        try {
+            Conv2d conv(2, 4, 3, 3, 1, 0);
+            (void)conv.forward(Var::make(Mat::Random(1, 25)), 5, 5);
+        } catch (const std::runtime_error&) {
+            explicit_threw = true;
+        }
+        CHECK(explicit_threw, "Conv2d explicit H,W rejects flat shape mismatch");
     }
 
     std::printf("--\n%d passed, %d failed\n", passed, failed);
