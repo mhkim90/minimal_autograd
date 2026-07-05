@@ -72,50 +72,8 @@ cmake --build build-advanced --parallel
 ./build-advanced/test_smoke       # 35 end-to-end smoke checks
 ```
 
-Minimal CUDA core autograd is opt-in and intentionally small:
-
-```bash
-cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_USE_CUDA=ON
-cmake --build build-cuda --parallel
-./build-cuda/test_cuda_core
-```
-
-If `nvcc` is not on `PATH`, point CMake at the toolkit explicitly, for example:
-
-```bash
-cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release \
-  -DAUTOGRAD_USE_CUDA=ON \
-  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
-```
-
-CUDA builds default to `AUTOGRAD_CUDA_ARCHITECTURES=75` unless
-`CMAKE_CUDA_ARCHITECTURES` or `AUTOGRAD_CUDA_ARCHITECTURES` is set by the
-caller. Override it for a specific deployment target, for example
-`-DAUTOGRAD_CUDA_ARCHITECTURES=86`.
-
-Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `sub`, `mul`,
-`div_op`, `matmul`, `broadcast_add`, `scale`, `relu`, `sigmoid`, `tanh_op`,
-`exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sum`, `softmax`,
-`log_softmax`, `cross_entropy`, `Conv2d`, `MaxPool2d`, `SGD`, and `Adam`,
-including backward/gradient accumulation on device. `AvgPool2d`,
-`DepthwiseConv2d`, and `NearestUpsample2d` remain CPU-only in this hardening
-pass. Unsupported CUDA ops throw instead of silently falling back to stale host
-data.
-
-At startup `test_cuda_core` prints the CUDA driver/runtime versions and selected
-device. If the CUDA backend is compiled but no CUDA device is visible, the test
-prints `SKIP CUDA CORE TESTS` and exits successfully. Runtime errors after a
-device is selected still fail the test.
-
-CUDA `Var` objects keep host `data`/`grad` matrices and device buffers as
-separate mirrors. After CUDA ops, `backward()`, `SGD::step()`, or
-`Adam::step()`, the device buffers are authoritative and the host matrices may
-be stale. Use `x->cpu()` to create a synchronized host copy, or call
-`sync_data_from_cuda()` / `sync_grad_from_cuda()` before reading host
-`data` / `grad` directly. If you intentionally edit host `data` or `grad` on a
-CUDA `Var`, call `sync_data_to_cuda()` or `sync_grad_to_cuda()` before running
-more CUDA work. `clear_grad()` and optimizer `zero_grad()` clear both host and
-device gradients.
+The optional CUDA backend has its own build flags, supported-op surface, and
+host/device sync rules; see *CUDA backend (optional)* below.
 
 `test_core`, `test_nn`, and `test_cuda_core` print `ALL ... TESTS PASSED`.
 `test_conv` prints `21 passed, 0 failed`. `test_extensions` prints
@@ -150,6 +108,77 @@ cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCE
 cmake --build build-advanced --parallel
 ./build-advanced/test_smoke
 ```
+
+## CUDA backend (optional)
+
+CUDA is opt-in via `AUTOGRAD_USE_CUDA=ON`. The default build is CPU-only and
+unchanged; users without a CUDA Toolkit or GPU see no CUDA requirement.
+
+### Building with CUDA
+
+```bash
+cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_USE_CUDA=ON
+cmake --build build-cuda --parallel
+./build-cuda/test_cuda_core
+```
+
+If `nvcc` is not on `PATH`, point CMake at the toolkit explicitly, for example:
+
+```bash
+cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release \
+  -DAUTOGRAD_USE_CUDA=ON \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+```
+
+CUDA builds require CMake 3.18+ and default to `AUTOGRAD_CUDA_ARCHITECTURES=75`
+unless `CMAKE_CUDA_ARCHITECTURES` or `AUTOGRAD_CUDA_ARCHITECTURES` is set by the
+caller. Override it for a specific deployment target, for example
+`-DAUTOGRAD_CUDA_ARCHITECTURES=86`.
+
+### No-device behavior
+
+At startup `test_cuda_core` prints the CUDA driver/runtime versions and the
+selected device. If the CUDA backend is compiled but no CUDA device is visible,
+the test prints `SKIP CUDA CORE TESTS` and exits successfully. Runtime errors
+after a device is selected still fail the test.
+
+### Supported CUDA surface
+
+`Var::cuda()` / `Var::cpu()` plus on-device forward and gradient accumulation
+for:
+
+- Arithmetic: `add`, `sub`, `mul`, `div_op`, `matmul`, `broadcast_add`,
+  `scale`, `sum`.
+- Activations: `relu`, `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`,
+  `silu`, `softplus`.
+- Probabilities / loss: `softmax`, `log_softmax`, `cross_entropy`.
+- Conv stack: `Conv2d`, `MaxPool2d`.
+- Optimizers: `SGD`, `Adam` (device-resident moment buffers; CPU/CUDA mixed
+  parameter lists supported).
+
+`AvgPool2d`, `DepthwiseConv2d`, and `NearestUpsample2d` remain CPU-only in this
+hardening pass and throw on CUDA input. Unsupported CUDA ops throw instead of
+silently falling back to stale host data.
+
+### Host/device sync
+
+CUDA `Var` objects keep host `data`/`grad` matrices and device buffers as
+separate mirrors. After CUDA ops, `backward()`, `SGD::step()`, or
+`Adam::step()`, the device buffers are authoritative and the host matrices may
+be stale. Use `x->cpu()` to create a synchronized host copy, or call
+`sync_data_from_cuda()` / `sync_grad_from_cuda()` before reading host
+`data` / `grad` directly. If you intentionally edit host `data` or `grad` on a
+CUDA `Var`, call `sync_data_to_cuda()` or `sync_grad_to_cuda()` before running
+more CUDA work. `clear_grad()` and optimizer `zero_grad()` clear both host and
+device gradients.
+
+### Downstream (`add_subdirectory`) consumers
+
+Projects that consume `minimal_autograd` via `add_subdirectory` can enable CUDA
+by passing `-DAUTOGRAD_USE_CUDA=ON` in their own configure step. If `nvcc` is
+not on `PATH`, also set `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` (or the
+toolkit's actual path). The CPU default build is unaffected when CUDA is left
+off.
 
 ## Quick start
 
@@ -297,13 +326,10 @@ they are scope decisions.
 - **No inplace ops.** Every op allocates a new `Var`. Mutating a leaf
   parameter is fine, but mutating a non-leaf `Var->data` will silently
   invalidate the graph.
-- **Limited CUDA.** CUDA is opt-in and currently covers only the minimal core
-  autograd slice: `add`, `mul`, `matmul`, `broadcast_add`, `scale`, `relu`,
-  `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`,
-  `sub`, `div_op`, `sum`, `softmax`, `log_softmax`, `cross_entropy`, `SGD`,
-  `Adam`, `Conv2d`, and `MaxPool2d`. `AvgPool2d`, `DepthwiseConv2d`, and
-  `NearestUpsample2d` remain CPU-only. Unsupported ops should stay on CPU until
-  explicit CUDA kernels are added.
+- **Limited CUDA.** CUDA is opt-in and covers only the supported surface listed
+  in *CUDA backend (optional)*; in particular `AvgPool2d`, `DepthwiseConv2d`,
+  and `NearestUpsample2d` remain CPU-only. Unsupported ops should stay on CPU
+  until explicit CUDA kernels are added.
 - **No dilated / transposed conv.** `Conv2d` is the standard
   cross-correlation. `DepthwiseConv2d` is available (groups = channels).
   Dilated or transposed variants are not implemented.
