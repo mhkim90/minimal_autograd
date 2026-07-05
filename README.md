@@ -105,6 +105,16 @@ device. If the CUDA backend is compiled but no CUDA device is visible, the test
 prints `SKIP CUDA CORE TESTS` and exits successfully. Runtime errors after a
 device is selected still fail the test.
 
+CUDA `Var` objects keep host `data`/`grad` matrices and device buffers as
+separate mirrors. After CUDA ops, `backward()`, `SGD::step()`, or
+`Adam::step()`, the device buffers are authoritative and the host matrices may
+be stale. Use `x->cpu()` to create a synchronized host copy, or call
+`sync_data_from_cuda()` / `sync_grad_from_cuda()` before reading host
+`data` / `grad` directly. If you intentionally edit host `data` or `grad` on a
+CUDA `Var`, call `sync_data_to_cuda()` or `sync_grad_to_cuda()` before running
+more CUDA work. `clear_grad()` and optimizer `zero_grad()` clear both host and
+device gradients.
+
 `test_core`, `test_nn`, and `test_cuda_core` print `ALL ... TESTS PASSED`.
 `test_conv` prints `21 passed, 0 failed`. `test_extensions` prints
 `30/30 passed`, and `test_smoke` prints `35/35 passed`.
