@@ -519,15 +519,60 @@ inline VarPtr reshape(VarPtr a, int r, int c)    { return apply<ReshapeFn>({a}, 
 inline VarPtr concat(std::vector<VarPtr> inputs) { return apply<ConcatFn>(inputs); }
 inline VarPtr hcat(std::vector<VarPtr> inputs)   { return apply<HCatFn>(inputs); }
 
-inline VarPtr sigmoid(VarPtr a)                  { return apply<SigmoidFn>({a}); }
-inline VarPtr tanh_op(VarPtr a)                  { return apply<TanhFn>({a}); }
-inline VarPtr exp_op(VarPtr a)                   { return apply<ExpFn>({a}); }
-inline VarPtr log_op(VarPtr a)                   { return apply<LogFn>({a}); }
-inline VarPtr sqrt_op(VarPtr a)                  { return apply<SqrtFn>({a}); }
-inline VarPtr silu(VarPtr a)                     { return apply<SiLUFn>({a}); }
-inline VarPtr softplus(VarPtr a)                 { return apply<SoftplusFn>({a}); }
-inline VarPtr sub(VarPtr a, VarPtr b)            { return apply<SubFn>({a, b}); }
-inline VarPtr div_op(VarPtr a, VarPtr b)         { return apply<DivFn>({a, b}); }
+inline VarPtr sigmoid(VarPtr a)                  {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_sigmoid_op(a);
+#endif
+    return apply<SigmoidFn>({a});
+}
+inline VarPtr tanh_op(VarPtr a)                  {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_tanh_op(a);
+#endif
+    return apply<TanhFn>({a});
+}
+inline VarPtr exp_op(VarPtr a)                   {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_exp_op(a);
+#endif
+    return apply<ExpFn>({a});
+}
+inline VarPtr log_op(VarPtr a)                   {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_log_op(a);
+#endif
+    return apply<LogFn>({a});
+}
+inline VarPtr sqrt_op(VarPtr a)                  {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_sqrt_op(a);
+#endif
+    return apply<SqrtFn>({a});
+}
+inline VarPtr silu(VarPtr a)                     {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_silu_op(a);
+#endif
+    return apply<SiLUFn>({a});
+}
+inline VarPtr softplus(VarPtr a)                 {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_softplus_op(a);
+#endif
+    return apply<SoftplusFn>({a});
+}
+inline VarPtr sub(VarPtr a, VarPtr b)            {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda() || b->is_cuda()) return cuda_sub_op(a, b);
+#endif
+    return apply<SubFn>({a, b});
+}
+inline VarPtr div_op(VarPtr a, VarPtr b)         {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda() || b->is_cuda()) return cuda_div_op(a, b);
+#endif
+    return apply<DivFn>({a, b});
+}
 inline VarPtr cumsum(VarPtr a, int axis = 1)     { return apply<CumsumFn>({a}, axis); }
 inline VarPtr flip(VarPtr a, int axis = 1)       { return apply<FlipFn>({a}, axis); }
 

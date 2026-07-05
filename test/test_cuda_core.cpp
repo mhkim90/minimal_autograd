@@ -36,6 +36,39 @@ static void check_mat_near(const Mat& a, const Mat& b, float tol, const char* wh
     }
 }
 
+static void check_unary_op(const char* name, const Mat& input,
+                           VarPtr (*op)(VarPtr), float tol = 1e-4f) {
+    auto cpu_x = Var::make(input);
+    auto cpu_y = op(cpu_x);
+    sum(cpu_y)->backward();
+
+    auto cuda_x = Var::make(input)->cuda();
+    auto cuda_y = op(cuda_x);
+    CHECK(cuda_y->is_cuda());
+    sum(cuda_y)->backward();
+
+    check_mat_near(cuda_y->cpu()->data, cpu_y->data, tol, name);
+    check_mat_near(cuda_x->cpu()->grad, cpu_x->grad, tol, name);
+}
+
+static void check_binary_op(const char* name, const Mat& lhs, const Mat& rhs,
+                            VarPtr (*op)(VarPtr, VarPtr), float tol = 1e-4f) {
+    auto cpu_a = Var::make(lhs);
+    auto cpu_b = Var::make(rhs);
+    auto cpu_y = op(cpu_a, cpu_b);
+    sum(cpu_y)->backward();
+
+    auto cuda_a = Var::make(lhs)->cuda();
+    auto cuda_b = Var::make(rhs)->cuda();
+    auto cuda_y = op(cuda_a, cuda_b);
+    CHECK(cuda_y->is_cuda());
+    sum(cuda_y)->backward();
+
+    check_mat_near(cuda_y->cpu()->data, cpu_y->data, tol, name);
+    check_mat_near(cuda_a->cpu()->grad, cpu_a->grad, tol, name);
+    check_mat_near(cuda_b->cpu()->grad, cpu_b->grad, tol, name);
+}
+
 int main() {
     CudaRuntimeInfo cuda_info;
     try {
@@ -175,6 +208,62 @@ int main() {
     CHECK_NEAR(ce_cpu->data(0, 0), expected_ce, 1e-4f);
     CHECK_NEAR(lg_cpu->grad(0, 2), (expected_sm(0, 2) - 1.f) / 2.f, 1e-4f);
     CHECK_NEAR(lg_cpu->grad(1, 0), (expected_sm(1, 0) - 1.f) / 2.f, 1e-4f);
+
+    {
+        Mat act(2, 5);
+        act << -8.f, -2.f, -0.25f, 0.5f, 8.f,
+                3.f, -4.f, 0.f, 1.5f, -1.f;
+        Mat small = act * 0.25f;
+        Mat pos(2, 5);
+        pos << 0.1f, 0.5f, 1.f, 4.f, 16.f,
+               2.f, 0.25f, 9.f, 0.75f, 6.f;
+        check_unary_op("cuda sigmoid", act, sigmoid);
+        check_unary_op("cuda tanh_op", act, tanh_op);
+        check_unary_op("cuda exp_op", small, exp_op);
+        check_unary_op("cuda log_op", pos, log_op);
+        check_unary_op("cuda sqrt_op", pos, sqrt_op);
+        check_unary_op("cuda silu", act, silu);
+        check_unary_op("cuda softplus", act, softplus);
+
+        Mat lhs(2, 5);
+        lhs << 1.f, -2.f, 3.f, -4.f, 5.f,
+               -1.5f, 2.5f, -3.5f, 4.5f, -5.5f;
+        Mat rhs(2, 5);
+        rhs << 0.5f, 2.f, -1.5f, 4.f, -2.f,
+               3.f, -2.5f, 1.25f, -4.5f, 5.5f;
+        Mat div_rhs(2, 5);
+        div_rhs << 0.75f, 1.5f, 2.5f, 4.f, 8.f,
+                   1.25f, 3.f, 5.f, 6.f, 9.f;
+        check_binary_op("cuda sub", lhs, rhs, sub);
+        check_binary_op("cuda div_op", lhs, div_rhs, div_op);
+
+        auto shaped_a = Var::make4d(Mat::Constant(2, 12, 1.f), 2, 3, 2, 2)->cuda();
+        auto shaped_b = Var::make4d(Mat::Constant(2, 12, 0.5f), 2, 3, 2, 2)->cuda();
+        auto shaped_unary = sigmoid(shaped_a);
+        auto shaped_binary = sub(shaped_a, shaped_b);
+        CHECK(shaped_unary->is4d());
+        CHECK(shaped_binary->is4d());
+        CHECK(shaped_unary->dim(0) == 2 && shaped_unary->dim(1) == 3);
+        CHECK(shaped_unary->dim(2) == 2 && shaped_unary->dim(3) == 2);
+        CHECK(shaped_binary->dim(0) == 2 && shaped_binary->dim(1) == 3);
+        CHECK(shaped_binary->dim(2) == 2 && shaped_binary->dim(3) == 2);
+
+        bool mixed_threw = false;
+        try {
+            (void)sub(Var::make(lhs)->cuda(), Var::make(rhs));
+        } catch (const std::runtime_error&) {
+            mixed_threw = true;
+        }
+        CHECK(mixed_threw);
+
+        mixed_threw = false;
+        try {
+            (void)div_op(Var::make(lhs), Var::make(div_rhs)->cuda());
+        } catch (const std::runtime_error&) {
+            mixed_threw = true;
+        }
+        CHECK(mixed_threw);
+    }
 
     bool adam_threw = false;
     try {

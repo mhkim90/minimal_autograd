@@ -86,6 +86,62 @@ __global__ void relu_kernel(const float* a, float* out, std::size_t n) {
     if (i < n) out[i] = a[i] > 0.f ? a[i] : 0.f;
 }
 
+__device__ float sigmoid_value(float x) {
+    if (x >= 0.f) {
+        return 1.f / (1.f + expf(-x));
+    }
+    float e = expf(x);
+    return e / (1.f + e);
+}
+
+__global__ void sigmoid_kernel(const float* a, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = sigmoid_value(a[i]);
+}
+
+__global__ void tanh_kernel(const float* a, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = tanhf(a[i]);
+}
+
+__global__ void exp_kernel(const float* a, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = expf(a[i]);
+}
+
+__global__ void log_kernel(const float* a, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = logf(a[i]);
+}
+
+__global__ void sqrt_kernel(const float* a, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = sqrtf(a[i]);
+}
+
+__global__ void silu_kernel(const float* a, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = a[i] * sigmoid_value(a[i]);
+}
+
+__global__ void softplus_kernel(const float* a, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        float x = a[i];
+        out[i] = fmaxf(x, 0.f) + log1pf(expf(-fabsf(x)));
+    }
+}
+
+__global__ void sub_kernel(const float* a, const float* b, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = a[i] - b[i];
+}
+
+__global__ void div_kernel(const float* a, const float* b, float* out, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = a[i] / b[i];
+}
+
 __global__ void axpy_kernel(float* dst, const float* x, float alpha, std::size_t n) {
     std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) dst[i] += alpha * x[i];
@@ -113,6 +169,68 @@ __global__ void broadcast_add_grad_kernel(float* da, float* db, const float* g,
 __global__ void relu_grad_kernel(float* dx, const float* g, const float* x, std::size_t n) {
     std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) dx[i] += x[i] > 0.f ? g[i] : 0.f;
+}
+
+__global__ void sigmoid_grad_kernel(float* dx, const float* g,
+                                    const float* y, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dx[i] += g[i] * y[i] * (1.f - y[i]);
+}
+
+__global__ void tanh_grad_kernel(float* dx, const float* g,
+                                 const float* y, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dx[i] += g[i] * (1.f - y[i] * y[i]);
+}
+
+__global__ void exp_grad_kernel(float* dx, const float* g,
+                                const float* y, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dx[i] += g[i] * y[i];
+}
+
+__global__ void log_grad_kernel(float* dx, const float* g,
+                                const float* x, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dx[i] += g[i] / x[i];
+}
+
+__global__ void sqrt_grad_kernel(float* dx, const float* g,
+                                 const float* y, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dx[i] += g[i] / (2.f * y[i]);
+}
+
+__global__ void silu_grad_kernel(float* dx, const float* g,
+                                 const float* x, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        float s = sigmoid_value(x[i]);
+        dx[i] += g[i] * (s + x[i] * s * (1.f - s));
+    }
+}
+
+__global__ void softplus_grad_kernel(float* dx, const float* g,
+                                     const float* x, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dx[i] += g[i] * sigmoid_value(x[i]);
+}
+
+__global__ void sub_grad_kernel(float* da, float* db, const float* g, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        da[i] += g[i];
+        db[i] -= g[i];
+    }
+}
+
+__global__ void div_grad_kernel(float* da, float* db, const float* g,
+                                const float* a, const float* b, std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        da[i] += g[i] / b[i];
+        db[i] -= g[i] * a[i] / (b[i] * b[i]);
+    }
 }
 
 __global__ void sum_kernel(const float* x, float* out, std::size_t n) {
@@ -656,6 +774,151 @@ VarPtr cuda_relu_op(VarPtr a) {
         relu_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
                                              a->cuda_data(), n);
         finish_kernel("cuda_relu_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_sigmoid_op(VarPtr a) {
+    require_cuda(a);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    sigmoid_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_sigmoid_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        sigmoid_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                                self->cuda_data(), n);
+        finish_kernel("cuda_sigmoid_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_tanh_op(VarPtr a) {
+    require_cuda(a);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    tanh_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_tanh_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        tanh_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                             self->cuda_data(), n);
+        finish_kernel("cuda_tanh_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_exp_op(VarPtr a) {
+    require_cuda(a);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    exp_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_exp_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        exp_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                            self->cuda_data(), n);
+        finish_kernel("cuda_exp_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_log_op(VarPtr a) {
+    require_cuda(a);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    log_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_log_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        log_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                            a->cuda_data(), n);
+        finish_kernel("cuda_log_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_sqrt_op(VarPtr a) {
+    require_cuda(a);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    sqrt_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_sqrt_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        sqrt_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                             self->cuda_data(), n);
+        finish_kernel("cuda_sqrt_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_silu_op(VarPtr a) {
+    require_cuda(a);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    silu_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_silu_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        silu_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                             a->cuda_data(), n);
+        finish_kernel("cuda_silu_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_softplus_op(VarPtr a) {
+    require_cuda(a);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    softplus_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_softplus_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        softplus_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                                 a->cuda_data(), n);
+        finish_kernel("cuda_softplus_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_sub_op(VarPtr a, VarPtr b) {
+    require_cuda(a); require_cuda(b); require_same_shape(a, b);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    sub_kernel<<<blocks(n), 256>>>(a->cuda_data(), b->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_sub_op");
+    out->parents = {a, b};
+    out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        sub_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), b->cuda_grad(),
+                                            self->cuda_grad(), n);
+        finish_kernel("cuda_sub_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_div_op(VarPtr a, VarPtr b) {
+    require_cuda(a); require_cuda(b); require_same_shape(a, b);
+    const std::size_t n = static_cast<std::size_t>(a->data.size());
+    auto out = make_cuda_like(a);
+    div_kernel<<<blocks(n), 256>>>(a->cuda_data(), b->cuda_data(), out->cuda_data(), n);
+    finish_kernel("cuda_div_op");
+    out->parents = {a, b};
+    out->back_fn = [a, b, wp = std::weak_ptr<Var>(out), n]() {
+        auto self = wp.lock();
+        div_grad_kernel<<<blocks(n), 256>>>(a->cuda_grad(), b->cuda_grad(),
+                                            self->cuda_grad(),
+                                            a->cuda_data(), b->cuda_data(), n);
+        finish_kernel("cuda_div_backward");
     };
     return out;
 }
