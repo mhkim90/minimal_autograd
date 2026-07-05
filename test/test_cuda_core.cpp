@@ -1,4 +1,5 @@
 #include "autograd.h"
+#include "autograd/cuda_core.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -36,6 +37,23 @@ static void check_mat_near(const Mat& a, const Mat& b, float tol, const char* wh
 }
 
 int main() {
+    CudaRuntimeInfo cuda_info;
+    try {
+        cuda_info = cuda_runtime_info();
+    } catch (const std::runtime_error& e) {
+        std::cerr << "CUDA runtime probe failed: " << e.what() << "\n";
+        return 1;
+    }
+    std::cout << cuda_runtime_summary(cuda_info) << "\n";
+    if (!cuda_info.has_device()) {
+        std::cout << "SKIP CUDA CORE TESTS: " << cuda_info.status << "\n";
+        return 0;
+    }
+    CHECK(cuda_info.device_count > 0);
+    CHECK(cuda_info.current_device >= 0);
+    CHECK(!cuda_info.device.name.empty());
+    CHECK(cuda_info.device.compute_major > 0);
+
     Mat m(2, 3);
     m << 1.f, -2.f, 3.f,
          4.f, -5.f, 6.f;

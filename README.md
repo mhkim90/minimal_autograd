@@ -80,10 +80,28 @@ cmake --build build-cuda --parallel
 ./build-cuda/test_cuda_core
 ```
 
+If `nvcc` is not on `PATH`, point CMake at the toolkit explicitly, for example:
+
+```bash
+cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release \
+  -DAUTOGRAD_USE_CUDA=ON \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+```
+
+CUDA builds default to `AUTOGRAD_CUDA_ARCHITECTURES=75` unless
+`CMAKE_CUDA_ARCHITECTURES` or `AUTOGRAD_CUDA_ARCHITECTURES` is set by the
+caller. Override it for a specific deployment target, for example
+`-DAUTOGRAD_CUDA_ARCHITECTURES=86`.
+
 Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `mul`, `matmul`,
 `broadcast_add`, `scale`, `relu`, `sum`, `softmax`, `log_softmax`,
 `cross_entropy`, and `SGD`, including backward/gradient accumulation on device.
 Unsupported CUDA ops throw instead of silently falling back to stale host data.
+
+At startup `test_cuda_core` prints the CUDA driver/runtime versions and selected
+device. If the CUDA backend is compiled but no CUDA device is visible, the test
+prints `SKIP CUDA CORE TESTS` and exits successfully. Runtime errors after a
+device is selected still fail the test.
 
 `test_core`, `test_nn`, and `test_cuda_core` print `ALL ... TESTS PASSED`.
 `test_conv` prints `21 passed, 0 failed`. `test_extensions` prints

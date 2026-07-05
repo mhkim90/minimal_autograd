@@ -21,12 +21,30 @@ if(AUTOGRAD_USE_CUDA)
     if(CMAKE_VERSION VERSION_LESS 3.18)
         message(FATAL_ERROR "AUTOGRAD_USE_CUDA requires CMake 3.18+")
     endif()
+    set(AUTOGRAD_CUDA_ARCHITECTURES "" CACHE STRING
+        "CUDA architectures for autograd; defaults to CMAKE_CUDA_ARCHITECTURES or 75")
+    if(NOT AUTOGRAD_CUDA_ARCHITECTURES)
+        if(CMAKE_CUDA_ARCHITECTURES)
+            set(AUTOGRAD_CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
+        else()
+            set(AUTOGRAD_CUDA_ARCHITECTURES "75")
+        endif()
+        set(AUTOGRAD_CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}" CACHE STRING
+            "CUDA architectures for autograd; defaults to CMAKE_CUDA_ARCHITECTURES or 75"
+            FORCE)
+    endif()
+    if(NOT CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}" CACHE STRING
+            "CUDA architectures" FORCE)
+    endif()
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
     target_compile_definitions(autograd PUBLIC AUTOGRAD_USE_CUDA)
     target_sources(autograd PRIVATE src/cuda_core.cu)
     target_link_libraries(autograd PUBLIC CUDA::cudart)
-    set_target_properties(autograd PROPERTIES CUDA_STANDARD 17)
+    set_target_properties(autograd PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}")
 endif()
 
 # Optional: multi-threaded Eigen.
