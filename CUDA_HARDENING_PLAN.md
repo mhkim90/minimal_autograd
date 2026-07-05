@@ -492,6 +492,28 @@ Validation:
 - `test_cuda_core` compares CPU and CUDA Adam over three deterministic gradient
   steps and checks that `zero_grad()` clears CUDA gradients.
 
+## Phase 4 Status: 2026-07-05
+
+Phase 4 keeps the existing explicit-sync model and documents it as the public
+CUDA contract.
+
+Implementation notes:
+
+- CUDA `Var` host matrices and device buffers are separate mirrors.
+- After CUDA forward/backward/optimizer work, device buffers are authoritative;
+  callers should use `cpu()`, `sync_data_from_cuda()`, or
+  `sync_grad_from_cuda()` before reading host `data` or `grad` directly.
+- Host edits to CUDA `Var::data` or `Var::grad` require
+  `sync_data_to_cuda()` or `sync_grad_to_cuda()` before later CUDA work.
+- Shape metadata is host-side metadata; `cuda()` and `cpu()` preserve it, and
+  explicit sync helpers leave it unchanged.
+
+Validation:
+
+- `test_cuda_core` checks 4D shape preservation through `cuda()`/`cpu()`,
+  explicit data/grad sync in both directions, gradients observed through
+  `cpu()` after backward, and `clear_grad()` clearing host and device gradients.
+
 ## Risks
 
 | Risk | Impact | Mitigation |

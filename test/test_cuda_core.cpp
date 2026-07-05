@@ -109,6 +109,54 @@ int main() {
     CHECK_NEAR(x_cpu->grad(1, 1), 0.f, 1e-4f);
     CHECK_NEAR(x_cpu->grad(1, 2), 2.f, 1e-4f);
 
+    {
+        Mat shaped_data(2, 6);
+        shaped_data << 1.f, 2.f, 3.f, 4.f, 5.f, 6.f,
+                       7.f, 8.f, 9.f, 10.f, 11.f, 12.f;
+        auto shaped_cpu = Var::make4d(shaped_data, 2, 3, 1, 2);
+        auto shaped_cuda = shaped_cpu->cuda();
+        CHECK(shaped_cuda->is_cuda());
+        CHECK(shaped_cuda->is4d());
+        CHECK(shaped_cuda->dim(0) == 2 && shaped_cuda->dim(1) == 3);
+        CHECK(shaped_cuda->dim(2) == 1 && shaped_cuda->dim(3) == 2);
+        auto shaped_roundtrip = shaped_cuda->cpu();
+        CHECK(!shaped_roundtrip->is_cuda());
+        CHECK(shaped_roundtrip->is4d());
+        CHECK(shaped_roundtrip->dim(0) == 2 && shaped_roundtrip->dim(1) == 3);
+        CHECK(shaped_roundtrip->dim(2) == 1 && shaped_roundtrip->dim(3) == 2);
+        check_mat_near(shaped_roundtrip->data, shaped_data, 1e-4f, "cuda/cpu shape roundtrip data");
+
+        shaped_cuda->data = Mat::Constant(2, 6, 9.f);
+        shaped_cuda->sync_data_to_cuda();
+        CHECK(shaped_cuda->is4d());
+        shaped_cuda->data.setZero();
+        shaped_cuda->sync_data_from_cuda();
+        CHECK(shaped_cuda->is4d());
+        CHECK_NEAR(shaped_cuda->data(1, 5), 9.f, 1e-4f);
+
+        shaped_cuda->grad = Mat::Constant(2, 6, 4.f);
+        shaped_cuda->sync_grad_to_cuda();
+        CHECK(shaped_cuda->is4d());
+        shaped_cuda->grad.setZero();
+        shaped_cuda->sync_grad_from_cuda();
+        CHECK(shaped_cuda->is4d());
+        CHECK_NEAR(shaped_cuda->grad(0, 3), 4.f, 1e-4f);
+
+        shaped_cuda->clear_grad();
+        CHECK_NEAR(shaped_cuda->grad.cwiseAbs().maxCoeff(), 0.f, 1e-4f);
+        CHECK_NEAR(shaped_cuda->cpu()->grad.cwiseAbs().maxCoeff(), 0.f, 1e-4f);
+
+        auto sync_loss = sum(scale(shaped_cuda, 3.f));
+        sync_loss->backward();
+        auto shaped_after_backward = shaped_cuda->cpu();
+        CHECK(shaped_after_backward->is4d());
+        CHECK_NEAR(shaped_after_backward->grad(1, 4), 3.f, 1e-4f);
+
+        shaped_cuda->clear_grad();
+        CHECK_NEAR(shaped_cuda->grad.cwiseAbs().maxCoeff(), 0.f, 1e-4f);
+        CHECK_NEAR(shaped_cuda->cpu()->grad.cwiseAbs().maxCoeff(), 0.f, 1e-4f);
+    }
+
     auto a = Var::make(Mat::Constant(2, 2, 3.f))->cuda();
     auto b = Var::make(Mat::Constant(2, 2, 4.f))->cuda();
     auto z = sum(scale(mul(a, b), 0.5f));
