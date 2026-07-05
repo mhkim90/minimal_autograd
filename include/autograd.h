@@ -13,3 +13,7 @@
 #include "autograd/conv.h"
 #include "autograd/norm.h"
 #include "autograd/diffusion.h"
+
+#ifdef AUTOGRAD_USE_CUDA
+#include "autograd/cuda_core.h"
+#endif

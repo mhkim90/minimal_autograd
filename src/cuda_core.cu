@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -447,6 +448,73 @@ void finish_kernel(const char* what) {
 }
 
 } // namespace
+
+CudaRuntimeInfo cuda_runtime_info(int preferred_device) {
+    CudaRuntimeInfo info;
+
+    cudaError_t err = cudaDriverGetVersion(&info.driver_version);
+    if (err != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaDriverGetVersion: ") +
+                                 cudaGetErrorString(err));
+    }
+    err = cudaRuntimeGetVersion(&info.runtime_version);
+    if (err != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaRuntimeGetVersion: ") +
+                                 cudaGetErrorString(err));
+    }
+
+    err = cudaGetDeviceCount(&info.device_count);
+    if (err == cudaErrorNoDevice) {
+        info.device_count = 0;
+        info.status = "no CUDA devices visible";
+        return info;
+    }
+    if (err != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaGetDeviceCount: ") +
+                                 cudaGetErrorString(err));
+    }
+    if (info.device_count <= 0) {
+        info.status = "no CUDA devices visible";
+        return info;
+    }
+    if (preferred_device < 0 || preferred_device >= info.device_count) {
+        throw std::runtime_error("cuda_runtime_info: preferred device out of range");
+    }
+
+    check(cudaSetDevice(preferred_device), "cudaSetDevice");
+    check(cudaGetDevice(&info.current_device), "cudaGetDevice");
+
+    cudaDeviceProp prop{};
+    check(cudaGetDeviceProperties(&prop, info.current_device), "cudaGetDeviceProperties");
+    info.device.device = info.current_device;
+    info.device.name = prop.name;
+    info.device.compute_major = prop.major;
+    info.device.compute_minor = prop.minor;
+    info.device.total_global_mem = prop.totalGlobalMem;
+    info.device.multiprocessor_count = prop.multiProcessorCount;
+    info.status = "CUDA device available";
+    return info;
+}
+
+std::string cuda_runtime_summary(const CudaRuntimeInfo& info) {
+    std::ostringstream os;
+    os << "CUDA runtime: compiled=yes"
+       << ", driver=" << info.driver_version
+       << ", runtime=" << info.runtime_version
+       << ", device_count=" << info.device_count;
+    if (info.has_device()) {
+        os << ", current_device=" << info.current_device
+           << ", name=\"" << info.device.name << "\""
+           << ", compute=" << info.device.compute_major << "."
+           << info.device.compute_minor
+           << ", global_mem_mib=" << (info.device.total_global_mem / (1024 * 1024))
+           << ", multiprocessors=" << info.device.multiprocessor_count;
+    }
+    if (!info.status.empty()) {
+        os << ", status=\"" << info.status << "\"";
+    }
+    return os.str();
+}
 
 void cuda_alloc_floats(float** p, std::size_t n, int device) {
     check(cudaSetDevice(device), "cudaSetDevice");

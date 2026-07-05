@@ -3,10 +3,35 @@
 
 #include "autograd/variable.h"
 #include <cstddef>
+#include <string>
 
 namespace ag {
 
 #ifdef AUTOGRAD_USE_CUDA
+
+struct CudaDeviceInfo {
+    int device = -1;
+    std::string name;
+    int compute_major = 0;
+    int compute_minor = 0;
+    std::size_t total_global_mem = 0;
+    int multiprocessor_count = 0;
+};
+
+struct CudaRuntimeInfo {
+    int device_count = 0;
+    int current_device = -1;
+    int driver_version = 0;
+    int runtime_version = 0;
+    std::string status;
+    CudaDeviceInfo device;
+
+    bool has_device() const noexcept { return device_count > 0 && current_device >= 0; }
+};
+
+// Probes CUDA runtime state and selects preferred_device when one is available.
+CudaRuntimeInfo cuda_runtime_info(int preferred_device = 0);
+std::string cuda_runtime_summary(const CudaRuntimeInfo& info);
 
 void cuda_alloc_floats(float** p, std::size_t n, int device);
 void cuda_free_floats(float* p);
