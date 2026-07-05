@@ -65,6 +65,9 @@ VarPtr cuda_maxpool2d_op(VarPtr input,
                          int N, int C, int H, int W,
                          int kH, int kW, int stride);
 void cuda_sgd_step(Var& p, float lr);
+void cuda_adam_step(Var& p, float* m, float* v,
+                    float lr, float beta1, float beta2, float eps,
+                    float bias_correction1, float bias_correction2);
 
 #endif
 

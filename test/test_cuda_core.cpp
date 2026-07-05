@@ -265,14 +265,57 @@ int main() {
         CHECK(mixed_threw);
     }
 
-    bool adam_threw = false;
-    try {
-        Adam adam({p});
-        adam.step();
-    } catch (const std::runtime_error&) {
-        adam_threw = true;
+    {
+        Mat param0(2, 3);
+        param0 << 1.f, -2.f, 3.f,
+                  -4.f, 5.f, -6.f;
+        Mat grad1(2, 3);
+        grad1 << 0.1f, -0.2f, 0.3f,
+                 -0.4f, 0.5f, -0.6f;
+        Mat grad2(2, 3);
+        grad2 << -0.3f, 0.25f, -0.2f,
+                  0.15f, -0.1f, 0.05f;
+        Mat grad3(2, 3);
+        grad3 << 0.01f, 0.02f, -0.03f,
+                 -0.04f, 0.05f, 0.06f;
+        std::vector<Mat> grads = {grad1, grad2, grad3};
+
+        auto cpu_p = Var::make(param0);
+        auto cuda_p = Var::make(param0)->cuda();
+        Adam cpu_adam({cpu_p}, 0.01f);
+        Adam cuda_adam({cuda_p}, 0.01f);
+
+        for (const auto& g : grads) {
+            cpu_p->grad = g;
+            cuda_p->grad = g;
+            cuda_p->sync_grad_to_cuda();
+            cpu_adam.step();
+            cuda_adam.step();
+            check_mat_near(cuda_p->cpu()->data, cpu_p->data, 1e-4f, "cuda Adam data");
+        }
+        cuda_adam.zero_grad();
+        CHECK_NEAR(cuda_p->cpu()->grad.cwiseAbs().maxCoeff(), 0.f, 1e-4f);
+
+        auto mixed_cpu = Var::make(param0);
+        auto mixed_cuda = Var::make(param0)->cuda();
+        auto ref_cpu = Var::make(param0);
+        auto ref_cuda = Var::make(param0)->cuda();
+        Adam mixed_adam({mixed_cpu, mixed_cuda}, 0.01f);
+        Adam ref_cpu_adam({ref_cpu}, 0.01f);
+        Adam ref_cuda_adam({ref_cuda}, 0.01f);
+        mixed_cpu->grad = grad1;
+        ref_cpu->grad = grad1;
+        mixed_cuda->grad = grad2;
+        mixed_cuda->sync_grad_to_cuda();
+        ref_cuda->grad = grad2;
+        ref_cuda->sync_grad_to_cuda();
+        mixed_adam.step();
+        ref_cpu_adam.step();
+        ref_cuda_adam.step();
+        check_mat_near(mixed_cpu->data, ref_cpu->data, 1e-4f, "mixed Adam CPU param");
+        check_mat_near(mixed_cuda->cpu()->data, ref_cuda->cpu()->data, 1e-4f,
+                       "mixed Adam CUDA param");
     }
-    CHECK(adam_threw);
 
     {
         const int N = 2, C = 2, H = 4, W = 5;
