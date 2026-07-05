@@ -203,6 +203,29 @@ void test_scale() {
     std::cout << "[ok] scale: grad_check ok\n";
 }
 
+void test_sub_div_shape_mismatch() {
+    auto a = Var::make(Mat::Constant(2, 3, 1.f));   // (2, 3)
+    auto b = Var::make(Mat::Constant(1, 3, 1.f));   // (1, 3)
+
+    bool sub_threw = false;
+    try {
+        sub(a, b);
+    } catch (const std::runtime_error&) {
+        sub_threw = true;
+    }
+    CHECK(sub_threw);
+
+    bool div_threw = false;
+    try {
+        div_op(a, b);
+    } catch (const std::runtime_error&) {
+        div_threw = true;
+    }
+    CHECK(div_threw);
+
+    std::cout << "[ok] sub/div_op reject mismatched shapes\n";
+}
+
 void test_backward_exception_rolls_back_grads() {
     auto x = Var::make(Mat::Constant(2, 2, 1.f));
     auto y = Var::make(Mat::Constant(1, 1, 0.f));
@@ -242,6 +265,7 @@ int main() {
     test_logical_4d_shape();
     test_concat();
     test_scale();
+    test_sub_div_shape_mismatch();
     test_backward_exception_rolls_back_grads();
     std::cout << "\nALL CORE TESTS PASSED\n";
     return 0;

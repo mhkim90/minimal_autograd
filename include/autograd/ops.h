@@ -9,6 +9,7 @@
 #include "autograd/function.h"
 #include "autograd/tensor.h"
 #include "autograd/cuda_core.h"
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -565,12 +566,18 @@ inline VarPtr sub(VarPtr a, VarPtr b)            {
 #ifdef AUTOGRAD_USE_CUDA
     if (a->is_cuda() || b->is_cuda()) return cuda_sub_op(a, b);
 #endif
+    if (a->data.rows() != b->data.rows() || a->data.cols() != b->data.cols()) {
+        throw std::runtime_error("sub: shape mismatch");
+    }
     return apply<SubFn>({a, b});
 }
 inline VarPtr div_op(VarPtr a, VarPtr b)         {
 #ifdef AUTOGRAD_USE_CUDA
     if (a->is_cuda() || b->is_cuda()) return cuda_div_op(a, b);
 #endif
+    if (a->data.rows() != b->data.rows() || a->data.cols() != b->data.cols()) {
+        throw std::runtime_error("div_op: shape mismatch");
+    }
     return apply<DivFn>({a, b});
 }
 inline VarPtr cumsum(VarPtr a, int axis = 1)     { return apply<CumsumFn>({a}, axis); }
