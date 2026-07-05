@@ -413,6 +413,66 @@ ctest --test-dir ../CppResist/build-cuda --output-on-failure
 The CppResist command is expected to become valid after CppResist adds its own
 CUDA build option. Before that, use it only as a design target.
 
+## Phase 0 Baseline: 2026-07-05
+
+Branch:
+
+- `codex/cuda-hardening`
+
+Plan commit:
+
+- `a8fdf1b Document CUDA hardening plan`
+
+Host CUDA environment:
+
+- `nvidia-smi` sees GPU 0: NVIDIA GeForce RTX 5060, compute capability 12.0,
+  8151 MiB, driver 595.71.05.
+- `nvcc` is not on the default `PATH`.
+- CMake found CUDA compiler `/usr/local/cuda/bin/nvcc`.
+- `/usr/local/cuda/bin/nvcc --version`: CUDA compilation tools 12.8,
+  V12.8.61.
+- `build-cuda/CMakeFiles/3.28.3/CMakeCUDACompiler.cmake` records
+  `CMAKE_CUDA_ARCHITECTURES_NATIVE` as `No CUDA devices found.-real`, while
+  runtime `nvidia-smi` sees the GPU.
+- CMake's CUDA architecture list for this toolkit tops out at `90`; the local
+  GPU is compute capability 12.0. Phase 1 should avoid relying on implicit
+  architecture defaults and should document or configure the intended
+  forward-compatibility behavior.
+
+CPU default validation:
+
+- `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`: passed.
+- `cmake --build build --parallel`: passed.
+- `./build/test_core`: `ALL CORE TESTS PASSED`.
+- `./build/test_nn`: `ALL NN TESTS PASSED`.
+- `./build/test_conv`: 21 passed, 0 failed.
+
+CPU advanced validation:
+
+- `cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release
+  -DAUTOGRAD_BUILD_ADVANCED_OPS=ON`: passed.
+- `cmake --build build-advanced --parallel`: passed.
+- `./build-advanced/test_extensions`: 30/30 passed.
+- `./build-advanced/test_diffusion`: 17/17 passed.
+- `./build-advanced/test_smoke`: 35/35 passed.
+
+CUDA validation:
+
+- `cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release
+  -DAUTOGRAD_USE_CUDA=ON`: passed with CMake `CMP0104` warning because
+  `CUDA_ARCHITECTURES` is empty for target `autograd`.
+- `cmake --build build-cuda --parallel`: passed with existing NVCC/Eigen
+  constexpr warnings and a deprecated GPU target warning.
+- `./build-cuda/test_cuda_core`: `ALL CUDA CORE TESTS PASSED`.
+
+Phase 1 follow-up risks from this baseline:
+
+- CUDA tests pass today, but the build relies on implicit architecture behavior.
+- Runtime device visibility and CMake configure-time native architecture
+  detection disagree.
+- README guidance should mention CUDA compiler discovery when `nvcc` is not on
+  `PATH`, for example by using `/usr/local/cuda/bin` or CMake CUDA variables.
+
 ## Risks
 
 | Risk | Impact | Mitigation |
