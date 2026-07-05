@@ -280,4 +280,4 @@ they are scope decisions.
 
 ## License
 
-MIT. (Replace with your own if you're forking.)
+Apache-2.0
