@@ -406,6 +406,49 @@ int main() {
     }
 
     {
+        const int N = 1, C = 2, H = 5, W = 7;
+        const int out_ch = 2, kH = 3, kW = 3, stride = 2, pad = 1;
+        Mat conv_x(N, C * H * W);
+        Mat conv_w(out_ch, C * kH * kW);
+        Mat conv_b(1, out_ch);
+        for (int i = 0; i < conv_x.size(); ++i) {
+            conv_x.data()[i] = 0.01f * static_cast<float>((i % 23) - 11);
+        }
+        for (int i = 0; i < conv_w.size(); ++i) {
+            conv_w.data()[i] = 0.015f * static_cast<float>((i % 13) - 6);
+        }
+        conv_b << -0.03f, 0.04f;
+
+        Conv2d conv_cpu(C, out_ch, kH, kW, stride, pad);
+        conv_cpu.W = Var::make(conv_w);
+        conv_cpu.b = Var::make(conv_b);
+        auto cx = Var::make4d(conv_x, N, C, H, W);
+        auto cy = conv_cpu.forward(cx);
+        CHECK(cy->dim(2) == 3 && cy->dim(3) == 4);
+        sum(add(cy, cy))->backward();
+
+        Conv2d conv_cuda(C, out_ch, kH, kW, stride, pad);
+        conv_cuda.W = Var::make(conv_w)->cuda();
+        conv_cuda.b = Var::make(conv_b)->cuda();
+        auto gx = Var::make4d(conv_x, N, C, H, W)->cuda();
+        auto gy = conv_cuda.forward(gx);
+        CHECK(gy->is_cuda());
+        CHECK(gy->is4d());
+        CHECK(gy->dim(0) == N && gy->dim(1) == out_ch);
+        CHECK(gy->dim(2) == 3 && gy->dim(3) == 4);
+        sum(add(gy, gy))->backward();
+
+        check_mat_near(gy->cpu()->data, cy->data, 1e-4f,
+                       "cuda Conv2d stride/pad forward");
+        check_mat_near(gx->cpu()->grad, cx->grad, 1e-4f,
+                       "cuda Conv2d stride/pad repeated grad input");
+        check_mat_near(conv_cuda.W->cpu()->grad, conv_cpu.W->grad, 1e-4f,
+                       "cuda Conv2d stride/pad repeated grad weight");
+        check_mat_near(conv_cuda.b->cpu()->grad, conv_cpu.b->grad, 1e-4f,
+                       "cuda Conv2d stride/pad repeated grad bias");
+    }
+
+    {
         const int N = 2, C = 2, H = 4, W = 4;
         Mat pool_x(N, C * H * W);
         for (int n = 0; n < N; ++n) {
@@ -433,6 +476,75 @@ int main() {
 
         check_mat_near(pgy->cpu()->data, py->data, 1e-4f, "cuda MaxPool2d forward");
         check_mat_near(pgx->cpu()->grad, px->grad, 1e-4f, "cuda MaxPool2d grad input");
+    }
+
+    {
+        const int N = 2, C = 2, H = 6, W = 7;
+        Mat pool_x(N, C * H * W);
+        for (int n = 0; n < N; ++n) {
+            for (int c = 0; c < C; ++c) {
+                for (int h = 0; h < H; ++h) {
+                    for (int w = 0; w < W; ++w) {
+                        pool_x(n, c * H * W + h * W + w) =
+                            static_cast<float>(c * H * W + h * W + w) +
+                            0.01f * static_cast<float>(n);
+                    }
+                }
+            }
+        }
+
+        MaxPool2d pool(2, 3, 2);
+        auto px = Var::make4d(pool_x, N, C, H, W);
+        auto py = pool.forward(px);
+        CHECK(py->dim(2) == 3 && py->dim(3) == 3);
+        sum(add(py, py))->backward();
+
+        auto pgx = Var::make4d(pool_x, N, C, H, W)->cuda();
+        auto pgy = pool.forward(pgx);
+        CHECK(pgy->is_cuda());
+        CHECK(pgy->is4d());
+        CHECK(pgy->dim(0) == N && pgy->dim(1) == C);
+        CHECK(pgy->dim(2) == 3 && pgy->dim(3) == 3);
+        sum(add(pgy, pgy))->backward();
+
+        check_mat_near(pgy->cpu()->data, py->data, 1e-4f,
+                       "cuda MaxPool2d stride forward");
+        check_mat_near(pgx->cpu()->grad, px->grad, 1e-4f,
+                       "cuda MaxPool2d repeated grad input");
+    }
+
+    {
+        auto unsupported_x = Var::make4d(Mat::Constant(1, 2 * 4 * 4, 1.f),
+                                         1, 2, 4, 4)->cuda();
+
+        bool unsupported_threw = false;
+        try {
+            AvgPool2d avg(2, 2);
+            (void)avg.forward(unsupported_x);
+        } catch (const std::runtime_error&) {
+            unsupported_threw = true;
+        }
+        CHECK(unsupported_threw);
+
+        unsupported_threw = false;
+        try {
+            DepthwiseConv2d depthwise(2, 3, 3, 1, 1);
+            depthwise.W = depthwise.W->cuda();
+            depthwise.b = depthwise.b->cuda();
+            (void)depthwise.forward(unsupported_x);
+        } catch (const std::runtime_error&) {
+            unsupported_threw = true;
+        }
+        CHECK(unsupported_threw);
+
+        unsupported_threw = false;
+        try {
+            NearestUpsample2d upsample(2);
+            (void)upsample.forward(unsupported_x);
+        } catch (const std::runtime_error&) {
+            unsupported_threw = true;
+        }
+        CHECK(unsupported_threw);
     }
 
     std::cout << "ALL CUDA CORE TESTS PASSED\n";
