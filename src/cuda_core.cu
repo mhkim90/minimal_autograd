@@ -189,6 +189,205 @@ __global__ void log_softmax_backward_kernel(float* dx, const float* g,
     }
 }
 
+__global__ void conv2d_forward_kernel(const float* input, const float* weight,
+                                      const float* bias, float* out,
+                                      int total, int N, int C, int H, int W,
+                                      int out_ch, int kH, int kW,
+                                      int stride, int pad, int oH, int oW) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= total) return;
+    int spatial = oH * oW;
+    int n = i % N;
+    int out_flat = i / N;
+    int oc = out_flat / spatial;
+    int pos = out_flat - oc * spatial;
+    int oh = pos / oW;
+    int ow = pos - oh * oW;
+
+    float acc = bias[oc];
+    for (int c = 0; c < C; ++c) {
+        for (int kh = 0; kh < kH; ++kh) {
+            int ih = oh * stride + kh - pad;
+            if (ih < 0 || ih >= H) continue;
+            for (int kw = 0; kw < kW; ++kw) {
+                int iw = ow * stride + kw - pad;
+                if (iw < 0 || iw >= W) continue;
+                int in_flat = c * H * W + ih * W + iw;
+                int w_flat = (c * kH + kh) * kW + kw;
+                acc += input[n + in_flat * N] * weight[oc + w_flat * out_ch];
+            }
+        }
+    }
+    out[i] = acc;
+}
+
+__global__ void conv2d_grad_input_kernel(float* dx, const float* grad_out,
+                                         const float* weight,
+                                         int total, int N, int C, int H, int W,
+                                         int out_ch, int kH, int kW,
+                                         int stride, int pad, int oH, int oW) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= total) return;
+    int n = i % N;
+    int flat = i / N;
+    int c = flat / (H * W);
+    int rem = flat - c * H * W;
+    int h = rem / W;
+    int w = rem - h * W;
+    int spatial = oH * oW;
+
+    float acc = 0.f;
+    for (int oc = 0; oc < out_ch; ++oc) {
+        for (int kh = 0; kh < kH; ++kh) {
+            int oh_num = h + pad - kh;
+            if (oh_num < 0 || oh_num % stride != 0) continue;
+            int oh = oh_num / stride;
+            if (oh < 0 || oh >= oH) continue;
+            for (int kw = 0; kw < kW; ++kw) {
+                int ow_num = w + pad - kw;
+                if (ow_num < 0 || ow_num % stride != 0) continue;
+                int ow = ow_num / stride;
+                if (ow < 0 || ow >= oW) continue;
+                int w_flat = (c * kH + kh) * kW + kw;
+                int pos = oh * oW + ow;
+                acc += weight[oc + w_flat * out_ch] *
+                       grad_out[n + (oc * spatial + pos) * N];
+            }
+        }
+    }
+    dx[i] += acc;
+}
+
+__global__ void conv2d_grad_weight_kernel(float* dw, const float* grad_out,
+                                          const float* input,
+                                          int total, int N, int C, int H, int W,
+                                          int out_ch, int kH, int kW,
+                                          int stride, int pad, int oH, int oW) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= total) return;
+    int oc = i % out_ch;
+    int w_flat = i / out_ch;
+    int c = w_flat / (kH * kW);
+    int rem = w_flat - c * kH * kW;
+    int kh = rem / kW;
+    int kw = rem - kh * kW;
+    int spatial = oH * oW;
+
+    float acc = 0.f;
+    for (int n = 0; n < N; ++n) {
+        for (int oh = 0; oh < oH; ++oh) {
+            int ih = oh * stride + kh - pad;
+            if (ih < 0 || ih >= H) continue;
+            for (int ow = 0; ow < oW; ++ow) {
+                int iw = ow * stride + kw - pad;
+                if (iw < 0 || iw >= W) continue;
+                int in_flat = c * H * W + ih * W + iw;
+                int pos = oh * oW + ow;
+                acc += grad_out[n + (oc * spatial + pos) * N] *
+                       input[n + in_flat * N];
+            }
+        }
+    }
+    dw[i] += acc;
+}
+
+__global__ void conv2d_grad_bias_kernel(float* db, const float* grad_out,
+                                        int N, int out_ch, int spatial) {
+    int oc = blockIdx.x * blockDim.x + threadIdx.x;
+    if (oc >= out_ch) return;
+    float acc = 0.f;
+    for (int n = 0; n < N; ++n) {
+        for (int pos = 0; pos < spatial; ++pos) {
+            acc += grad_out[n + (oc * spatial + pos) * N];
+        }
+    }
+    db[oc] += acc;
+}
+
+__global__ void maxpool2d_forward_kernel(const float* input, float* out,
+                                         float* mask, int total,
+                                         int N, int C, int H, int W,
+                                         int kH, int kW, int stride,
+                                         int oH, int oW) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= total) return;
+    int spatial = oH * oW;
+    int ksz = kH * kW;
+    int n = i % N;
+    int out_flat = i / N;
+    int c = out_flat / spatial;
+    int pos = out_flat - c * spatial;
+    int oh = pos / oW;
+    int ow = pos - oh * oW;
+    int col_idx = n * spatial + pos;
+
+    int best_k = 0;
+    int ih0 = oh * stride;
+    int iw0 = ow * stride;
+    float best_v = input[n + (c * H * W + ih0 * W + iw0) * N];
+    for (int k = 1; k < ksz; ++k) {
+        int kh = k / kW;
+        int kw = k - kh * kW;
+        int ih = oh * stride + kh;
+        int iw = ow * stride + kw;
+        float v = input[n + (c * H * W + ih * W + iw) * N];
+        if (v > best_v) {
+            best_v = v;
+            best_k = k;
+        }
+    }
+    out[i] = best_v;
+    mask[c * ksz + best_k + col_idx * (C * ksz)] = 1.f;
+}
+
+__global__ void maxpool2d_backward_kernel(float* dx, const float* grad_out,
+                                          const float* mask, int total,
+                                          int N, int C, int H, int W,
+                                          int kH, int kW, int stride,
+                                          int oH, int oW) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= total) return;
+    int n = i % N;
+    int flat = i / N;
+    int c = flat / (H * W);
+    int rem = flat - c * H * W;
+    int h = rem / W;
+    int w = rem - h * W;
+    int spatial = oH * oW;
+    int ksz = kH * kW;
+
+    float acc = 0.f;
+    for (int kh = 0; kh < kH; ++kh) {
+        int oh_num = h - kh;
+        if (oh_num < 0 || oh_num % stride != 0) continue;
+        int oh = oh_num / stride;
+        if (oh < 0 || oh >= oH) continue;
+        for (int kw = 0; kw < kW; ++kw) {
+            int ow_num = w - kw;
+            if (ow_num < 0 || ow_num % stride != 0) continue;
+            int ow = ow_num / stride;
+            if (ow < 0 || ow >= oW) continue;
+            int pos = oh * oW + ow;
+            int col_idx = n * spatial + pos;
+            int mask_row = c * ksz + kh * kW + kw;
+            acc += mask[mask_row + col_idx * (C * ksz)] *
+                   grad_out[n + (c * spatial + pos) * N];
+        }
+    }
+    dx[i] += acc;
+}
+
+int cuda_output_extent(int input, int kernel, int stride, int pad, const char* what) {
+    if (input <= 0 || kernel <= 0 || stride <= 0 || pad < 0) {
+        throw std::runtime_error(std::string(what) + ": invalid kernel geometry");
+    }
+    const int span = input + 2 * pad - kernel;
+    if (span < 0 || span % stride != 0) {
+        throw std::runtime_error(std::string(what) + ": kernel/stride geometry mismatch");
+    }
+    return span / stride + 1;
+}
+
 void require_cuda(VarPtr v) {
     if (!v->is_cuda()) throw std::runtime_error("cuda op requires CUDA Var input");
 }
@@ -218,6 +417,23 @@ void require_broadcast_add_shape(VarPtr a, VarPtr b) {
         throw std::runtime_error("cuda_broadcast_add_op: shape mismatch");
     }
     require_same_device(a, b);
+}
+
+void require_conv2d_shape(VarPtr input, VarPtr weight, VarPtr bias,
+                          int N, int C, int H, int W, int kH, int kW) {
+    if (input->data.rows() != N || input->data.cols() != C * H * W ||
+        weight->data.cols() != C * kH * kW ||
+        bias->data.rows() != 1 || bias->data.cols() != weight->data.rows()) {
+        throw std::runtime_error("cuda_conv2d_op: shape mismatch");
+    }
+    require_same_device(input, weight);
+    require_same_device(input, bias);
+}
+
+void require_maxpool2d_shape(VarPtr input, int N, int C, int H, int W) {
+    if (input->data.rows() != N || input->data.cols() != C * H * W) {
+        throw std::runtime_error("cuda_maxpool2d_op: shape mismatch");
+    }
 }
 
 VarPtr make_cuda_like(VarPtr a) {
@@ -429,6 +645,75 @@ VarPtr cuda_log_softmax_op(VarPtr a) {
         log_softmax_backward_kernel<<<rows, 1>>>(a->cuda_grad(), self->cuda_grad(),
                                                  self->cuda_data(), rows, cols);
         finish_kernel("cuda_log_softmax_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,
+                      int N, int C, int H, int W,
+                      int kH, int kW, int stride, int pad) {
+    require_cuda(input); require_cuda(weight); require_cuda(bias);
+    require_conv2d_shape(input, weight, bias, N, C, H, W, kH, kW);
+    const int out_ch = weight->data.rows();
+    const int oH = cuda_output_extent(H, kH, stride, pad, "cuda_conv2d_op");
+    const int oW = cuda_output_extent(W, kW, stride, pad, "cuda_conv2d_op");
+    const int total = N * out_ch * oH * oW;
+    auto out = Var::make(Mat::Zero(N, out_ch * oH * oW))->cuda(input->cuda_device());
+    out->set_shape({N, out_ch, oH, oW});
+    conv2d_forward_kernel<<<blocks(total), 256>>>(
+        input->cuda_data(), weight->cuda_data(), bias->cuda_data(), out->cuda_data(),
+        total, N, C, H, W, out_ch, kH, kW, stride, pad, oH, oW);
+    finish_kernel("cuda_conv2d_op");
+    out->parents = {input, weight, bias};
+    out->back_fn = [input, weight, bias, wp = std::weak_ptr<Var>(out),
+                    N, C, H, W, out_ch, kH, kW, stride, pad, oH, oW]() {
+        auto self = wp.lock();
+        const int input_total = N * C * H * W;
+        const int weight_total = out_ch * C * kH * kW;
+        const int spatial = oH * oW;
+        conv2d_grad_input_kernel<<<blocks(input_total), 256>>>(
+            input->cuda_grad(), self->cuda_grad(), weight->cuda_data(),
+            input_total, N, C, H, W, out_ch, kH, kW, stride, pad, oH, oW);
+        finish_kernel("cuda_conv2d_grad_input");
+        conv2d_grad_weight_kernel<<<blocks(weight_total), 256>>>(
+            weight->cuda_grad(), self->cuda_grad(), input->cuda_data(),
+            weight_total, N, C, H, W, out_ch, kH, kW, stride, pad, oH, oW);
+        finish_kernel("cuda_conv2d_grad_weight");
+        conv2d_grad_bias_kernel<<<blocks(out_ch), 256>>>(
+            bias->cuda_grad(), self->cuda_grad(), N, out_ch, spatial);
+        finish_kernel("cuda_conv2d_grad_bias");
+    };
+    return out;
+}
+
+VarPtr cuda_maxpool2d_op(VarPtr input,
+                         int N, int C, int H, int W,
+                         int kH, int kW, int stride) {
+    require_cuda(input);
+    require_maxpool2d_shape(input, N, C, H, W);
+    const int oH = cuda_output_extent(H, kH, stride, 0, "cuda_maxpool2d_op");
+    const int oW = cuda_output_extent(W, kW, stride, 0, "cuda_maxpool2d_op");
+    const int total = N * C * oH * oW;
+    const int mask_rows = C * kH * kW;
+    const int mask_cols = N * oH * oW;
+    auto out = Var::make(Mat::Zero(N, C * oH * oW))->cuda(input->cuda_device());
+    auto mask = Var::make(Mat::Zero(mask_rows, mask_cols))->cuda(input->cuda_device());
+    out->set_shape({N, C, oH, oW});
+    cuda_zero(mask->cuda_data(), static_cast<std::size_t>(mask->data.size()),
+              input->cuda_device());
+    maxpool2d_forward_kernel<<<blocks(total), 256>>>(
+        input->cuda_data(), out->cuda_data(), mask->cuda_data(), total,
+        N, C, H, W, kH, kW, stride, oH, oW);
+    finish_kernel("cuda_maxpool2d_op");
+    out->parents = {input};
+    out->back_fn = [input, mask, wp = std::weak_ptr<Var>(out),
+                    N, C, H, W, kH, kW, stride, oH, oW]() {
+        auto self = wp.lock();
+        const int input_total = N * C * H * W;
+        maxpool2d_backward_kernel<<<blocks(input_total), 256>>>(
+            input->cuda_grad(), self->cuda_grad(), mask->cuda_data(), input_total,
+            N, C, H, W, kH, kW, stride, oH, oW);
+        finish_kernel("cuda_maxpool2d_backward");
     };
     return out;
 }

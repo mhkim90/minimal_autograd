@@ -9,6 +9,11 @@ Two MCP tools drive Codex:
 - `mcp__codex__codex` — start a session (`prompt` required; set `sandbox`, `approval-policy`, `cwd`, `model`).
 - `mcp__codex__codex-reply` — continue a thread (`threadId` + `prompt`).
 
+The Codex MCP environment does **not** provide GPU access. Use Codex for CUDA/GPU
+reasoning, kernel review, and code edits, but do not ask it to run GPU-dependent
+builds, tests, benchmarks, profilers, or device probes. Run GPU validation from
+Claude/OpenCode/local shell where a GPU is actually available.
+
 Codex runs on **GPT-5.5** by default (`model_reasoning_effort = "high"` in `~/.codex/config.toml`).
 Override with the `model` param if needed (e.g. `gpt-5.2`, `gpt-5.2-codex`).
 

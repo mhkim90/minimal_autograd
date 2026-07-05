@@ -73,6 +73,18 @@ option(AUTOGRAD_BUILD_EXAMPLES "Build README examples" OFF)
 if(AUTOGRAD_BUILD_EXAMPLES)
     add_executable(linear_regression examples/linear_regression.cpp)
     target_link_libraries(linear_regression autograd)
+
+    add_executable(mnist_classify_cpu examples/mnist_classify_cpu.cpp)
+    target_link_libraries(mnist_classify_cpu autograd)
+    target_compile_definitions(mnist_classify_cpu PRIVATE
+        DATA_DIR_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/data")
+
+    if(AUTOGRAD_USE_CUDA)
+        add_executable(mnist_classify_gpu examples/mnist_classify_gpu.cpp)
+        target_link_libraries(mnist_classify_gpu autograd)
+        target_compile_definitions(mnist_classify_gpu PRIVATE
+            DATA_DIR_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    endif()
 endif()
 
 # README quick-start example.
