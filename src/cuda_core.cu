@@ -147,6 +147,22 @@ __global__ void axpy_kernel(float* dst, const float* x, float alpha, std::size_t
     if (i < n) dst[i] += alpha * x[i];
 }
 
+__global__ void adam_step_kernel(float* p, const float* grad, float* m, float* v,
+                                 float lr, float beta1, float beta2, float eps,
+                                 float bias_correction1, float bias_correction2,
+                                 std::size_t n) {
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    float g = grad[i];
+    float mi = beta1 * m[i] + (1.f - beta1) * g;
+    float vi = beta2 * v[i] + (1.f - beta2) * g * g;
+    m[i] = mi;
+    v[i] = vi;
+    float m_hat = mi / bias_correction1;
+    float v_hat = vi / bias_correction2;
+    p[i] -= lr * m_hat / (sqrtf(v_hat) + eps);
+}
+
 __global__ void mul_grad_kernel(float* da, float* db, const float* g,
                                 const float* a, const float* b, std::size_t n) {
     std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -944,6 +960,18 @@ void cuda_sgd_step(Var& p, float lr) {
     const std::size_t n = static_cast<std::size_t>(p.data.size());
     axpy_kernel<<<blocks(n), 256>>>(p.cuda_data(), p.cuda_grad(), -lr, n);
     finish_kernel("cuda_sgd_step");
+}
+
+void cuda_adam_step(Var& p, float* m, float* v,
+                    float lr, float beta1, float beta2, float eps,
+                    float bias_correction1, float bias_correction2) {
+    if (!p.is_cuda()) return;
+    check(cudaSetDevice(p.cuda_device()), "cudaSetDevice");
+    const std::size_t n = static_cast<std::size_t>(p.data.size());
+    adam_step_kernel<<<blocks(n), 256>>>(p.cuda_data(), p.cuda_grad(), m, v,
+                                         lr, beta1, beta2, eps,
+                                         bias_correction1, bias_correction2, n);
+    finish_kernel("cuda_adam_step");
 }
 
 VarPtr cuda_softmax_op(VarPtr a) {

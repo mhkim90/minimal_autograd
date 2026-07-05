@@ -55,7 +55,8 @@ Known gaps:
 - Other advanced ops are CPU-only:
   - `transpose`, `reshape`, `concat`, `hcat`, `cumsum`, `flip`, `sin_op`,
     `cos_op`, `clamp`, `col_slice`, `split`.
-- `Adam::step()` throws for CUDA parameters.
+- `Adam::step()` previously threw for CUDA parameters; Phase 3 adds a tested
+  CUDA Adam path with device moment buffers.
 - No explicit no-device skip helper exists in tests.
 - CUDA Toolkit version/device capability is not reported by the test.
 - Public CUDA helpers are minimal and mostly raw pointer level.
@@ -472,6 +473,24 @@ Phase 1 follow-up risks from this baseline:
   detection disagree.
 - README guidance should mention CUDA compiler discovery when `nvcc` is not on
   `PATH`, for example by using `/usr/local/cuda/bin` or CMake CUDA variables.
+
+## Phase 3 Status: 2026-07-05
+
+Phase 3 implements CUDA Adam rather than documenting it as CPU-only.
+
+Implementation notes:
+
+- Adam keeps existing CPU moment matrices for CPU parameters.
+- CUDA parameters get device-resident first and second moment buffers owned by
+  internal `Var` objects.
+- `Adam::step()` supports mixed CPU/CUDA parameter lists by updating each
+  parameter on its own backend.
+- CUDA Adam uses the same bias correction and update formula as CPU Adam.
+
+Validation:
+
+- `test_cuda_core` compares CPU and CUDA Adam over three deterministic gradient
+  steps and checks that `zero_grad()` clears CUDA gradients.
 
 ## Risks
 

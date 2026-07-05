@@ -96,7 +96,7 @@ caller. Override it for a specific deployment target, for example
 Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `sub`, `mul`,
 `div_op`, `matmul`, `broadcast_add`, `scale`, `relu`, `sigmoid`, `tanh_op`,
 `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sum`, `softmax`,
-`log_softmax`, `cross_entropy`, and `SGD`, including backward/gradient
+`log_softmax`, `cross_entropy`, `SGD`, and `Adam`, including backward/gradient
 accumulation on device. Unsupported CUDA ops throw instead of silently falling
 back to stale host data.
 
@@ -287,8 +287,10 @@ they are scope decisions.
   invalidate the graph.
 - **Limited CUDA.** CUDA is opt-in and currently covers only the minimal core
   autograd slice: `add`, `mul`, `matmul`, `broadcast_add`, `scale`, `relu`,
-  `sum`, `softmax`, `log_softmax`, `cross_entropy`, and `SGD`. Unsupported ops
-  should stay on CPU until explicit CUDA kernels are added.
+  `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`,
+  `sub`, `div_op`, `sum`, `softmax`, `log_softmax`, `cross_entropy`, `SGD`,
+  and `Adam`. Unsupported ops should stay on CPU until explicit CUDA kernels
+  are added.
 - **No dilated / transposed conv.** `Conv2d` is the standard
   cross-correlation. `DepthwiseConv2d` is available (groups = channels).
   Dilated or transposed variants are not implemented.

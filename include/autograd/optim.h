@@ -40,6 +40,10 @@ struct Adam {
     int t = 0;
     std::vector<Mat> m;   // first moment
     std::vector<Mat> v;   // second moment
+#ifdef AUTOGRAD_USE_CUDA
+    std::vector<VarPtr> cuda_m;
+    std::vector<VarPtr> cuda_v;
+#endif
 
     Adam(std::vector<VarPtr> params,
          float lr    = 1e-3f,
