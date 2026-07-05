@@ -352,9 +352,12 @@ Readiness checklist:
 
 Exit criteria:
 
-- Update CppResist `CUDA_BACKEND_PLAN.md` with the new
-  `minimal_autograd` baseline.
-- Then proceed to CppResist CUDA Phase 1.
+- This plan records the downstream baseline and follow-up items for
+  CppResist under Phase 6 Status; the CppResist plan is not edited in this
+  repository's PR scope.
+- Before starting CppResist CUDA Phase 1, update
+  `../CppResist/CUDA_BACKEND_PLAN.md` with the new `minimal_autograd`
+  baseline as a cross-repo follow-up.
 
 ## Suggested Commit Breakdown
 
@@ -536,6 +539,49 @@ Validation:
 - CPU/CUDA parity holds for the expanded `Conv2d` and `MaxPool2d` cases.
 - README CUDA coverage now explicitly names supported and CPU-only conv-stack
   modules.
+
+## Phase 6 Status: 2026-07-05
+
+Phase 6 reviewed whether CppResist can start its own CUDA backend work without
+more generic CUDA hardening in `minimal_autograd`.
+
+Readiness verdict:
+
+- CppResist can proceed to its CUDA Phase 1 optional build skeleton.
+- `minimal_autograd` is ready to be consumed by CppResist with
+  `AUTOGRAD_USE_CUDA=ON`, provided downstream CMake either has `nvcc` on
+  `PATH` or sets `CMAKE_CUDA_COMPILER` explicitly.
+- CppResist should keep initial CUDA optics value-level. `minimal_autograd`
+  still has no FFT/cuFFT autograd primitive, so end-to-end mask gradients
+  through optics remain a separate design gate.
+- CUDA resist work can reuse `ag::Var::cuda()`, the priority elementwise ops,
+  `Conv2d`, `MaxPool2d`, `SGD`, and `Adam` where those primitives match the
+  model. CppResist's fused `ResistKernelBank` remains a CppResist-local custom
+  op and does not become CUDA-capable automatically.
+
+Downstream validation against `../CppResist`:
+
+- CPU build using this checkout as `CPPRESIST_AUTOGRAD_DIR` passed configure,
+  build, and all 5 CTest tests.
+- CUDA-enabled downstream build with `-DAUTOGRAD_USE_CUDA=ON` first failed
+  cleanly when `nvcc` was not on `PATH`, matching README guidance.
+- The same downstream CUDA build passed configure and build when
+  `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` was supplied.
+- The CUDA-enabled downstream build ran all 5 current CppResist tests
+  successfully. Those tests still exercise CppResist's CPU behavior because
+  `CPPRESIST_ENABLE_CUDA` has not been implemented there yet.
+
+CppResist plan update:
+
+- `../CppResist/CUDA_BACKEND_PLAN.md` is outside this repository's writable PR
+  scope. It should be updated before CppResist CUDA Phase 1 to replace the
+  stale Phase 0 audit items:
+  - CUDA sigmoid/tanh/exp/log/sqrt/silu/softplus, `sub`, and `div_op` are now
+    implemented and tested in `minimal_autograd`.
+  - CUDA Adam is now implemented and tested.
+  - CUDA sync semantics and no-device behavior are documented and tested.
+  - CUDA `Conv2d` and `MaxPool2d` have expanded CPU/CUDA parity coverage;
+    `AvgPool2d`, `DepthwiseConv2d`, and `NearestUpsample2d` remain CPU-only.
 
 ## Risks
 
