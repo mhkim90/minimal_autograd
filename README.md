@@ -96,9 +96,11 @@ caller. Override it for a specific deployment target, for example
 Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `sub`, `mul`,
 `div_op`, `matmul`, `broadcast_add`, `scale`, `relu`, `sigmoid`, `tanh_op`,
 `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sum`, `softmax`,
-`log_softmax`, `cross_entropy`, `SGD`, and `Adam`, including backward/gradient
-accumulation on device. Unsupported CUDA ops throw instead of silently falling
-back to stale host data.
+`log_softmax`, `cross_entropy`, `Conv2d`, `MaxPool2d`, `SGD`, and `Adam`,
+including backward/gradient accumulation on device. `AvgPool2d`,
+`DepthwiseConv2d`, and `NearestUpsample2d` remain CPU-only in this hardening
+pass. Unsupported CUDA ops throw instead of silently falling back to stale host
+data.
 
 At startup `test_cuda_core` prints the CUDA driver/runtime versions and selected
 device. If the CUDA backend is compiled but no CUDA device is visible, the test
@@ -299,8 +301,9 @@ they are scope decisions.
   autograd slice: `add`, `mul`, `matmul`, `broadcast_add`, `scale`, `relu`,
   `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`,
   `sub`, `div_op`, `sum`, `softmax`, `log_softmax`, `cross_entropy`, `SGD`,
-  and `Adam`. Unsupported ops should stay on CPU until explicit CUDA kernels
-  are added.
+  `Adam`, `Conv2d`, and `MaxPool2d`. `AvgPool2d`, `DepthwiseConv2d`, and
+  `NearestUpsample2d` remain CPU-only. Unsupported ops should stay on CPU until
+  explicit CUDA kernels are added.
 - **No dilated / transposed conv.** `Conv2d` is the standard
   cross-correlation. `DepthwiseConv2d` is available (groups = channels).
   Dilated or transposed variants are not implemented.

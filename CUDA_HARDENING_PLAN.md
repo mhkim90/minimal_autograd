@@ -514,6 +514,29 @@ Validation:
   explicit data/grad sync in both directions, gradients observed through
   `cpu()` after backward, and `clear_grad()` clearing host and device gradients.
 
+## Phase 5 Status: 2026-07-05
+
+Phase 5 keeps the existing CUDA conv/pool implementation surface: `Conv2d` and
+`MaxPool2d` are supported, while `AvgPool2d`, `DepthwiseConv2d`, and
+`NearestUpsample2d` remain CPU-only and throw on CUDA input.
+
+Implementation notes:
+
+- No CUDA kernels were added in this phase.
+- `test_cuda_core` now covers `Conv2d` with non-square H/W, multiple channels,
+  padding, stride > 1, logical output shape checks, and repeated-branch
+  gradient accumulation for input, weight, and bias.
+- `test_cuda_core` now covers `MaxPool2d` with non-square H/W, stride > 1,
+  logical output shape checks, and repeated-branch gradient accumulation.
+- Unsupported conv-stack modules are tested to throw on CUDA input instead of
+  falling back to host data.
+
+Validation:
+
+- CPU/CUDA parity holds for the expanded `Conv2d` and `MaxPool2d` cases.
+- README CUDA coverage now explicitly names supported and CPU-only conv-stack
+  modules.
+
 ## Risks
 
 | Risk | Impact | Mitigation |
