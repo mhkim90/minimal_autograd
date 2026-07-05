@@ -93,10 +93,12 @@ CUDA builds default to `AUTOGRAD_CUDA_ARCHITECTURES=75` unless
 caller. Override it for a specific deployment target, for example
 `-DAUTOGRAD_CUDA_ARCHITECTURES=86`.
 
-Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `mul`, `matmul`,
-`broadcast_add`, `scale`, `relu`, `sum`, `softmax`, `log_softmax`,
-`cross_entropy`, and `SGD`, including backward/gradient accumulation on device.
-Unsupported CUDA ops throw instead of silently falling back to stale host data.
+Current CUDA coverage is `Var::cuda()`, `Var::cpu()`, `add`, `sub`, `mul`,
+`div_op`, `matmul`, `broadcast_add`, `scale`, `relu`, `sigmoid`, `tanh_op`,
+`exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sum`, `softmax`,
+`log_softmax`, `cross_entropy`, and `SGD`, including backward/gradient
+accumulation on device. Unsupported CUDA ops throw instead of silently falling
+back to stale host data.
 
 At startup `test_cuda_core` prints the CUDA driver/runtime versions and selected
 device. If the CUDA backend is compiled but no CUDA device is visible, the test
