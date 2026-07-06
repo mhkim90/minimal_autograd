@@ -110,6 +110,91 @@ int main() {
     CHECK_NEAR(x_cpu->grad(1, 2), 2.f, 1e-4f);
 
     {
+        Mat slice_data(4, 5);
+        for (int i = 0; i < slice_data.size(); ++i) {
+            slice_data.data()[i] = 0.1f * static_cast<float>(i - 7);
+        }
+
+        auto cpu_mean_x = Var::make(slice_data);
+        auto cpu_mean = mean(cpu_mean_x);
+        cpu_mean->backward();
+        auto cuda_mean_x = Var::make(slice_data)->cuda();
+        auto cuda_mean = mean(cuda_mean_x);
+        CHECK(cuda_mean->is_cuda());
+        cuda_mean->backward();
+        CHECK_NEAR(cuda_mean->cpu()->data(0, 0), cpu_mean->data(0, 0), 1e-4f);
+        check_mat_near(cuda_mean_x->cpu()->grad, cpu_mean_x->grad, 1e-4f,
+                       "cuda mean grad");
+
+        auto cpu_col_x = Var::make(slice_data);
+        auto cpu_col = col_slice(cpu_col_x, 1, 3);
+        sum(cpu_col)->backward();
+        auto cuda_col_x = Var::make(slice_data)->cuda();
+        auto cuda_col = col_slice(cuda_col_x, 1, 3);
+        CHECK(cuda_col->is_cuda());
+        CHECK(cuda_col->data.rows() == 4 && cuda_col->data.cols() == 3);
+        sum(cuda_col)->backward();
+        check_mat_near(cuda_col->cpu()->data, cpu_col->data, 1e-4f,
+                       "cuda col_slice forward");
+        check_mat_near(cuda_col_x->cpu()->grad, cpu_col_x->grad, 1e-4f,
+                       "cuda col_slice grad");
+
+        auto cpu_row_x = Var::make(slice_data);
+        auto cpu_row = row_slice(cpu_row_x, 1, 2);
+        sum(cpu_row)->backward();
+        auto cuda_row_x = Var::make(slice_data)->cuda();
+        auto cuda_row = row_slice(cuda_row_x, 1, 2);
+        CHECK(cuda_row->is_cuda());
+        CHECK(cuda_row->data.rows() == 2 && cuda_row->data.cols() == 5);
+        sum(cuda_row)->backward();
+        check_mat_near(cuda_row->cpu()->data, cpu_row->data, 1e-4f,
+                       "cuda row_slice forward");
+        check_mat_near(cuda_row_x->cpu()->grad, cpu_row_x->grad, 1e-4f,
+                       "cuda row_slice grad");
+
+        auto finite_difference_regularizer = [](VarPtr v) {
+            auto dx = sub(col_slice(v, 1, v->data.cols() - 1),
+                          col_slice(v, 0, v->data.cols() - 1));
+            auto dy = sub(row_slice(v, 1, v->data.rows() - 1),
+                          row_slice(v, 0, v->data.rows() - 1));
+            auto eps_x = Var::make(Mat::Constant(dx->data.rows(), dx->data.cols(), 1e-3f));
+            auto eps_y = Var::make(Mat::Constant(dy->data.rows(), dy->data.cols(), 1e-3f));
+            if (dx->is_cuda()) eps_x = eps_x->cuda(dx->cuda_device());
+            if (dy->is_cuda()) eps_y = eps_y->cuda(dy->cuda_device());
+            auto penalty_x = mean(sqrt_op(add(mul(dx, dx), eps_x)));
+            auto penalty_y = mean(sqrt_op(add(mul(dy, dy), eps_y)));
+            return add(penalty_x, penalty_y);
+        };
+
+        auto cpu_reg_x = Var::make(slice_data);
+        auto cpu_reg = finite_difference_regularizer(cpu_reg_x);
+        cpu_reg->backward();
+        auto cuda_reg_x = Var::make(slice_data)->cuda();
+        auto cuda_reg = finite_difference_regularizer(cuda_reg_x);
+        CHECK(cuda_reg->is_cuda());
+        cuda_reg->backward();
+        CHECK_NEAR(cuda_reg->cpu()->data(0, 0), cpu_reg->data(0, 0), 1e-4f);
+        check_mat_near(cuda_reg_x->cpu()->grad, cpu_reg_x->grad, 1e-4f,
+                       "cuda finite difference regularizer grad");
+
+        bool range_threw = false;
+        try {
+            (void)col_slice(Var::make(slice_data)->cuda(), 1, 0);
+        } catch (const std::runtime_error&) {
+            range_threw = true;
+        }
+        CHECK(range_threw);
+
+        range_threw = false;
+        try {
+            (void)row_slice(Var::make(slice_data)->cuda(), 3, 2);
+        } catch (const std::runtime_error&) {
+            range_threw = true;
+        }
+        CHECK(range_threw);
+    }
+
+    {
         Mat shaped_data(2, 6);
         shaped_data << 1.f, 2.f, 3.f, 4.f, 5.f, 6.f,
                        7.f, 8.f, 9.f, 10.f, 11.f, 12.f;

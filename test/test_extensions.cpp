@@ -7,6 +7,7 @@
 #include "grad_check.h"
 #include <cstdio>
 #include <cmath>
+#include <stdexcept>
 
 using namespace ag;
 
@@ -169,6 +170,53 @@ static void test_col_slice() {
     auto x = rand_var(3, 6);
     check("col_slice left",  grad_check([](VarPtr v) { return sum(col_slice(v, 0, 3)); }, x));
     check("col_slice right", grad_check([](VarPtr v) { return sum(col_slice(v, 3, 3)); }, x));
+
+    bool threw = false;
+    try {
+        (void)col_slice(x, 5, 2);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    check("col_slice rejects out of range", threw);
+}
+
+static void test_row_slice() {
+    auto x = rand_var(6, 3);
+    check("row_slice top",    grad_check([](VarPtr v) { return sum(row_slice(v, 0, 3)); }, x));
+    check("row_slice bottom", grad_check([](VarPtr v) { return sum(row_slice(v, 3, 3)); }, x));
+
+    bool threw = false;
+    try {
+        (void)row_slice(x, 2, 0);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    check("row_slice rejects empty range", threw);
+}
+
+static void test_mean() {
+    auto x = rand_var(3, 4);
+    auto y = mean(x);
+    check("mean value", std::fabs(y->data(0, 0) - x->data.mean()) < 1e-6f);
+    check("mean grad", grad_check([](VarPtr v) { return mean(v); }, x));
+}
+
+static VarPtr finite_difference_regularizer(VarPtr v) {
+    auto dx = sub(col_slice(v, 1, v->data.cols() - 1),
+                  col_slice(v, 0, v->data.cols() - 1));
+    auto dy = sub(row_slice(v, 1, v->data.rows() - 1),
+                  row_slice(v, 0, v->data.rows() - 1));
+    auto eps_x = Var::make(Mat::Constant(dx->data.rows(), dx->data.cols(), 1e-3f));
+    auto eps_y = Var::make(Mat::Constant(dy->data.rows(), dy->data.cols(), 1e-3f));
+    auto penalty_x = mean(sqrt_op(add(mul(dx, dx), eps_x)));
+    auto penalty_y = mean(sqrt_op(add(mul(dy, dy), eps_y)));
+    return add(penalty_x, penalty_y);
+}
+
+static void test_finite_difference_regularizer_from_slices() {
+    auto x = rand_var(4, 5);
+    check("finite difference regularizer from slices",
+          grad_check([](VarPtr v) { return finite_difference_regularizer(v); }, x));
 }
 
 static void test_split() {
@@ -213,6 +261,9 @@ int main() {
     test_sin_cos();
     test_clamp();
     test_col_slice();
+    test_row_slice();
+    test_mean();
+    test_finite_difference_regularizer_from_slices();
     test_split();
     std::printf("-- hcat --\n");
     test_hcat();

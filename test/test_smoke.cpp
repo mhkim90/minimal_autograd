@@ -292,7 +292,7 @@ static void test_mini_inference_loop() {
     model_linear.W->data = Mat::Random(spatial + t_emb_dim, spatial) * 0.01f;
     model_linear.b->data = Mat::Constant(1, spatial, 0.5f);
 
-    // Initial x_T: aerial placeholder (uniform 0.5).
+    // Initial x_T: uniform placeholder sample.
     auto x_t = Var::make(Mat::Constant(N, spatial, 0.5f));
 
     bool all_finite = true;

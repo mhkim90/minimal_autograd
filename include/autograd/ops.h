@@ -10,6 +10,7 @@
 #include "autograd/tensor.h"
 #include "autograd/cuda_core.h"
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -81,6 +82,7 @@ struct SumFn : Function {
     }
 };
 VarPtr sum(VarPtr a);
+VarPtr mean(VarPtr a);
 
 // --- Phase 2c: bias add with proper backward. ---
 //
@@ -423,6 +425,28 @@ struct ColSliceFn : Function {
 };
 VarPtr col_slice(VarPtr a, int start, int len);
 
+inline void require_slice_range(const char* op, int size, int start, int len) {
+    if (start < 0 || len <= 0 || start + len > size) {
+        throw std::runtime_error(std::string(op) + ": slice out of range");
+    }
+}
+
+// RowSliceFn — extract rows [start, start+len).
+struct RowSliceFn : Function {
+    int start, len;
+    RowSliceFn(int start, int len) : start(start), len(len) {}
+    Mat forward(const Mats& in) override {
+        saved = {in[0]};
+        return in[0].middleRows(start, len);
+    }
+    Mats backward(const Mat& g) override {
+        Mat grad = Mat::Zero(saved[0].rows(), saved[0].cols());
+        grad.middleRows(start, len) = g;
+        return {grad};
+    }
+};
+VarPtr row_slice(VarPtr a, int start, int len);
+
 // split(x) — splits columns evenly in two. Returns {left, right}.
 // x must have an even number of columns.
 inline std::pair<VarPtr, VarPtr> split(VarPtr a) {
@@ -490,6 +514,9 @@ inline VarPtr sum(VarPtr a)                      {
     if (a->is_cuda()) return cuda_sum_op(a);
 #endif
     return apply<SumFn>({a});
+}
+inline VarPtr mean(VarPtr a)                     {
+    return scale(sum(a), 1.f / static_cast<float>(a->data.size()));
 }
 inline VarPtr broadcast_add(VarPtr a, VarPtr b)  {
 #ifdef AUTOGRAD_USE_CUDA
@@ -586,6 +613,19 @@ inline VarPtr flip(VarPtr a, int axis = 1)       { return apply<FlipFn>({a}, axi
 inline VarPtr sin_op(VarPtr a)                            { return apply<SinFn>({a}); }
 inline VarPtr cos_op(VarPtr a)                            { return apply<CosFn>({a}); }
 inline VarPtr clamp(VarPtr a, float lo, float hi)         { return apply<ClampFn>({a}, lo, hi); }
-inline VarPtr col_slice(VarPtr a, int start, int len)     { return apply<ColSliceFn>({a}, start, len); }
+inline VarPtr col_slice(VarPtr a, int start, int len)     {
+    require_slice_range("col_slice", a->data.cols(), start, len);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_col_slice_op(a, start, len);
+#endif
+    return apply<ColSliceFn>({a}, start, len);
+}
+inline VarPtr row_slice(VarPtr a, int start, int len)     {
+    require_slice_range("row_slice", a->data.rows(), start, len);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a->is_cuda()) return cuda_row_slice_op(a, start, len);
+#endif
+    return apply<RowSliceFn>({a}, start, len);
+}
 
 } // namespace ag
