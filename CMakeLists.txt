@@ -12,6 +12,7 @@ add_library(autograd STATIC
     src/optim.cpp
     src/conv.cpp
     src/norm.cpp
+    src/fft.cpp
 )
 target_include_directories(autograd PUBLIC include)
 target_link_libraries(autograd PUBLIC Eigen3::Eigen)
@@ -40,7 +41,7 @@ if(AUTOGRAD_USE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
     target_compile_definitions(autograd PUBLIC AUTOGRAD_USE_CUDA)
-    target_sources(autograd PRIVATE src/cuda_core.cu)
+    target_sources(autograd PRIVATE src/cuda_core.cu src/cuda_fft.cu)
     target_link_libraries(autograd PUBLIC CUDA::cudart)
     set_target_properties(autograd PROPERTIES
         CUDA_STANDARD 17
@@ -65,10 +66,18 @@ add_executable(test_conv test/test_conv.cpp)
 target_link_libraries(test_conv autograd)
 target_include_directories(test_conv PRIVATE test)
 
+add_executable(test_fft test/test_fft.cpp)
+target_link_libraries(test_fft autograd)
+target_include_directories(test_fft PRIVATE test)
+
 if(AUTOGRAD_USE_CUDA)
     add_executable(test_cuda_core test/test_cuda_core.cpp)
     target_link_libraries(test_cuda_core autograd)
     target_include_directories(test_cuda_core PRIVATE test)
+
+    add_executable(test_cuda_fft test/test_cuda_fft.cpp)
+    target_link_libraries(test_cuda_fft autograd)
+    target_include_directories(test_cuda_fft PRIVATE test)
 endif()
 
 option(AUTOGRAD_BUILD_ADVANCED_OPS "Build extended/advanced ops and tests" OFF)

@@ -56,6 +56,8 @@ VarPtr cuda_softplus_op(VarPtr a);
 VarPtr cuda_sub_op(VarPtr a, VarPtr b);
 VarPtr cuda_div_op(VarPtr a, VarPtr b);
 VarPtr cuda_sum_op(VarPtr a);
+VarPtr cuda_col_slice_op(VarPtr a, int start, int len);
+VarPtr cuda_row_slice_op(VarPtr a, int start, int len);
 VarPtr cuda_softmax_op(VarPtr a);
 VarPtr cuda_log_softmax_op(VarPtr a);
 VarPtr cuda_conv2d_op(VarPtr input, VarPtr weight, VarPtr bias,

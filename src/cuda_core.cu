@@ -259,6 +259,46 @@ __global__ void sum_backward_kernel(float* dx, const float* g, std::size_t n) {
     if (i < n) dx[i] += g[0];
 }
 
+__global__ void col_slice_kernel(const float* x, float* out,
+                                 int rows, int start, int len) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = rows * len;
+    if (i >= total) return;
+    int row = i % rows;
+    int out_col = i / rows;
+    out[i] = x[row + (start + out_col) * rows];
+}
+
+__global__ void col_slice_backward_kernel(float* dx, const float* g,
+                                          int rows, int start, int len) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = rows * len;
+    if (i >= total) return;
+    int row = i % rows;
+    int out_col = i / rows;
+    dx[row + (start + out_col) * rows] += g[i];
+}
+
+__global__ void row_slice_kernel(const float* x, float* out,
+                                 int rows, int cols, int start, int len) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = len * cols;
+    if (i >= total) return;
+    int out_row = i % len;
+    int col = i / len;
+    out[i] = x[(start + out_row) + col * rows];
+}
+
+__global__ void row_slice_backward_kernel(float* dx, const float* g,
+                                          int rows, int cols, int start, int len) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = len * cols;
+    if (i >= total) return;
+    int out_row = i % len;
+    int col = i / len;
+    dx[(start + out_row) + col * rows] += g[i];
+}
+
 __global__ void softmax_kernel(const float* x, float* out, int rows, int cols) {
     int r = blockIdx.x;
     if (r >= rows) return;
@@ -538,6 +578,12 @@ void require_same_shape(VarPtr a, VarPtr b) {
         throw std::runtime_error("cuda op shape mismatch");
     }
     require_same_device(a, b);
+}
+
+void require_cuda_slice_range(const char* op, int size, int start, int len) {
+    if (start < 0 || len <= 0 || start + len > size) {
+        throw std::runtime_error(std::string(op) + ": slice out of range");
+    }
 }
 
 void require_matmul_shape(VarPtr a, VarPtr b) {
@@ -951,6 +997,46 @@ VarPtr cuda_sum_op(VarPtr a) {
         auto self = wp.lock();
         sum_backward_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(), n);
         finish_kernel("cuda_sum_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_col_slice_op(VarPtr a, int start, int len) {
+    require_cuda(a);
+    const int rows = a->data.rows();
+    const int cols = a->data.cols();
+    require_cuda_slice_range("cuda_col_slice_op", cols, start, len);
+    const std::size_t n = static_cast<std::size_t>(rows) * static_cast<std::size_t>(len);
+    auto out = Var::make(Mat::Zero(rows, len))->cuda(a->cuda_device());
+    col_slice_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(),
+                                         rows, start, len);
+    finish_kernel("cuda_col_slice_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), rows, start, len, n]() {
+        auto self = wp.lock();
+        col_slice_backward_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                                      rows, start, len);
+        finish_kernel("cuda_col_slice_backward");
+    };
+    return out;
+}
+
+VarPtr cuda_row_slice_op(VarPtr a, int start, int len) {
+    require_cuda(a);
+    const int rows = a->data.rows();
+    const int cols = a->data.cols();
+    require_cuda_slice_range("cuda_row_slice_op", rows, start, len);
+    const std::size_t n = static_cast<std::size_t>(len) * static_cast<std::size_t>(cols);
+    auto out = Var::make(Mat::Zero(len, cols))->cuda(a->cuda_device());
+    row_slice_kernel<<<blocks(n), 256>>>(a->cuda_data(), out->cuda_data(),
+                                         rows, cols, start, len);
+    finish_kernel("cuda_row_slice_op");
+    out->parents = {a};
+    out->back_fn = [a, wp = std::weak_ptr<Var>(out), rows, cols, start, len, n]() {
+        auto self = wp.lock();
+        row_slice_backward_kernel<<<blocks(n), 256>>>(a->cuda_grad(), self->cuda_grad(),
+                                                      rows, cols, start, len);
+        finish_kernel("cuda_row_slice_backward");
     };
     return out;
 }
