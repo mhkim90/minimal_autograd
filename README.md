@@ -16,17 +16,20 @@ minimal CUDA core are opt-in.
 - Lightweight logical shape metadata, including 4D `(N, C, H, W)` views over
   the existing flat Eigen matrix layout.
 - Element-wise ops (`add`, `mul`, `scale`, `sub`, `div_op`), matmul, ReLU,
-  broadcast bias-add with correct bias gradient, sum, softmax, log-softmax,
-  transpose, reshape, concat, `hcat` (column-wise / channel-dim cat).
+  broadcast bias-add with correct bias gradient, `sum`, `mean`, softmax,
+  log-softmax, transpose, reshape, concat, `hcat` (column-wise /
+  channel-dim cat).
 - Activation ops: `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`,
   `silu`, `softplus` — all gradient-checked.
 - Sequence ops: `cumsum` (axis 0 or 1) and `flip` (axis 0 or 1) with
   correct suffix-sum / reverse backward passes.
 - Trig / clamp ops: `sin_op`, `cos_op`, `clamp`
   (element-wise with zero gradient at the boundary).
-- Column ops: `col_slice(x, start, len)` and `split(x)` (even column
-  split returning `std::pair<VarPtr, VarPtr>`) — used for AdaGN
-  scale+shift decomposition.
+- Slice ops: `col_slice(x, start, len)`, `row_slice(x, start, len)`, and
+  `split(x)` (even column split returning `std::pair<VarPtr, VarPtr>`).
+- Complex / FFT helpers: `ComplexVar` as paired real/imag `Var` nodes,
+  `make_complex`, `real_to_complex`, `real`, `imag`, `conj`, `complex_mul`,
+  `complex_scale`, `abs2`, and differentiable `fft2` / `ifft2`.
 - Module system with `Linear` (Xavier init), `ReLUModule`, `SiLUModule`,
   `SigmoidModule`, `Sequential`.
 - Losses: `mse_loss`, `cross_entropy`.
@@ -55,12 +58,13 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-This produces the static library `libautograd.a` and three core test binaries:
+This produces the static library `libautograd.a` and the core test binaries:
 
 ```bash
 ./build/test_core        # core op correctness + grad_check
 ./build/test_nn          # end-to-end net training (XOR with Adam)
 ./build/test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
+./build/test_fft         # complex ops + differentiable CPU FFT checks
 ```
 
 Advanced experimental tests are opt-in:
@@ -68,16 +72,17 @@ Advanced experimental tests are opt-in:
 ```bash
 cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
 cmake --build build-advanced --parallel
-./build-advanced/test_extensions  # 30 grad-checks for the extension ops
+./build-advanced/test_extensions  # 37 checks for the extension ops
 ./build-advanced/test_smoke       # 35 end-to-end smoke checks
 ```
 
 The optional CUDA backend has its own build flags, supported-op surface, and
 host/device sync rules; see *CUDA backend (optional)* below.
 
-`test_core`, `test_nn`, and `test_cuda_core` print `ALL ... TESTS PASSED`.
-`test_conv` prints `21 passed, 0 failed`. `test_extensions` prints
-`30/30 passed`, and `test_smoke` prints `35/35 passed`.
+`test_core`, `test_nn`, `test_fft`, `test_cuda_core`, and `test_cuda_fft`
+print `ALL ... TESTS PASSED`. `test_conv` prints `21 passed, 0 failed`.
+`test_extensions` prints `37/37 passed`, and `test_smoke` prints
+`35/35 passed`.
 
 ### Smoke test (`test_smoke`)
 
@@ -120,6 +125,7 @@ unchanged; users without a CUDA Toolkit or GPU see no CUDA requirement.
 cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_USE_CUDA=ON
 cmake --build build-cuda --parallel
 ./build-cuda/test_cuda_core
+./build-cuda/test_cuda_fft
 ```
 
 If `nvcc` is not on `PATH`, point CMake at the toolkit explicitly, for example:
@@ -148,17 +154,25 @@ after a device is selected still fail the test.
 for:
 
 - Arithmetic: `add`, `sub`, `mul`, `div_op`, `matmul`, `broadcast_add`,
-  `scale`, `sum`.
+  `scale`.
 - Activations: `relu`, `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`,
   `silu`, `softplus`.
 - Probabilities / loss: `softmax`, `log_softmax`, `cross_entropy`.
+- Slices/reductions: `sum`, `mean`, `col_slice`, `row_slice`.
 - Conv stack: `Conv2d`, `MaxPool2d`.
+- Complex / FFT: paired-real `ComplexVar` helpers plus `fft2` / `ifft2`.
 - Optimizers: `SGD`, `Adam` (device-resident moment buffers; CPU/CUDA mixed
   parameter lists supported).
 
-`AvgPool2d`, `DepthwiseConv2d`, and `NearestUpsample2d` remain CPU-only in this
-hardening pass and throw on CUDA input. Unsupported CUDA ops throw instead of
-silently falling back to stale host data.
+CUDA `fft2` / `ifft2` currently use the pure-CUDA v1 backend. It supports
+power-of-two row and column counts up to 256 and throws for unsupported shapes.
+cuFFT is intentionally not a dependency; it can be added later behind an option
+if broader shape support or performance becomes necessary.
+
+`AvgPool2d`, `DepthwiseConv2d`, `NearestUpsample2d`, and sequence/trig/clamp
+helpers such as `cumsum`, `flip`, `sin_op`, `cos_op`, and `clamp` remain
+CPU-only in this hardening pass and throw on CUDA input. Unsupported CUDA ops
+throw instead of silently falling back to stale host data.
 
 ### Host/device sync
 
@@ -232,6 +246,33 @@ epoch 50   loss=...
 final pred: ~[[5], [2], [3], [0]]
 ```
 
+### Differentiable FFT example
+
+`autograd.h` also exposes complex-valued helpers built from pairs of real
+`Var` nodes. FFTs are differentiable, so frequency-domain expressions can
+participate in the same reverse-mode graph:
+
+```cpp
+#include "autograd.h"
+#include <iostream>
+using namespace ag;
+
+Mat x0 = Mat::Random(8, 8);
+auto x = Var::make(x0);
+
+auto z = real_to_complex(x);
+auto spectrum = fft2(z);
+auto field = ifft2(spectrum);
+auto loss = mean(abs2(field));
+loss->backward();
+
+std::cout << "loss = " << loss->data(0, 0) << "\n";
+std::cout << "max |grad| = " << x->grad.cwiseAbs().maxCoeff() << "\n";
+```
+
+The same API works for CUDA inputs when `AUTOGRAD_USE_CUDA=ON`, subject to the
+pure-CUDA FFT shape limits documented above.
+
 ## Architecture
 
 A `Var` is a node in a directed acyclic graph. It holds the result of a forward
@@ -299,12 +340,14 @@ Most users can include `autograd.h`, which re-exports the public headers below.
 | Header | Public surface |
 |--------|----------------|
 | `variable.h` | `Var`, `VarPtr`, `Var::make`, `Var::make4d`, logical shape helpers, `backward()`, `zero_grad()`, `cuda()`, `cpu()` |
-| `ops.h` | `add`, `mul`, `matmul`, `relu`, `sum`, `broadcast_add`, `scale`, `softmax`, `log_softmax`, `transpose`, `reshape`, `concat`, `hcat`, `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`, `cumsum`, `flip`, `sin_op`, `cos_op`, `clamp`, `col_slice`, `split` |
+| `ops.h` | `add`, `mul`, `matmul`, `relu`, `sum`, `mean`, `broadcast_add`, `scale`, `softmax`, `log_softmax`, `transpose`, `reshape`, `concat`, `hcat`, `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`, `cumsum`, `flip`, `sin_op`, `cos_op`, `clamp`, `col_slice`, `row_slice`, `split` |
 | `module.h` | `Module`, `Linear`, `Sequential`, `ReLUModule`, `SiLUModule`, `SigmoidModule` |
 | `loss.h` | `mse_loss`, `cross_entropy` |
 | `optim.h` | `SGD`, `Adam` |
 | `conv.h` | `im2col`, `col2im`, `conv2d_op`, `maxpool2d_op`, `avgpool2d_op`, `nearest_upsample2d_op`, `depthwise_conv2d_op`, `Conv2d`, `MaxPool2d`, `AvgPool2d`, `NearestUpsample2d`, `DepthwiseConv2d` |
 | `norm.h` | `GroupNorm` |
+| `complex.h` | `ComplexVar`, `make_complex`, `real_to_complex`, `real`, `imag`, `conj`, `complex_mul`, `complex_scale`, `abs2` |
+| `fft.h` | `FftNorm`, `fft2`, `ifft2` |
 
 CUDA support is intentionally exposed through the same high-level ops where it
 exists. Move a `Var` to device with `x->cuda()`, run supported ops, and call
@@ -327,9 +370,10 @@ they are scope decisions.
   parameter is fine, but mutating a non-leaf `Var->data` will silently
   invalidate the graph.
 - **Limited CUDA.** CUDA is opt-in and covers only the supported surface listed
-  in *CUDA backend (optional)*; in particular `AvgPool2d`, `DepthwiseConv2d`,
-  and `NearestUpsample2d` remain CPU-only. Unsupported ops should stay on CPU
-  until explicit CUDA kernels are added.
+  in *CUDA backend (optional)*. Some advanced helpers remain CPU-only, and the
+  pure-CUDA FFT backend is intentionally limited to supported power-of-two
+  shapes. Unsupported ops should stay on CPU until explicit CUDA kernels are
+  added.
 - **No dilated / transposed conv.** `Conv2d` is the standard
   cross-correlation. `DepthwiseConv2d` is available (groups = channels).
   Dilated or transposed variants are not implemented.
