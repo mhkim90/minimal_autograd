@@ -1,6 +1,6 @@
 ---
 name: phase-gated-implementation
-description: Use when implementing multi-phase work from a plan, PR description, issue, design doc, or user-approved checklist. Guides Codex to preserve TDD phase gates while using OpenCode as the primary implementer, Codex as final gatekeeper for scope/test/diff/commit decisions, and Claude or a user-specified OpenCode model for read-only second opinion before each phase report.
+description: Use when implementing multi-phase work from a plan, PR description, issue, design doc, or user-approved checklist. Guides Codex to preserve TDD phase gates with adaptive risk levels: OpenCode handles most source reading, implementation, test iteration, and routine review; Codex remains the final scope/test/diff/commit gatekeeper; Claude/Sonnet is reserved for targeted high-value blocker checks.
 ---
 
 # Phase-Gated Implementation
@@ -11,10 +11,11 @@ code, docs, experiments, migrations, data pipelines, build systems, and UI work.
 
 ## Operating Principle
 
-Default to OpenCode-led implementation. Codex owns judgment, phase boundaries,
-TDD evidence, final diff review, commits, pushes, PR/issue comments, and
-stop/go decisions. OpenCode owns source exploration, mechanical edits, and
-run-inspect-tweak loops. Second opinion is read-only and advisory.
+Default to OpenCode-heavy implementation. OpenCode spends tokens on source
+exploration, red gates, mechanical edits, run-inspect-tweak loops, and routine
+read-only review. Codex spends judgment on phase boundaries, TDD evidence,
+final diff review, commits, pushes, PR/issue comments, and stop/go decisions.
+Claude/Sonnet is scarce and reserved for targeted high-value blocker checks.
 
 Use delegation to reduce duplicate context loading, not to reduce verification
 quality. Do not outsource final accountability. Delegates produce patches or
@@ -22,15 +23,19 @@ reviews; Codex verifies and decides.
 
 ## Role Budgeting
 
-- **Codex/GPT-5.5 gatekeeper**: read the plan, phase boundary, git status,
-  diff stat, key hunks, validation output, and risky files only when needed.
-  Expand context or drive directly when risk or ambiguity requires it.
-- **OpenCode default implementer**: read source, add or run the red gate,
-  perform edits, run tests, iterate, and return a compact report. Do not commit.
-- **Second opinion reviewer**: use Claude MCP by default. If the user says
-  Claude quota is low/exhausted, asks to avoid Claude, or names an OpenCode
-  model, use OpenCode with that exact model instead. Example:
-  `opencode-go/glm-5.2`.
+- **Level 1, low risk / default**: OpenCode 75-90%, Codex 10-20%,
+  Claude/Sonnet 0-5%. Use for mechanical edits, docs/config changes, narrow bug
+  fixes, routine test fixes, and repetitive refactors.
+- **Level 2, medium risk / Codex-expanded**: OpenCode 60-75%, Codex 25-35%,
+  Claude/Sonnet 0-5%. Use when touched logic is important, tests are nontrivial,
+  scope is broader than expected, or OpenCode reports uncertainty.
+- **Level 3, high risk / Codex-heavy gate**: OpenCode 40-60%, Codex 35-55%,
+  Claude/Sonnet 0-10%. Use for architecture/API changes, memory, concurrency,
+  build, CUDA, release behavior, subtle numerical correctness, weak tests,
+  suspicious red gates, or unexpected diff expansion.
+- **Level 4, stop**: stop and report when the gate is invalid, implementation
+  must change plan intent, required tooling is unavailable, unrelated user
+  changes block safe work, or correctness cannot be verified.
 
 ## Standard Loop
 
@@ -59,22 +64,29 @@ reviews; Codex verifies and decides.
    - Require a compact final report: changed files, key decisions, commands run,
      metrics, and blockers.
 
-4. **Codex Gate Review**
+4. **Routine Second Opinion**
+   - Ask OpenCode by default for read-only blocker review.
+   - Prefer a separate OpenCode pass or model when available.
+   - Focus on scope drift, invalid tests, missed acceptance criteria, and
+     obvious bug risk.
+   - Treat advice as input, not authority.
+
+5. **Codex Gate Review**
    - Review diff stat and key hunks before trusting delegate output.
    - Verify red/green evidence, test validity, and command output.
    - Run formatting/lint/diff checks appropriate to repo.
    - Confirm diff scope matches phase.
-   - Read deeper source or drive directly when risk escalation rules apply.
+   - Read deeper source, raise the level, or drive directly when risk escalation
+     rules apply.
 
-5. **Second Opinion**
-   - Ask Claude MCP by default for read-only review/advice.
-   - If user notified quota limits, asked to avoid Claude, or specified an
-     OpenCode model, ask OpenCode with that exact model.
-   - Ask focused questions: blockers, spec mismatches, test validity, scope,
-     and stop/go.
-   - Treat advice as input, not authority.
+6. **Targeted Claude/Sonnet Escalation**
+   - Do not use Claude/Sonnet by default.
+   - Use it only for architecture/API risk, weak or suspicious tests, subtle
+     correctness risk, delegate uncertainty, delegate/reviewer disagreement, or
+     explicit user request.
+   - Keep the prompt compact and ask for blocking issues only.
 
-6. **Commit + Report**
+7. **Commit + Report**
    - Stage only intended files. Never `git add -A` when unrelated files exist.
    - Commit one phase at a time.
    - Push current branch.
@@ -83,28 +95,35 @@ reviews; Codex verifies and decides.
      - scope
      - validation commands and key metrics
      - deviations from plan and rationale
+     - level used and Codex review scope
      - second-opinion result
      - explicit next phase / waiting-for-approval state
 
-7. **Wait**
+8. **Wait**
    - Stop after report if user requested per-phase approval.
    - Do not start next phase until approval is given.
 
 ## Risk Escalation
 
-Codex must expand context, inspect source directly, or drive implementation
-directly when:
+Escalate one or more levels when:
 
 - architecture or API contracts change
 - security, data loss, concurrency, memory, build, packaging, or release
   behavior is involved
 - tests are weak, missing, flaky, or suspicious
+- numerical correctness risk appears
 - OpenCode reports uncertainty, blockers, or broadens scope
+- unexpected files change
+- the red gate is missing or fails for the wrong reason
 - second opinion finds a blocker
 - delegate and reviewer disagree
 - diff scope expands beyond phase boundary
 - Codex cannot verify quality from diff/test evidence without reading more
   context
+
+Escalation means spending more Codex tokens on direct source/test inspection.
+For high risk, Codex may drive targeted fixes directly. For blocking risk,
+stop instead of weakening the gate.
 
 ## Stop Rules
 
@@ -139,15 +158,25 @@ Constraints:
 Final response: changed files, key decisions, commands run, metrics, blockers
 ```
 
-Second-opinion prompt should include:
+OpenCode routine review prompt should include:
 
 ```text
 Read-only review. Do not edit.
 Context: <phase + changed files>
 Validation: <red gate + passing commands + metrics>
 Review scope: <diff summary + key hunks or files>
-Question: any blocking issue before commit? Focus on <risks>.
+Question: any blocking issue before commit? Focus on scope drift, test validity,
+missed acceptance criteria, and obvious bug risk.
 Return findings first, concise.
+```
+
+Claude/Sonnet escalation prompt should be smaller:
+
+```text
+Read-only blocker check. Do not edit.
+Context: <phase + risk>
+Evidence: <diff stat + key hunk summary + validation result>
+Question: is there a blocking issue? Return only findings or "no blocker".
 ```
 
 ## Phase Report Template
@@ -159,6 +188,7 @@ Scope:
 - ...
 
 Implementation:
+- level: <1 low / 2 medium / 3 high>
 - model: <OpenCode default or other>
 - Codex review scope: <diff stat/key hunks/source files inspected>
 
@@ -173,7 +203,7 @@ Plan deviations:
 - <none or rationale>
 
 Second opinion:
-- <Claude MCP or OpenCode model>: <verdict>
+- <OpenCode routine review and optional Claude/Sonnet escalation>: <verdict>
 
 Waiting for approval before Phase <N+1>.
 ```
