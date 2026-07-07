@@ -46,7 +46,7 @@ Load these skills at the start of relevant Codex tasks:
 - **grilled-me**: When drafting or reviewing plans; stress-test assumptions, risks, scope creep, and failure modes before presenting.
 - **handoff**: When ending a session, switching context, or preserving progress for another agent.
 - **caveman**: When token efficiency is requested; use `full` for English and `korean-full` for Korean unless the user requests another level.
-- **phase-gated-implementation**: When implementing multi-phase work from a plan, PR description, issue, design doc, or approved checklist; use adaptive levels with OpenCode-heavy default execution, Codex final gatekeeping, and Claude/Sonnet only for targeted blocker escalation.
+- **phase-gated-implementation**: When implementing multi-phase work from a plan, PR description, issue, design doc, or approved checklist; use adaptive levels with OpenCode-heavy default execution, Codex final gatekeeping, and Claude/Sonnet or a user-specified OpenCode model for targeted read-only second opinion.
 - **opencode-delegate**: When tedious, mechanical, or long-running work can be delegated; keep final verification local.
 - **claude-delegate**: When an independent read-only second opinion is useful for a plan, risk review, or reasoning check.
 
