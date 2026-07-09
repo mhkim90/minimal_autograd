@@ -25,16 +25,18 @@ reviews; Codex verifies and decides.
 
 ## Role Budgeting
 
-- **Level 1, low risk / default**: OpenCode 75-90%, Codex 10-20%,
+- **Level 1, low risk / default**: OpenCode 80-90%, Codex 5-15%,
   Claude/Sonnet 0-5%. Use for mechanical edits, docs/config changes, narrow bug
   fixes, routine test fixes, and repetitive refactors.
-- **Level 2, medium risk / Codex-expanded**: OpenCode 60-75%, Codex 25-35%,
+- **Level 2, medium risk / Codex-expanded**: OpenCode 65-80%, Codex 15-25%,
   Claude/Sonnet 0-5%. Use when touched logic is important, tests are nontrivial,
   scope is broader than expected, or OpenCode reports uncertainty.
-- **Level 3, high risk / Codex-heavy gate**: OpenCode 40-60%, Codex 35-55%,
+- **Level 3, high risk / Codex-reviewed gate**: OpenCode 45-65%, Codex 30-45%,
   Claude/Sonnet 0-10%. Use for architecture/API changes, memory, concurrency,
   build, CUDA, release behavior, subtle numerical correctness, weak tests,
-  suspicious red gates, or unexpected diff expansion.
+  suspicious red gates, or unexpected diff expansion. OpenCode remains the
+  plurality of token share even here; "Codex-reviewed" reflects Codex's
+  judgment/gatekeeper role, not a token-share majority.
 - **Level 4, stop**: stop and report when the gate is invalid, implementation
   must change plan intent, required tooling is unavailable, unrelated user
   changes block safe work, or correctness cannot be verified.
