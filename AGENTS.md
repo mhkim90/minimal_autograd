@@ -46,14 +46,14 @@ Load these skills at the start of relevant Codex tasks:
 - **grilled-me**: When drafting or reviewing plans; stress-test assumptions, risks, scope creep, and failure modes before presenting.
 - **handoff**: When ending a session, switching context, or preserving progress for another agent.
 - **caveman**: When token efficiency is requested; use `full` for English and `korean-full` for Korean unless the user requests another level.
-- **phase-gated-implementation**: When implementing multi-phase work from a plan, PR description, issue, design doc, or approved checklist; use adaptive levels with OpenCode-heavy default execution, Codex final gatekeeping, and Claude/Sonnet or a user-specified OpenCode model for targeted read-only second opinion.
+- **phase-gated-implementation**: When implementing multi-phase work from a plan, PR description, issue, design doc, or approved checklist. From Codex: adaptive levels with OpenCode-heavy default execution (80-90%), Codex's own token share scaling 5-15% -> 15-25% -> 30-45% with risk as scope/test/diff gatekeeper, and Claude/Sonnet for targeted read-only second opinion. From Claude (`.claude/skills/phase-gated-implementation`): same loop, Claude-perspective — OpenCode implements, Codex (via codex-delegate) absorbs escalation as risk rises, Claude stays minimal-footprint (orchestration, verification, final commit decision) since its own token budget is the scarcest of the three engines.
 - **opencode-delegate**: When tedious, mechanical, or long-running work can be delegated; keep final verification local.
 - **claude-delegate**: When an independent read-only second opinion is useful
   for a plan, risk review, or reasoning check. Use async for meaningful work;
   Claude may inspect files with `Read`, `Glob`, and `Grep` but has no shell,
   editing, or network tools.
 
-See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/skills/grilled-me/SKILL.md](.codex/skills/grilled-me/SKILL.md), [.codex/skills/handoff/SKILL.md](.codex/skills/handoff/SKILL.md), [.codex/skills/caveman/SKILL.md](.codex/skills/caveman/SKILL.md), [.codex/skills/phase-gated-implementation/SKILL.md](.codex/skills/phase-gated-implementation/SKILL.md), [.codex/skills/opencode-delegate/SKILL.md](.codex/skills/opencode-delegate/SKILL.md), and [.codex/skills/claude-delegate/SKILL.md](.codex/skills/claude-delegate/SKILL.md).
+See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/skills/grilled-me/SKILL.md](.codex/skills/grilled-me/SKILL.md), [.codex/skills/handoff/SKILL.md](.codex/skills/handoff/SKILL.md), [.codex/skills/caveman/SKILL.md](.codex/skills/caveman/SKILL.md), [.codex/skills/phase-gated-implementation/SKILL.md](.codex/skills/phase-gated-implementation/SKILL.md), [.codex/skills/opencode-delegate/SKILL.md](.codex/skills/opencode-delegate/SKILL.md), [.codex/skills/claude-delegate/SKILL.md](.codex/skills/claude-delegate/SKILL.md), and [.claude/skills/phase-gated-implementation/SKILL.md](.claude/skills/phase-gated-implementation/SKILL.md).
 
 ### Quick Reminders
 
