@@ -5,6 +5,8 @@ description: Delegate tedious, mechanical, or long-running work to OpenCode via 
 
 # OpenCode Delegate
 
+Use `mcp__opencode.opencode_run_async` by default. Use blocking `mcp__opencode.opencode_run` only for trivial, known-short prompts where losing the result would be acceptable. Reviews, implementation, iteration, and test-running should use async even when they look quick.
+
 OpenCode is a tedious-work delegate. Use it when the work can be specified precisely and checked with clear success criteria.
 
 ## Tool Availability
@@ -13,12 +15,12 @@ If `mcp__opencode` tools are not already visible, use `tool_search` with a query
 
 Common tools:
 
-- `mcp__opencode.opencode_run`: send a prompt, optionally with `session_id`, `model`, and `timeout`.
-- `mcp__opencode.opencode_run_async`: start a background run and poll with job tools.
-- `mcp__opencode.opencode_session_new`: create a fresh session.
-- `mcp__opencode.opencode_session_list`: list recent sessions.
-- `mcp__opencode.opencode_session_fork`: fork a session to reset or compact context.
-- `mcp__opencode.opencode_job_result`: fetch a completed async job result.
+- `mcp__opencode.opencode_run_async` — default for delegated work; returns a job ID immediately.
+- `mcp__opencode.opencode_session_fork_async` — reset long context in the background.
+- `mcp__opencode.opencode_job_status` / `mcp__opencode.opencode_job_result` — poll and fetch results.
+- `mcp__opencode.opencode_job_list` / `mcp__opencode.opencode_job_cancel` — discover or stop jobs.
+- `mcp__opencode.opencode_run` / `mcp__opencode.opencode_session_fork` — blocking; only for trivial, known-short calls.
+- `mcp__opencode.opencode_session_new` / `mcp__opencode.opencode_session_list` — create or find sessions.
 
 ## When to Delegate
 
@@ -61,26 +63,39 @@ Constraints:
 
 ## Session Management
 
-- New task: omit `session_id` on `opencode_run`, or call `opencode_session_new` first.
+- New task: omit `session_id` on `opencode_run_async`, or call `opencode_session_new` first.
 - Continue the same task: pass the previous `session_id`.
 - Find a session: call `opencode_session_list`.
-- Long context: fork with `opencode_session_fork` and continue on the returned session ID.
+- Long context: fork with `opencode_session_fork_async`, poll the job result, and continue on the new session ID.
 
 ## Model selection
 
 Pass `model="provider/model"` to `opencode_run`, `opencode_run_async`, or
-`opencode_session_fork` to override OpenCode's default model for that call.
+`opencode_session_fork_async` to override OpenCode's default model for that call.
 Omit `model` to use the configured default.
+
+## Async workflow
+
+For delegated work:
+
+1. Start with `mcp__opencode.opencode_run_async`, or `mcp__opencode.opencode_session_fork_async` when resetting context.
+2. Poll with `mcp__opencode.opencode_job_status`.
+3. Fetch the final response with `mcp__opencode.opencode_job_result`.
+4. Use `mcp__opencode.opencode_job_list` to recover or discover jobs; `scope="all"` includes jobs recorded by other repository MCP instances.
+5. Use `mcp__opencode.opencode_job_cancel` only when the job should stop.
+
+Async job metadata is recorded under `/tmp/opencode_mcp/jobs`. Live response buffers remain local to the MCP process, but discovery and cancellation can work across repository MCP instances.
 
 ## Timeout
 
-- Default to `timeout=3600` for long builds, test loops, sweeps, and multi-file edits.
-- Use a lower timeout only for clearly quick tasks.
-- Use `opencode_run_async` when a blocking tool call may exceed the MCP client or proxy limit.
+- Blocking `opencode_run` and `opencode_session_fork` retain their timeout arguments, but they are not the normal path.
+- Use blocking tools only for trivial, known-short calls, with a small explicit timeout.
+- For anything uncertain, start async first instead of retrying after a client timeout.
+- A client may abort a blocking call before the server timeout fires, losing the result.
 
 ## After Delegation
 
-1. Report the session ID or job ID to the user.
+1. Report the job ID immediately, and the session ID once the result contains it
 2. Summarize what OpenCode was asked to do.
 3. Relay results concisely when OpenCode returns.
 4. Surface blockers or questions before continuing.
