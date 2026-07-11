@@ -1,6 +1,6 @@
 ---
 name: claude-delegate
-description: Delegate bounded second opinions, adversarial review, planning critique, and concise reasoning checks to Claude through the mcp__claude tools. Use when Codex should ask Claude for an independent perspective, review a plan, stress-test an assumption, or run a small read-only reasoning pass. Do not use for mechanical edits, live shell work, or tasks that require Claude filesystem access.
+description: Delegate bounded second opinions, adversarial review, planning critique, and concise reasoning checks to Claude through the mcp__claude tools. Use when Codex should ask Claude for an independent perspective, review a plan, stress-test an assumption, or run a small read-only reasoning pass. Do not use for mechanical edits or tasks requiring shell, network, credentials, filesystem writes, or tools beyond read-only file inspection.
 ---
 
 # Claude Delegate
@@ -13,10 +13,11 @@ If `mcp__claude` tools are not already visible, use `tool_search` with a query s
 
 Common tools:
 
-- `mcp__claude.claude_run`: send a prompt and wait for the completed response.
-- `mcp__claude.claude_run_async`: start a background Claude run and poll with job tools.
+- `mcp__claude.claude_run_async`: default for meaningful Claude delegation; start a background run and poll with job tools.
+- `mcp__claude.claude_run`: blocking; only for trivial, known-short prompts where losing the result is acceptable.
 - `mcp__claude.claude_job_status`: check a background job, optionally including the response.
 - `mcp__claude.claude_job_result`: fetch a completed background result.
+- `mcp__claude.claude_job_list`: discover recorded jobs, including jobs started by another repo-local MCP server instance.
 - `mcp__claude.claude_job_cancel`: cancel a running job.
 
 ## When to Delegate
@@ -41,13 +42,14 @@ Do not delegate to Claude:
 Give Claude cold-context instructions and ask for a verdict, not a broad summary:
 
 ```text
-Context: This repository builds a Claude MCP server for Codex. The relevant files are <files or snippets>.
+Context: This repository is <project and task context>. The relevant files are <files or snippets>.
 Question: <specific claim, plan, failure mode, or design fork to evaluate>.
 I currently lean <option>. Argue the strongest case against it, then state which option you would pick and why.
 Constraints:
 - Be concise.
-- Do not assume filesystem or shell access.
-- Cite provided file paths or snippets when relevant.
+- Use `Read`, `Glob`, and `Grep` for relevant accessible project files when useful.
+- Do not assume shell, editing, network, credential, or filesystem-write access.
+- Cite inspected file paths or provided snippets when relevant.
 ```
 
 For most calls, prefer:
@@ -61,7 +63,11 @@ For most calls, prefer:
 
 ## Async Runs
 
-Use `claude_run_async` only when the review may exceed the MCP client or proxy blocking limit. Poll with `claude_job_status` or `claude_job_result`, then cancel if the task becomes irrelevant.
+Use `claude_run_async` as the default for meaningful reviews, adversarial checks, planning critique, and non-trivial reasoning. Poll with `claude_job_status` or `claude_job_result`, then cancel if the task becomes irrelevant.
+
+Use `claude_job_list` to discover recorded jobs after losing a job ID or crossing MCP server instances. Final result retrieval remains most reliable from the instance that started the job.
+
+Use blocking `claude_run` only for trivial, known-short prompts where losing the result is acceptable if the client aborts.
 
 ## After Delegation
 
