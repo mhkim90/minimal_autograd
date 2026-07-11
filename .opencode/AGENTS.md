@@ -40,7 +40,11 @@ Always load these skills at the start of relevant tasks:
 - Language-aware caveman default: use `full` for English responses and `korean-full` for Korean responses unless the user explicitly requests another level.
 - **phase-gated-implementation**: When implementing multi-phase work from a plan, PR description, issue, design doc, or user-approved checklist — run each phase through explicit test, implementation, verification, report, and approval gates.
 - **opencode-delegate**: When tedious, mechanical, or tightly scoped plan work can be delegated — use OpenCode's default model for precise edits, sweeps, and run-inspect-tweak loops; keep final verification local.
-- **claude-delegate**: When an independent read-only second opinion is useful and the user has not requested a specific OpenCode model — ask Claude for concise review or critique.
+- **claude-delegate**: When an independent read-only second opinion is useful
+  and the user has not requested a specific OpenCode model, ask Claude for a
+  concise review or critique. Use async for meaningful work; Claude may inspect
+  files with `Read`, `Glob`, and `Grep` but has no shell, editing, or network
+  tools.
 
 See [.codex/skills/karpathy/SKILL.md](../.codex/skills/karpathy/SKILL.md), [.codex/skills/grilled-me/SKILL.md](../.codex/skills/grilled-me/SKILL.md), [.codex/skills/handoff/SKILL.md](../.codex/skills/handoff/SKILL.md), [.codex/skills/caveman/SKILL.md](../.codex/skills/caveman/SKILL.md), [.codex/skills/phase-gated-implementation/SKILL.md](../.codex/skills/phase-gated-implementation/SKILL.md), [.codex/skills/opencode-delegate/SKILL.md](../.codex/skills/opencode-delegate/SKILL.md), and [.codex/skills/claude-delegate/SKILL.md](../.codex/skills/claude-delegate/SKILL.md).
 
