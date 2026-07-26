@@ -1,0 +1,30 @@
+# autograd package configuration.
+#
+# This file is installed to <prefix>/lib/cmake/autograd/autogradConfig.cmake.
+# It is the entry point used by `find_package(autograd)` in downstream
+# projects. It must declare every non-default CMake dependency of the
+# exported `autograd::autograd` target so that consumers do not need to
+# pre-find them.
+#
+# API version is reserved for the Phase 11 freeze; this file intentionally
+# accepts unversioned `find_package(autograd)` calls.
+
+include(CMakeFindDependencyMacro)
+
+# Eigen3 is always required.
+find_dependency(Eigen3 REQUIRED)
+
+# Set the per-feature flag variables when the matching feature was enabled
+# at install time. The parent project substitutes an empty value when a
+# feature was OFF, leaving the flag undefined and the corresponding
+# find_dependency() block below a no-op.
+@autograd_extra_deps@
+
+if(_AUTOGRAD_HAS_OPENMP)
+    find_dependency(OpenMP)
+endif()
+if(_AUTOGRAD_HAS_CUDA)
+    find_dependency(CUDAToolkit REQUIRED)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/autogradTargets.cmake")
