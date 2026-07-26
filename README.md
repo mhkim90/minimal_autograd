@@ -186,22 +186,104 @@ CUDA `Var`, call `sync_data_to_cuda()` or `sync_grad_to_cuda()` before running
 more CUDA work. `clear_grad()` and optimizer `zero_grad()` clear both host and
 device gradients.
 
-### Downstream (`add_subdirectory`) consumers
+### Downstream consumers
 
-Projects that consume `minimal_autograd` via `add_subdirectory` can enable CUDA
-by passing `-DAUTOGRAD_USE_CUDA=ON` in their own configure step. If `nvcc` is
-not on `PATH`, also set `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` (or the
-toolkit's actual path). The CPU default build is unaffected when CUDA is left
-off.
+Downstream projects can consume `minimal_autograd` either by embedding the
+source tree via `add_subdirectory(...)` or by installing once and using
+`find_package(autograd CONFIG)`. Both modes expose the library through the
+namespaced target `autograd::autograd`. The plain `autograd` target is an
+in-tree compatibility alias created via `add_library(... ALIAS ...)`, so it
+is available to consumers via `add_subdirectory(...)` and inside the
+repository's own builds, but it is **not** exposed by an installed
+package — installed consumers must use `autograd::autograd`.
+
+#### `add_subdirectory(...)`
+
+```cmake
+add_subdirectory(minimal_autograd EXCLUDE_FROM_ALL)
+target_link_libraries(my_app PRIVATE autograd::autograd)
+```
+
+Embedded consumers default to **no inherited tests or examples** from
+`minimal_autograd`. The library is built with
+`POSITION_INDEPENDENT_CODE ON` so it can be linked into shared objects,
+and the C++17 requirement is propagated to consumers via
+`target_compile_features(... cxx_std_17)`. Because the C++17 standard is
+applied per-target, embedded consumers **do not have the parent's
+`CMAKE_CXX_STANDARD` or unrelated global build defaults overwritten**.
+
+Note: CMake `option()` cache entries necessarily live in the build cache
+the parent passes through, so the namespaced `AUTOGRAD_BUILD_TESTS`,
+`AUTOGRAD_BUILD_ADVANCED_OPS`, `AUTOGRAD_BUILD_EXAMPLES`, and
+`AUTOGRAD_USE_CUDA` options are visible in `cmake-gui` / `ccmake` and may
+be set by the parent before forwarding to the embedded `add_subdirectory`
+call. Their default values do not fire from this library.
+
+#### `find_package(autograd CONFIG)`
+
+```sh
+cmake -S minimal_autograd -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+cmake --install build --prefix /opt/autograd
+```
+
+```cmake
+# In the consumer project.
+find_package(autograd CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE autograd::autograd)
+```
+
+The installed package re-exports the same target and sets up its
+transitive dependencies (`Eigen3`, optional `OpenMP` and `CUDAToolkit`,
+recorded via `INTERFACE_LINK_LIBRARIES` in the exported targets file).
+The package records `cxx_std_17` via `INTERFACE_COMPILE_FEATURES`; PIC
+is applied to the installed library artifact at build time and does not
+need to be propagated through `INTERFACE_*` properties (consumer
+targets do not need to compile with `-fPIC` to link a static library
+that was already built with `-fPIC`). There is currently no semantic
+project version (the architecture refactor reserves that for
+Phase 11); consumers use `find_package(autograd)` unversioned.
+
+Whether CUDA is present in the installed package is decided at install
+time on the autograd side. To consume CUDA-enabled autograd via
+`find_package`, build a CUDA-enabled autograd with
+`-DAUTOGRAD_USE_CUDA=ON` on the autograd side and install it to a
+separate prefix (or any prefix the consumer passes via
+`-DCMAKE_PREFIX_PATH=...`); the installed `autogradConfig.cmake`
+includes `find_dependency(CUDAToolkit REQUIRED)` for that prefix. The
+consumer cannot enable CUDA by passing `-DAUTOGRAD_USE_CUDA=ON` to its
+own configure step under `find_package` — that flag belongs only to the
+autograd build itself. The `add_subdirectory(...)` mode is different:
+because the consumer's configure step builds autograd itself, passing
+`-DAUTOGRAD_USE_CUDA=ON` to the parent project does enable CUDA on the
+embedded autograd build.
+
+Minimal consumer smoke projects (deterministic compile/link/run checks
+exercising the normal public API via `#include "autograd.h"` only — no
+internal, Eigen, or CUDA headers) live in `tests/consumer/find_package/`
+and `tests/consumer/add_subdir/`. The `add_subdirectory` smoke project's
+own `CMakeLists.txt` enforces the no-inheritance contract at configure
+time by failing if any known autograd test/example target is visible to
+the consumer.
+
+#### Enabling CUDA as a downstream consumer
+
+For `add_subdirectory(...)` consumption, pass `-DAUTOGRAD_USE_CUDA=ON`
+in the parent configure step (along with
+`-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` if `nvcc` is not on
+`PATH`). For `find_package(...)` consumption, CUDA is selected on the
+autograd side at install time; install a CUDA-enabled autograd into a
+prefix and point the consumer at that prefix via `CMAKE_PREFIX_PATH`.
+The CPU default build is unaffected when CUDA is left off.
 
 ## Quick start
 
-The default build always creates the README example executable:
+The README example builds when the examples option is enabled:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target example --parallel
-./build/example
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_EXAMPLES=ON
+cmake --build build --parallel
+./build/linear_regression
 ```
 
 It trains a 2-layer ReLU MLP to fit `y = 2*x1 + 3*x2` with Adam. The source is

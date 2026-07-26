@@ -1,23 +1,49 @@
 cmake_minimum_required(VERSION 3.14)
-project(autograd CXX)
-set(CMAKE_CXX_STANDARD 17)
 
+# Project version is intentionally a placeholder; the architecture refactor
+# reserves semantic-version assignment for Phase 11. Consumers use
+# `find_package(autograd)` unversioned until that phase.
+project(autograd LANGUAGES CXX)
+
+# C++17 is enforced per-target via target_compile_features below so we do not
+# mutate the parent's global CMAKE_CXX_STANDARD when this project is added
+# via add_subdirectory(...). When this IS the top-level CMake project we
+# additionally pin the global standard so other targets compiled here pick
+# up C++17 without per-target repetition.
+set(_AUTOGRAD_CXX_STD 17)
+
+# Top-level vs embedded detection. PROJECT_IS_TOP_LEVEL is CMake 3.21+, so we
+# stay on the 3.14-compatible CMAKE_SOURCE_DIR / PROJECT_SOURCE_DIR comparison.
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(_AUTOGRAD_IS_TOP_LEVEL TRUE)
+    set(CMAKE_CXX_STANDARD ${_AUTOGRAD_CXX_STD})
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+else()
+    set(_AUTOGRAD_IS_TOP_LEVEL FALSE)
+endif()
+
+# ----------------------------------------------------------------------------
+# Options
+# ----------------------------------------------------------------------------
+# Tests default to ON only when this project is the top-level CMake project.
+# All tests/examples are OFF by default when consumed via add_subdirectory(...)
+# so embedding projects do not inherit them and may opt in explicitly.
+option(AUTOGRAD_BUILD_TESTS "Build the in-tree test suite" ${_AUTOGRAD_IS_TOP_LEVEL})
+option(AUTOGRAD_BUILD_ADVANCED_OPS "Build advanced/extended ops and tests" OFF)
+option(AUTOGRAD_BUILD_EXAMPLES "Build README/example executables" OFF)
+option(AUTOGRAD_USE_CUDA "Build the optional CUDA backend" OFF)
+
+# ----------------------------------------------------------------------------
+# Required and optional dependencies
+# ----------------------------------------------------------------------------
 find_package(Eigen3 REQUIRED)
 
-add_library(autograd STATIC
-    src/variable.cpp
-    src/ops.cpp
-    src/module.cpp
-    src/loss.cpp
-    src/optim.cpp
-    src/conv.cpp
-    src/norm.cpp
-    src/fft.cpp
-)
-target_include_directories(autograd PUBLIC include)
-target_link_libraries(autograd PUBLIC Eigen3::Eigen)
+find_package(OpenMP)
+set(_AUTOGRAD_HAS_OPENMP FALSE)
+if(OpenMP_CXX_FOUND)
+    set(_AUTOGRAD_HAS_OPENMP TRUE)
+endif()
 
-option(AUTOGRAD_USE_CUDA "Build minimal CUDA autograd core" OFF)
 if(AUTOGRAD_USE_CUDA)
     if(CMAKE_VERSION VERSION_LESS 3.18)
         message(FATAL_ERROR "AUTOGRAD_USE_CUDA requires CMake 3.18+")
@@ -35,91 +61,175 @@ if(AUTOGRAD_USE_CUDA)
             FORCE)
     endif()
     if(NOT CMAKE_CUDA_ARCHITECTURES)
-        set(CMAKE_CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}" CACHE STRING
-            "CUDA architectures" FORCE)
+        set(CMAKE_CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}")
     endif()
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
+endif()
+
+# ----------------------------------------------------------------------------
+# Library
+# ----------------------------------------------------------------------------
+set(_AUTOGRAD_LIB_SOURCES
+    src/variable.cpp
+    src/ops.cpp
+    src/module.cpp
+    src/loss.cpp
+    src/optim.cpp
+    src/conv.cpp
+    src/norm.cpp
+    src/fft.cpp
+)
+
+add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
+add_library(autograd::autograd ALIAS autograd)
+
+set_target_properties(autograd PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    CXX_STANDARD ${_AUTOGRAD_CXX_STD}
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF)
+
+target_compile_features(autograd PUBLIC cxx_std_${_AUTOGRAD_CXX_STD})
+
+target_include_directories(autograd PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+
+target_link_libraries(autograd PUBLIC Eigen3::Eigen)
+
+if(_AUTOGRAD_HAS_OPENMP)
+    target_link_libraries(autograd PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
+if(AUTOGRAD_USE_CUDA)
     target_compile_definitions(autograd PUBLIC AUTOGRAD_USE_CUDA)
     target_sources(autograd PRIVATE src/cuda_core.cu src/cuda_fft.cu)
     target_link_libraries(autograd PUBLIC CUDA::cudart)
     set_target_properties(autograd PROPERTIES
-        CUDA_STANDARD 17
+        CUDA_STANDARD ${_AUTOGRAD_CXX_STD}
         CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}")
 endif()
 
-# Optional: multi-threaded Eigen.
-find_package(OpenMP)
+# ----------------------------------------------------------------------------
+# Install rules + exported CMake targets
+# ----------------------------------------------------------------------------
+include(GNUInstallDirs)
+
+install(TARGETS autograd
+    EXPORT autogradTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(EXPORT autogradTargets
+    FILE autogradTargets.cmake
+    NAMESPACE autograd::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/autograd)
+
+# Build the @autograd_extra_deps@ substitution. The value is either empty
+# (no extra find_dependency blocks) or one or more multi-line `set(...)`
+# invocations that turn on the corresponding find_dependency branch in the
+# installed autogradConfig.cmake. The flag values are evaluated at install
+# time so consumers see exactly what was built.
+set(autograd_extra_deps "")
 if(OpenMP_CXX_FOUND)
-    target_link_libraries(autograd PUBLIC OpenMP::OpenMP_CXX)
+    set(autograd_extra_deps
+        "set(_AUTOGRAD_HAS_OPENMP TRUE)")
 endif()
-
-# Tests
-add_executable(test_core test/test_core.cpp)
-target_link_libraries(test_core autograd)
-target_include_directories(test_core PRIVATE test)
-
-add_executable(test_nn test/test_nn.cpp)
-target_link_libraries(test_nn autograd)
-
-add_executable(test_conv test/test_conv.cpp)
-target_link_libraries(test_conv autograd)
-target_include_directories(test_conv PRIVATE test)
-
-add_executable(test_fft test/test_fft.cpp)
-target_link_libraries(test_fft autograd)
-target_include_directories(test_fft PRIVATE test)
-
-# Phase 0 characterization gate: pins observable behavior the architecture
-# refactor must preserve. Builds unconditionally on CPU-only configs.
-add_executable(test_characterization test/test_characterization.cpp)
-target_link_libraries(test_characterization autograd)
-target_include_directories(test_characterization PRIVATE test)
-
 if(AUTOGRAD_USE_CUDA)
-    add_executable(test_cuda_core test/test_cuda_core.cpp)
-    target_link_libraries(test_cuda_core autograd)
-    target_include_directories(test_cuda_core PRIVATE test)
-
-    add_executable(test_cuda_fft test/test_cuda_fft.cpp)
-    target_link_libraries(test_cuda_fft autograd)
-    target_include_directories(test_cuda_fft PRIVATE test)
+    set(autograd_extra_deps
+        "${autograd_extra_deps}\nset(_AUTOGRAD_HAS_CUDA TRUE)")
 endif()
 
-option(AUTOGRAD_BUILD_ADVANCED_OPS "Build extended/advanced ops and tests" OFF)
-if(AUTOGRAD_BUILD_ADVANCED_OPS)
-    add_executable(test_extensions test/test_extensions.cpp)
-    target_link_libraries(test_extensions autograd)
-    target_include_directories(test_extensions PRIVATE test)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/autogradConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/autogradConfig.cmake"
+    @ONLY)
 
-    add_executable(test_diffusion test/test_diffusion.cpp)
-    target_link_libraries(test_diffusion autograd)
-    target_include_directories(test_diffusion PRIVATE test)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/autogradConfig.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/autograd)
 
-    add_executable(test_smoke test/test_smoke.cpp)
-    target_link_libraries(test_smoke autograd)
-    target_include_directories(test_smoke PRIVATE test)
+# ----------------------------------------------------------------------------
+# Tests (default ON at top-level only; OFF when embedded)
+# ----------------------------------------------------------------------------
+if(AUTOGRAD_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(test_core test/test_core.cpp)
+    target_link_libraries(test_core PRIVATE autograd::autograd)
+    target_include_directories(test_core PRIVATE test)
+    add_test(NAME test_core COMMAND test_core)
+
+    add_executable(test_nn test/test_nn.cpp)
+    target_link_libraries(test_nn PRIVATE autograd::autograd)
+    add_test(NAME test_nn COMMAND test_nn)
+
+    add_executable(test_conv test/test_conv.cpp)
+    target_link_libraries(test_conv PRIVATE autograd::autograd)
+    target_include_directories(test_conv PRIVATE test)
+    add_test(NAME test_conv COMMAND test_conv)
+
+    add_executable(test_fft test/test_fft.cpp)
+    target_link_libraries(test_fft PRIVATE autograd::autograd)
+    target_include_directories(test_fft PRIVATE test)
+    add_test(NAME test_fft COMMAND test_fft)
+
+    add_executable(test_characterization test/test_characterization.cpp)
+    target_link_libraries(test_characterization PRIVATE autograd::autograd)
+    target_include_directories(test_characterization PRIVATE test)
+    add_test(NAME test_characterization COMMAND test_characterization)
+
+    if(AUTOGRAD_USE_CUDA)
+        add_executable(test_cuda_core test/test_cuda_core.cpp)
+        target_link_libraries(test_cuda_core PRIVATE autograd::autograd)
+        target_include_directories(test_cuda_core PRIVATE test)
+        add_test(NAME test_cuda_core COMMAND test_cuda_core)
+
+        add_executable(test_cuda_fft test/test_cuda_fft.cpp)
+        target_link_libraries(test_cuda_fft PRIVATE autograd::autograd)
+        target_include_directories(test_cuda_fft PRIVATE test)
+        add_test(NAME test_cuda_fft COMMAND test_cuda_fft)
+    endif()
+
+    if(AUTOGRAD_BUILD_ADVANCED_OPS)
+        add_executable(test_extensions test/test_extensions.cpp)
+        target_link_libraries(test_extensions PRIVATE autograd::autograd)
+        target_include_directories(test_extensions PRIVATE test)
+        add_test(NAME test_extensions COMMAND test_extensions)
+
+        add_executable(test_diffusion test/test_diffusion.cpp)
+        target_link_libraries(test_diffusion PRIVATE autograd::autograd)
+        target_include_directories(test_diffusion PRIVATE test)
+        add_test(NAME test_diffusion COMMAND test_diffusion)
+
+        add_executable(test_smoke test/test_smoke.cpp)
+        target_link_libraries(test_smoke PRIVATE autograd::autograd)
+        target_include_directories(test_smoke PRIVATE test)
+        add_test(NAME test_smoke COMMAND test_smoke)
+    endif()
 endif()
 
-# Optional: build the README example.
-option(AUTOGRAD_BUILD_EXAMPLES "Build README examples" OFF)
+# ----------------------------------------------------------------------------
+# Examples (default OFF; consumer projects do not inherit them)
+# ----------------------------------------------------------------------------
 if(AUTOGRAD_BUILD_EXAMPLES)
     add_executable(linear_regression examples/linear_regression.cpp)
-    target_link_libraries(linear_regression autograd)
+    target_link_libraries(linear_regression PRIVATE autograd::autograd)
 
     add_executable(mnist_classify_cpu examples/mnist_classify_cpu.cpp)
-    target_link_libraries(mnist_classify_cpu autograd)
+    target_link_libraries(mnist_classify_cpu PRIVATE autograd::autograd)
     target_compile_definitions(mnist_classify_cpu PRIVATE
         DATA_DIR_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
     if(AUTOGRAD_USE_CUDA)
         add_executable(mnist_classify_gpu examples/mnist_classify_gpu.cpp)
-        target_link_libraries(mnist_classify_gpu autograd)
+        target_link_libraries(mnist_classify_gpu PRIVATE autograd::autograd)
         target_compile_definitions(mnist_classify_gpu PRIVATE
             DATA_DIR_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/data")
     endif()
 endif()
-
-# README quick-start example.
-add_executable(example examples/linear_regression.cpp)
-target_link_libraries(example autograd)
