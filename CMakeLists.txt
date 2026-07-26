@@ -70,6 +70,12 @@ add_executable(test_fft test/test_fft.cpp)
 target_link_libraries(test_fft autograd)
 target_include_directories(test_fft PRIVATE test)
 
+# Phase 0 characterization gate: pins observable behavior the architecture
+# refactor must preserve. Builds unconditionally on CPU-only configs.
+add_executable(test_characterization test/test_characterization.cpp)
+target_link_libraries(test_characterization autograd)
+target_include_directories(test_characterization PRIVATE test)
+
 if(AUTOGRAD_USE_CUDA)
     add_executable(test_cuda_core test/test_cuda_core.cpp)
     target_link_libraries(test_cuda_core autograd)
