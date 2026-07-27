@@ -4,6 +4,7 @@
 
 #include "autograd/tensor.h"
 #include "autograd/shape.h"
+#include "autograd/device.h"
 #include "autograd/variable.h"
 #include "autograd/function.h"
 #include "autograd/ops.h"
