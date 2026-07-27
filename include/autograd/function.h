@@ -10,6 +10,7 @@
 //   apply<Fn>(ins)                          — Fn has a no-arg ctor.
 //   apply<Fn>(ins, args...)                 — Fn has a ctor matching (args...).
 
+#include "autograd/extension/eigen.h"
 #include "autograd/variable.h"
 #include <memory>
 #include <stdexcept>

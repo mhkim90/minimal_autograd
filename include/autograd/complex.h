@@ -2,6 +2,7 @@
 // complex.h — small complex-valued wrapper over pairs of real Var nodes.
 
 #include "autograd/ops.h"
+#include "autograd/extension/eigen.h"
 #include "autograd/variable.h"
 
 #include <stdexcept>

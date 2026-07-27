@@ -5,6 +5,7 @@
 // runs each node's back_fn in reverse. Shared nodes are visited once, so
 // a node used in two branches gets its gradient accumulated exactly once.
 
+#include "autograd/extension/eigen.h"
 #include "autograd/tensor.h"
 #include "autograd/shape.h"
 #include <memory>

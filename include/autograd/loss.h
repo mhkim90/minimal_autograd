@@ -4,6 +4,7 @@
 // Both are composable from existing ops; no new Function subclass is needed.
 
 #include "autograd/ops.h"
+#include "autograd/extension/eigen.h"
 #include "autograd/variable.h"
 
 namespace ag {

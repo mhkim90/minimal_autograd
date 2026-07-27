@@ -2,6 +2,7 @@
 // optim.h — SGD, Adam.
 
 #include "autograd/cuda_core.h"
+#include "autograd/extension/eigen.h"
 #include "autograd/variable.h"
 #include <vector>
 
