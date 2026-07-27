@@ -165,6 +165,11 @@ if(AUTOGRAD_BUILD_TESTS)
     target_include_directories(test_core PRIVATE test)
     add_test(NAME test_core COMMAND test_core)
 
+    add_executable(test_shape_device test/test_shape_device.cpp)
+    target_link_libraries(test_shape_device PRIVATE autograd::autograd)
+    target_include_directories(test_shape_device PRIVATE test)
+    add_test(NAME test_shape_device COMMAND test_shape_device)
+
     add_executable(test_nn test/test_nn.cpp)
     target_link_libraries(test_nn PRIVATE autograd::autograd)
     add_test(NAME test_nn COMMAND test_nn)
