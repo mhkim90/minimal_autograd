@@ -711,6 +711,40 @@ migrated. It receives no new features. Its core operations are adapted or
 deleted as the Phase 5–10 consumers move, with final facade deletion in
 Phase 11.
 
+#### Phase 5a transitional naming
+
+Phase 5a places the new `Module`/`Linear`/`SGD` declarations under
+`ag::nn` and `ag::optim` (in `include/autograd/core/module.h` and
+`include/autograd/core/optim.h`) instead of the flat `ag::Module` /
+`ag::Linear` / `ag::SGD` names the legacy facade already owns. The new
+namespace prefix is a deliberate anti-collision choice for the
+transitional period. Phase 11 will remove the legacy facade and expose
+flat canonical aliases; until then, `using`-aliases or header
+re-exports must not be added (doing so would widen scope and obscure
+the legacy deletion gate).
+
+#### Phase 5a legacy bridge exception
+
+Building a bridge between the new `Variable` graph and the legacy
+`VarPtr` graph would require adapter code that crosses two graph
+representations. Adapting either side is unsafe during Phase 5a
+because (a) the new graph's mutation boundary is still being
+calibrated, and (b) the legacy graph retains legacy
+amplification/rollback behavior the new graph deliberately does not
+replicate. Phase 5a therefore does NOT edit, adapt, or bridge to the
+legacy `Module`/`Linear`/`Sequential`/`SGD`/`Adam` implementations; the
+legacy path remains untouched and continues to receive no new
+features.
+
+The legacy facade's retirement is gated on the migration of every
+actual consumer — spatial modules (Phase 6), CUDA op bundles
+(Phases 8–9), and the CppResist migration spike (Phase 10) — not on
+the OOP training stack alone. Phase 5b (Sequential + Adam + state
+snapshot/restore) is a prerequisite for the OOP training slice but
+does NOT, by itself, unlock any legacy deletion. Final facade deletion
+remains Phase 11's responsibility and runs only after the in-tree
+consumers and downstream qualification have moved.
+
 ### Gate 4.5 — Executable-contract closeout
 
 Before Phase 5 feature work:
