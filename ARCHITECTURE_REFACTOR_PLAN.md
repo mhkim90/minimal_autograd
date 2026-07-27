@@ -13,11 +13,18 @@ Current delivery state:
 
 - Shape/Device, hidden CPU Tensor, and private Variable/tape foundations are
   merged;
-- CPU N-D operations and losses are implemented in PR #36;
-- Phase 4 is not closed until PR #36 merges and Gate 4.5 proves the registered
-  CPU contract inventory executes in hosted CI;
-- the immediate closeout gate is executable-contract CI correction;
-- the next feature gate is the Phase 5a Linear + SGD vertical training slice.
+- CPU N-D operations and losses are merged through PR #36;
+- Phase 4 is closed: Gate 4.5 runs the registered CPU contract inventory in
+  hosted CI;
+- Phase 5a (`nn::Module`, `nn::Linear`, `optim::SGD`) is implemented in the
+  current Bundle 5 branch;
+- Phase 5b (`nn::Sequential`, `nn::ReLU`, `nn::Module::register_module`,
+  recursive parameter traversal, `optim::Adam` with `AdamState` snapshot and
+  `load_state` restore) is the current delivery. Legacy flat
+  `ag::Module`/`ag::Linear`/`ag::Sequential`/`ag::SGD`/`ag::Adam` remains
+  untouched; its retirement remains gated on the Phase 6 spatial modules,
+  Phase 8–9 CUDA bundles, and the Phase 10 CppResist spike, with the final
+  facade deletion in Phase 11.
 
 ## 2. Purpose
 
@@ -803,6 +810,28 @@ consumer translation unit.
 Exit criterion: an end-to-end MLP trains through the new API, nested parameter
 discovery is deterministic, and optimizer state can be restored without
 accessing implementation fields.
+
+**Phase 5b delivery (current):** `nn::Sequential` composes children with
+deterministic numeric names (`0`, `1`, ...); `nn::Module::register_module`
+adds nested composition with empty / null / duplicate / cross-kind
+collision rejection; `parameters()`, `named_parameters()`, and `zero_grad()`
+recurse depth-first with dotted-prefix names (`0.weight`, `0.0.bias`,
+`child.weight`, ...). `optim::Adam` validates hyperparameters in the
+constructor, pre-validates every eligible parameter in `step()`, computes
+all new moment/parameter values into temporaries, then commits — a
+failure cannot leave state half-updated. `state()` returns deep-cloned
+moments; `load_state()` validates the entire snapshot (step count,
+hyperparameters, moment counts, shapes, devices) before mutating any
+live state, so a failed load leaves both the optimizer and the parameter
+values unchanged. `nn::ReLU` is a parameter-free module that routes
+through the public `ag::relu` free function.
+
+Phase 5b is the last OOP-stack slice before the spatial/CUDA/CppResist
+migration. Phase 5b does NOT, by itself, unlock any legacy facade
+deletion; the legacy facade's retirement still depends on the Phase 6
+spatial modules, Phase 8–9 CUDA bundles, and Phase 10 CppResist spike
+moving their actual consumers, with the final facade deletion remaining
+Phase 11's responsibility.
 
 ### Phase 6 — CPU spatial and special modules
 

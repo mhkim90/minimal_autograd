@@ -118,6 +118,14 @@ struct VariableAccess {
         }
         t.copy_from_host(data.empty() ? nullptr : data.data(), data.size());
     }
+
+    // Copies prepared values into existing parameter storage without
+    // allocating. Callers validate count before entering their commit phase.
+    static void copy_to_storage(Variable& v,
+                                const std::vector<float>& data) {
+        Tensor& t = v.node_->value;
+        t.copy_from_host(data.empty() ? nullptr : data.data(), data.size());
+    }
 };
 
 }  // namespace detail
