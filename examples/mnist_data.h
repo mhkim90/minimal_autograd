@@ -16,7 +16,7 @@
 //   images : Mat(N, 784), pixel values in [0, 1] (uint8 / 255.f)
 //   labels : Mat(N, 10), one-hot float
 
-#include "autograd/tensor.h"
+#include "autograd/extension/eigen.h"
 
 #include <cstdint>
 #include <cstdio>

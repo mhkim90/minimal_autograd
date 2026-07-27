@@ -7,7 +7,7 @@
 // All ops are out-of-place: they allocate a new node, never mutate inputs.
 
 #include "autograd/function.h"
-#include "autograd/tensor.h"
+#include "autograd/extension/eigen.h"
 #include "autograd/cuda_core.h"
 #include <stdexcept>
 #include <string>

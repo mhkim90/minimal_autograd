@@ -13,6 +13,7 @@
 // plain compositions; the non-differentiable ones (RNG, time embedding
 // from a host int) are leaf-producing helpers.
 
+#include "autograd/extension/eigen.h"
 #include "autograd/tensor.h"
 #include "autograd/variable.h"
 #include "autograd/ops.h"

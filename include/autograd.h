@@ -5,6 +5,12 @@
 #include "autograd/tensor.h"
 #include "autograd/shape.h"
 #include "autograd/device.h"
+// The legacy `Mat` / `Mats` / `shape(Mat)` / `numel(Mat)` aliases
+// used by the existing Var / Function / ops / modules surface live in
+// the opt-in extension header. The umbrella still re-exports them so
+// downstream code that includes "autograd.h" continues to work
+// unchanged; the new public path is `autograd/tensor.h` alone.
+#include "autograd/extension/eigen.h"
 #include "autograd/variable.h"
 #include "autograd/function.h"
 #include "autograd/ops.h"

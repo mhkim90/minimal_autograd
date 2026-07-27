@@ -79,6 +79,7 @@ set(_AUTOGRAD_LIB_SOURCES
     src/conv.cpp
     src/norm.cpp
     src/fft.cpp
+    src/core/tensor.cpp
 )
 
 add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
@@ -169,6 +170,11 @@ if(AUTOGRAD_BUILD_TESTS)
     target_link_libraries(test_shape_device PRIVATE autograd::autograd)
     target_include_directories(test_shape_device PRIVATE test)
     add_test(NAME test_shape_device COMMAND test_shape_device)
+
+    add_executable(test_tensor test/test_tensor.cpp)
+    target_link_libraries(test_tensor PRIVATE autograd::autograd)
+    target_include_directories(test_tensor PRIVATE test)
+    add_test(NAME test_tensor COMMAND test_tensor)
 
     add_executable(test_nn test/test_nn.cpp)
     target_link_libraries(test_nn PRIVATE autograd::autograd)

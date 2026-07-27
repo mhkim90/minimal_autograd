@@ -15,7 +15,7 @@
 
 #include "autograd/ops.h"
 #include "autograd/module.h"
-#include "autograd/tensor.h"
+#include "autograd/extension/eigen.h"
 #include <cmath>
 #include <vector>
 #include <cassert>
