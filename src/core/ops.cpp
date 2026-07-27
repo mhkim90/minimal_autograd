@@ -43,14 +43,6 @@ void validate_unary(const char* op, const Variable& a) {
     (void)a;
 }
 
-void require_rank2(const char* op, const Variable& v) {
-    if (v.value().shape().rank() != 2) {
-        std::ostringstream os;
-        os << op << ": expected rank-2 tensor, got shape " << v.value().shape();
-        throw std::invalid_argument(os.str());
-    }
-}
-
 using detail::OpKind;
 
 struct Extras {
@@ -60,6 +52,8 @@ struct Extras {
     int   axis    = 0;
     int64_t extra_i0 = 0;
     int64_t extra_i1 = 0;
+    std::vector<int> axes;
+    bool keep_dims = false;
 };
 
 Variable make_result(Tensor value,
@@ -84,6 +78,8 @@ Variable make_result(Tensor value,
         node->axis     = extras.axis;
         node->extra_i0 = extras.extra_i0;
         node->extra_i1 = extras.extra_i1;
+        node->axes     = std::move(extras.axes);
+        node->keep_dims = extras.keep_dims;
     }
     return detail::VariableAccess::make(std::move(node));
 }
@@ -115,7 +111,7 @@ Variable scale(const Variable& a, float scalar) {
         OpKind::Scale,
         {detail::VariableAccess::node(a)},
         {},
-        Extras{scalar, 0.f, 0.f, 0, 0, 0});
+        Extras{scalar, 0.f, 0.f, 0, 0, 0, {}, false});
 }
 
 Variable sum(const Variable& a) {
@@ -125,14 +121,27 @@ Variable sum(const Variable& a) {
         {detail::VariableAccess::node(a)});
 }
 
+Variable sum(const Variable& a, const std::vector<int>& axes, bool keep_dims) {
+    validate_unary("sum", a);
+    Tensor out = detail::tensor_sum_axes_nd(a.value(), axes, keep_dims);
+    return make_result(
+        std::move(out),
+        OpKind::SumAxes,
+        {detail::VariableAccess::node(a)},
+        {},
+        Extras{0.f, 0.f, 0.f, 0, 0, 0,
+               detail::normalize_axes(axes,
+                                      static_cast<int>(a.value().shape().rank()),
+                                      "sum"),
+               keep_dims});
+}
+
 // ── Linear algebra, reductions, activations, and layout ────────────────
 
 Variable matmul(const Variable& a, const Variable& b) {
     validate_binary("matmul", a, b, /*exact_shape=*/false);
-    require_rank2("matmul", a);
-    require_rank2("matmul", b);
     return make_result(
-        detail::tensor_matmul(a.value(), b.value()),
+        detail::tensor_matmul_nd(a.value(), b.value()),
         OpKind::MatMul,
         {detail::VariableAccess::node(a), detail::VariableAccess::node(b)},
         {a.value().clone(), b.value().clone()});
@@ -146,12 +155,28 @@ Variable mean(const Variable& a) {
     return scale(sum(a), 1.f / static_cast<float>(n));
 }
 
+Variable mean(const Variable& a, const std::vector<int>& axes, bool keep_dims) {
+    validate_unary("mean", a);
+    const int64_t n = [&] {
+        const auto& s = a.value().shape();
+        const auto norm =
+            detail::normalize_axes(axes, static_cast<int>(s.rank()), "mean");
+        int64_t prod = 1;
+        for (int axis : norm) {
+            prod = detail::mul_check_overflow(prod, s[axis], "mean");
+        }
+        return prod;
+    }();
+    if (n == 0) {
+        return sum(a, axes, keep_dims);
+    }
+    return scale(sum(a, axes, keep_dims), 1.f / static_cast<float>(n));
+}
+
 Variable broadcast_add(const Variable& a, const Variable& b) {
     validate_binary("broadcast_add", a, b, /*exact_shape=*/false);
-    require_rank2("broadcast_add", a);
-    require_rank2("broadcast_add", b);
     return make_result(
-        detail::tensor_broadcast_add(a.value(), b.value()),
+        detail::tensor_broadcast_add_nd(a.value(), b.value()),
         OpKind::BroadcastAdd,
         {detail::VariableAccess::node(a), detail::VariableAccess::node(b)});
 }
@@ -283,54 +308,73 @@ Variable clamp(const Variable& a, float lo, float hi) {
         OpKind::Clamp,
         {detail::VariableAccess::node(a)},
         {a.value().clone()},
-        Extras{0.f, lo, hi, 0, 0, 0});
+        Extras{0.f, lo, hi, 0, 0, 0, {}, false});
 }
 
-Variable softmax(const Variable& a) {
+Variable softmax(const Variable& a, int axis) {
     validate_unary("softmax", a);
-    require_rank2("softmax", a);
     Tensor saved;
-    Tensor out = detail::tensor_softmax(a.value(), saved);
+    Tensor out = detail::tensor_softmax_nd(a.value(), axis, saved);
     return make_result(
         std::move(out),
         OpKind::Softmax,
         {detail::VariableAccess::node(a)},
-        {std::move(saved)});
+        {std::move(saved)},
+        Extras{0.f, 0.f, 0.f, axis, 0, 0, {}, false});
 }
 
-Variable log_softmax(const Variable& a) {
+Variable log_softmax(const Variable& a, int axis) {
     validate_unary("log_softmax", a);
-    require_rank2("log_softmax", a);
     Tensor saved;
-    Tensor out = detail::tensor_log_softmax(a.value(), saved);
+    Tensor out = detail::tensor_log_softmax_nd(a.value(), axis, saved);
     return make_result(
         std::move(out),
         OpKind::LogSoftmax,
         {detail::VariableAccess::node(a)},
-        {std::move(saved)});
+        {std::move(saved)},
+        Extras{0.f, 0.f, 0.f, axis, 0, 0, {}, false});
 }
 
 Variable transpose(const Variable& a) {
     validate_unary("transpose", a);
-    require_rank2("transpose", a);
+    const int rank = static_cast<int>(a.value().shape().rank());
+    if (rank < 2) {
+        throw std::invalid_argument("transpose: requires rank >= 2");
+    }
+    const int ax0 = rank - 2;
+    const int ax1 = rank - 1;
     return make_result(
-        detail::tensor_transpose(a.value()),
+        detail::tensor_transpose_nd(a.value(), ax0, ax1),
         OpKind::Transpose,
         {detail::VariableAccess::node(a)},
-        {a.value().clone()});
+        {a.value().clone()},
+        Extras{0.f, 0.f, 0.f, ax0, 0, ax1, {}, false});
 }
 
-Variable reshape(const Variable& a, int64_t rows, int64_t cols) {
-    validate_unary("reshape", a);
-    require_rank2("reshape", a);
+Variable transpose(const Variable& a, int axis0, int axis1) {
+    validate_unary("transpose", a);
     return make_result(
-        detail::tensor_reshape_view(a.value(), rows, cols),
+        detail::tensor_transpose_nd(a.value(), axis0, axis1),
+        OpKind::Transpose,
+        {detail::VariableAccess::node(a)},
+        {a.value().clone()},
+        Extras{0.f, 0.f, 0.f, axis0, 0, axis1, {}, false});
+}
+
+Variable reshape(const Variable& a, const Shape& shape) {
+    validate_unary("reshape", a);
+    return make_result(
+        detail::tensor_reshape_view(a.value(), shape),
         OpKind::Reshape,
         {detail::VariableAccess::node(a)},
         {a.value().clone()});
 }
 
-Variable concat(std::vector<Variable> inputs) {
+Variable reshape(const Variable& a, int64_t rows, int64_t cols) {
+    return reshape(a, Shape{rows, cols});
+}
+
+Variable concat(std::vector<Variable> inputs, int axis) {
     if (inputs.empty()) {
         throw std::invalid_argument("concat: requires at least one input");
     }
@@ -345,95 +389,77 @@ Variable concat(std::vector<Variable> inputs) {
         parents.push_back(detail::VariableAccess::node(v));
         values.push_back(v.value());
     }
-    Tensor out = detail::tensor_concat(values);
+    const int normalized_axis = detail::normalize_axis(
+        axis, static_cast<int>(inputs[0].value().shape().rank()), "concat");
+    Tensor out = detail::tensor_concat_nd(values, normalized_axis);
     return make_result(
         std::move(out),
         OpKind::Concat,
         std::move(parents),
-        std::move(values));
+        std::move(values),
+        Extras{0.f, 0.f, 0.f, normalized_axis, 0, 0, {}, false});
 }
 
 Variable hcat(std::vector<Variable> inputs) {
     if (inputs.empty()) {
         throw std::invalid_argument("hcat: requires at least one input");
     }
-    std::vector<std::shared_ptr<detail::VariableNode>> parents;
-    parents.reserve(inputs.size());
-    std::vector<Tensor> values;
-    values.reserve(inputs.size());
-    for (auto& v : inputs) {
-        if (v.device() != inputs[0].device()) {
-            throw std::invalid_argument("hcat: device mismatch");
-        }
-        parents.push_back(detail::VariableAccess::node(v));
-        values.push_back(v.value());
-    }
-    Tensor out = detail::tensor_hcat(values);
+    const int rank = static_cast<int>(inputs[0].value().shape().rank());
+    const int axis = rank - 1;
+    return concat(std::move(inputs), axis);
+}
+
+Variable slice(const Variable& a, int axis, int64_t start, int64_t len) {
+    validate_unary("slice", a);
     return make_result(
-        std::move(out),
-        OpKind::HCat,
-        std::move(parents),
-        std::move(values));
+        detail::tensor_slice_nd(a.value(), axis, start, len),
+        OpKind::Slice,
+        {detail::VariableAccess::node(a)},
+        {a.value().clone()},
+        Extras{0.f, 0.f, 0.f, axis, start, len, {}, false});
 }
 
 Variable col_slice(const Variable& a, int64_t start, int64_t len) {
-    validate_unary("col_slice", a);
-    return make_result(
-        detail::tensor_col_slice(a.value(), start, len),
-        OpKind::ColSlice,
-        {detail::VariableAccess::node(a)},
-        {a.value().clone()},
-        Extras{0.f, 0.f, 0.f, 0, start, len});
+    return slice(a, 1, start, len);
 }
 
 Variable row_slice(const Variable& a, int64_t start, int64_t len) {
-    validate_unary("row_slice", a);
-    return make_result(
-        detail::tensor_row_slice(a.value(), start, len),
-        OpKind::RowSlice,
-        {detail::VariableAccess::node(a)},
-        {a.value().clone()},
-        Extras{0.f, 0.f, 0.f, 0, start, len});
+    return slice(a, 0, start, len);
 }
 
-std::pair<Variable, Variable> split(const Variable& a) {
+std::pair<Variable, Variable> split(const Variable& a, int axis) {
     validate_unary("split", a);
-    require_rank2("split", a);
-    const int64_t total_cols = a.value().shape()[1];
-    if (total_cols % 2 != 0) {
-        throw std::invalid_argument(
-            "split: requires an even number of columns");
+    const int rank = static_cast<int>(a.value().shape().rank());
+    const int ax = detail::normalize_axis(axis, rank, "split");
+    const int64_t total = a.value().shape()[ax];
+    if (total % 2 != 0) {
+        std::ostringstream os;
+        os << "split: requires an even length along axis " << ax
+           << " (got " << total << ")";
+        throw std::invalid_argument(os.str());
     }
-    const int64_t half = total_cols / 2;
-    return {col_slice(a, 0, half), col_slice(a, half, half)};
+    const int64_t half = total / 2;
+    return {slice(a, ax, 0, half), slice(a, ax, half, half)};
 }
 
 Variable cumsum(const Variable& a, int axis) {
     validate_unary("cumsum", a);
-    require_rank2("cumsum", a);
-    if (axis != 0 && axis != 1) {
-        throw std::invalid_argument("cumsum: axis must be 0 or 1");
-    }
     return make_result(
-        detail::tensor_cumsum(a.value(), axis),
+        detail::tensor_cumsum_nd(a.value(), axis),
         OpKind::Cumsum,
         {detail::VariableAccess::node(a)},
         {},
-        Extras{0.f, 0.f, 0.f, axis, 0, 0});
+        Extras{0.f, 0.f, 0.f, axis, 0, 0, {}, false});
 }
 
 Variable flip(const Variable& a, int axis) {
     validate_unary("flip", a);
-    require_rank2("flip", a);
-    if (axis != 0 && axis != 1) {
-        throw std::invalid_argument("flip: axis must be 0 or 1");
-    }
     return make_result(
-        detail::tensor_flip(a.value(), axis),
+        detail::tensor_flip_nd(a.value(), axis),
         OpKind::Flip,
         {detail::VariableAccess::node(a)},
         {},
-        Extras{0.f, 0.f, 0.f, axis, 0, 0});
+        Extras{0.f, 0.f, 0.f, axis, 0, 0, {}, false});
 }
 
 }  // namespace ag

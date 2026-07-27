@@ -9,11 +9,13 @@
 
 namespace ag {
 
-// mse_loss(pred, target) = mean((pred - target)^2), elementwise.
+// mse_loss(pred, target) = mean((pred - target)^2) over all elements.
+// Any rank.
 Variable mse_loss(const Variable& pred, const Tensor& target);
 
-// cross_entropy(pred, target) = -mean(sum(target * log_softmax(pred),
-// axis=1)); target is one-hot (N, C).
+// cross_entropy(pred, target) treats the last axis as classes and
+// averages over all leading sample axes. target is one-hot on the
+// last axis. Any rank.
 Variable cross_entropy(const Variable& pred, const Tensor& target);
 
 }  // namespace ag

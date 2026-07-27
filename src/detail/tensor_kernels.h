@@ -1,14 +1,17 @@
 #pragma once
 // Private CPU tensor arithmetic for the autograd vertical slice.
 //
-// All kernels act on Tensor-backed rank-2 storage laid out in the
-// legacy Eigen column-major convention: flat index for shape (R, C) is
-// `i + R * j`, where i is the row and j is the column of the logical
-// matrix element. Host copies go through Tensor::copy_to_host /
-// copy_from_host; shapes and devices are validated by callers.
+// All kernels act on Tensor-backed dense storage laid out first-axis
+// contiguous: for shape (D0, D1, ..., D{n-1}) the strides are
+// stride[0] = 1, stride[i] = stride[i-1] * D[i-1]. For rank-2 this
+// matches the legacy Eigen column-major convention (flat index for
+// (R, C) is `i + R * j`). Host copies go through Tensor::copy_to_host
+// / copy_from_host; shapes and devices are validated by callers. New
+// kernels are rank-agnostic and accept any rank + axis.
 
 #include "autograd/tensor.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -21,22 +24,6 @@ namespace ag {
 namespace detail {
 
 namespace {
-
-inline int64_t rows_of(const Tensor& t) {
-    return t.shape()[0];
-}
-
-inline int64_t cols_of(const Tensor& t) {
-    return t.shape()[1];
-}
-
-inline void require_rank2(const char* op, const Tensor& t) {
-    if (t.shape().rank() != 2) {
-        std::ostringstream os;
-        os << op << ": expected rank-2 tensor, got shape " << t.shape();
-        throw std::invalid_argument(os.str());
-    }
-}
 
 inline void require_same_shape(const char* op, const Tensor& a, const Tensor& b) {
     if (a.shape() != b.shape()) {
@@ -61,6 +48,73 @@ inline int64_t checked_dim_sum(const char* op, int64_t a, int64_t b) {
         throw std::overflow_error(std::string(op) + ": dimension overflow");
     }
     return a + b;
+}
+
+// ── Shape / stride / index helpers ─────────────────────────────────────
+// First-axis-contiguous strides: stride[0] = 1, stride[i] = stride[i-1] *
+// shape[i-1]. Matches Eigen column-major for rank-2.
+inline std::vector<int64_t> contiguous_strides(const Shape& s) {
+    return contiguous_stride(s).strides;
+}
+
+// Flat offset from a multi-index and stride vector.
+inline int64_t linear_offset(const std::vector<int64_t>& idx,
+                             const std::vector<int64_t>& strides) {
+    int64_t off = 0;
+    for (std::size_t i = 0; i < idx.size(); ++i) {
+        off += idx[i] * strides[i];
+    }
+    return off;
+}
+
+// Normalize a single axis against a rank. Negative axes wrap.
+inline int normalize_axis(int axis, int rank, const char* what) {
+    if (rank <= 0) {
+        std::ostringstream os;
+        os << what << ": empty rank";
+        throw std::invalid_argument(os.str());
+    }
+    int n = axis;
+    if (n < 0) n += rank;
+    if (n < 0 || n >= rank) {
+        std::ostringstream os;
+        os << what << ": axis " << axis << " out of range for rank "
+           << rank;
+        throw std::invalid_argument(os.str());
+    }
+    return n;
+}
+
+// Normalize a list of axes; rejects duplicates and out-of-range.
+inline std::vector<int> normalize_axes(const std::vector<int>& axes,
+                                       int rank,
+                                       const char* what) {
+    std::vector<int> out;
+    out.reserve(axes.size());
+    for (int a : axes) {
+        int n = normalize_axis(a, rank, what);
+        for (int prev : out) {
+            if (prev == n) {
+                std::ostringstream os;
+                os << what << ": duplicate axis " << n;
+                throw std::invalid_argument(os.str());
+            }
+        }
+        out.push_back(n);
+    }
+    return out;
+}
+
+// Increment a multi-index in first-axis-contiguous order.
+inline bool increment_index(std::vector<int64_t>& idx, const Shape& s) {
+    for (std::size_t i = 0; i < idx.size(); ++i) {
+        if (idx[i] + 1 < s.sizes[i]) {
+            ++idx[i];
+            return true;
+        }
+        idx[i] = 0;
+    }
+    return false;
 }
 
 }  // namespace
@@ -132,114 +186,10 @@ inline Tensor tensor_broadcast_scalar(const Tensor& scalar,
     return out;
 }
 
-// ── Matmul, transpose, reshape, slice/concat/flip/cumsum ───────────────
+// ── Shape ──────────────────────────────────────────────────────────────
 
-inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
-    require_rank2("matmul", a);
-    require_rank2("matmul", b);
-    require_same_device("matmul", a, b);
-    const int64_t M = rows_of(a);
-    const int64_t K = cols_of(a);
-    const int64_t K2 = rows_of(b);
-    const int64_t N = cols_of(b);
-    if (K != K2) {
-        std::ostringstream os;
-        os << "matmul: inner dimensions mismatch ("
-           << a.shape() << " vs " << b.shape() << ")";
-        throw std::invalid_argument(os.str());
-    }
-    Tensor out = Tensor::empty(Shape{M, N}, a.device());
-    if (M == 0 || N == 0) return out;
-    std::vector<float> av(M * K, 0.f), bv(K * N, 0.f), ov(M * N, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    b.copy_to_host(bv.data(), bv.size());
-    for (int64_t r = 0; r < M; ++r) {
-        for (int64_t c = 0; c < N; ++c) {
-            float s = 0.f;
-            for (int64_t k = 0; k < K; ++k) {
-                s += av[r + M * k] * bv[k + K * c];
-            }
-            ov[r + M * c] = s;
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-// dA = dC * B^T for shapes (M, K) = (M, N) * (N, K).
-inline Tensor tensor_matmul_backward_a(const Tensor& g, const Tensor& b) {
-    require_rank2("matmul_backward_a", g);
-    require_rank2("matmul_backward_a", b);
-    require_same_device("matmul_backward_a", g, b);
-    const int64_t M = rows_of(g);
-    const int64_t N = cols_of(g);
-    const int64_t K = rows_of(b);
-    Tensor out = Tensor::empty(Shape{M, K}, g.device());
-    if (M == 0 || K == 0) return out;
-    std::vector<float> gv(M * N, 0.f), bv(K * N, 0.f), ov(M * K, 0.f);
-    g.copy_to_host(gv.data(), gv.size());
-    b.copy_to_host(bv.data(), bv.size());
-    for (int64_t r = 0; r < M; ++r) {
-        for (int64_t k = 0; k < K; ++k) {
-            float s = 0.f;
-            for (int64_t c = 0; c < N; ++c) {
-                s += gv[r + M * c] * bv[k + K * c];
-            }
-            ov[r + M * k] = s;
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-// dB = A^T * dC for shapes (K, N) = (K, M) * (M, N).
-inline Tensor tensor_matmul_backward_b(const Tensor& a, const Tensor& g) {
-    require_rank2("matmul_backward_b", a);
-    require_rank2("matmul_backward_b", g);
-    require_same_device("matmul_backward_b", a, g);
-    const int64_t M = rows_of(a);
-    const int64_t K = cols_of(a);
-    const int64_t N = cols_of(g);
-    Tensor out = Tensor::empty(Shape{K, N}, a.device());
-    if (K == 0 || N == 0) return out;
-    std::vector<float> av(M * K, 0.f), gv(M * N, 0.f), ov(K * N, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    g.copy_to_host(gv.data(), gv.size());
-    for (int64_t k = 0; k < K; ++k) {
-        for (int64_t n = 0; n < N; ++n) {
-            float s = 0.f;
-            for (int64_t m = 0; m < M; ++m) {
-                s += av[m + M * k] * gv[m + M * n];
-            }
-            ov[k + K * n] = s;
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_transpose(const Tensor& a) {
-    require_rank2("transpose", a);
-    const int64_t R = rows_of(a);
-    const int64_t C = cols_of(a);
-    Tensor out = Tensor::empty(Shape{C, R}, a.device());
-    if (R == 0 || C == 0) return out;
-    std::vector<float> av(R * C, 0.f), ov(R * C, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    // out[c, r] = a[r, c]; out is shape (C, R).
-    for (int64_t r = 0; r < R; ++r) {
-        for (int64_t c = 0; c < C; ++c) {
-            ov[c + C * r] = av[r + R * c];
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_reshape_view(const Tensor& a, int64_t rows, int64_t cols) {
-    require_rank2("reshape", a);
+inline Tensor tensor_reshape_view(const Tensor& a, const Shape& target_shape) {
     const int64_t expected = static_cast<int64_t>(a.elements());
-    const Shape target_shape{rows, cols};
     const int64_t target = target_shape.numel();
     if (expected != target) {
         std::ostringstream os;
@@ -250,336 +200,7 @@ inline Tensor tensor_reshape_view(const Tensor& a, int64_t rows, int64_t cols) {
     return a.reshape(target_shape);
 }
 
-inline Tensor tensor_concat(const std::vector<Tensor>& inputs) {
-    if (inputs.empty()) {
-        throw std::invalid_argument("concat: requires at least one input");
-    }
-    int64_t total_rows = 0;
-    int64_t cols = 0;
-    for (std::size_t i = 0; i < inputs.size(); ++i) {
-        require_rank2("concat", inputs[i]);
-        if (i == 0) {
-            cols = cols_of(inputs[i]);
-        } else if (cols_of(inputs[i]) != cols) {
-            std::ostringstream os;
-            os << "concat: column count mismatch at input " << i
-               << " (have " << cols_of(inputs[i]) << ", want " << cols << ")";
-            throw std::invalid_argument(os.str());
-        }
-        total_rows = checked_dim_sum(
-            "concat", total_rows, rows_of(inputs[i]));
-    }
-    Tensor out = Tensor::empty(Shape{total_rows, cols}, inputs[0].device());
-    if (total_rows == 0 || cols == 0) return out;
-    std::vector<float> ov(total_rows * cols, 0.f);
-    int64_t row_off = 0;
-    for (const auto& t : inputs) {
-        const int64_t R = rows_of(t);
-        const int64_t C = cols_of(t);
-        std::vector<float> tv(R * C, 0.f);
-        t.copy_to_host(tv.data(), tv.size());
-        for (int64_t r = 0; r < R; ++r) {
-            for (int64_t c = 0; c < C; ++c) {
-                ov[(row_off + r) + total_rows * c] = tv[r + R * c];
-            }
-        }
-        row_off += R;
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_hcat(const std::vector<Tensor>& inputs) {
-    if (inputs.empty()) {
-        throw std::invalid_argument("hcat: requires at least one input");
-    }
-    int64_t rows = 0;
-    int64_t total_cols = 0;
-    for (std::size_t i = 0; i < inputs.size(); ++i) {
-        require_rank2("hcat", inputs[i]);
-        if (i == 0) {
-            rows = rows_of(inputs[i]);
-        } else if (rows_of(inputs[i]) != rows) {
-            std::ostringstream os;
-            os << "hcat: row count mismatch at input " << i
-               << " (have " << rows_of(inputs[i]) << ", want " << rows << ")";
-            throw std::invalid_argument(os.str());
-        }
-        total_cols = checked_dim_sum(
-            "hcat", total_cols, cols_of(inputs[i]));
-    }
-    Tensor out = Tensor::empty(Shape{rows, total_cols}, inputs[0].device());
-    if (rows == 0 || total_cols == 0) return out;
-    std::vector<float> ov(rows * total_cols, 0.f);
-    int64_t col_off = 0;
-    for (const auto& t : inputs) {
-        const int64_t R = rows_of(t);
-        const int64_t C = cols_of(t);
-        std::vector<float> tv(R * C, 0.f);
-        t.copy_to_host(tv.data(), tv.size());
-        for (int64_t r = 0; r < R; ++r) {
-            for (int64_t c = 0; c < C; ++c) {
-                ov[r + rows * (col_off + c)] = tv[r + R * c];
-            }
-        }
-        col_off += C;
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_col_slice(const Tensor& a, int64_t start, int64_t len) {
-    require_rank2("col_slice", a);
-    if (start < 0 || len <= 0 || start > cols_of(a) ||
-        len > cols_of(a) - start) {
-        std::ostringstream os;
-        os << "col_slice: out of range (cols=" << cols_of(a)
-           << ", start=" << start << ", len=" << len << ")";
-        throw std::invalid_argument(os.str());
-    }
-    const int64_t R = rows_of(a);
-    const int64_t C = cols_of(a);
-    Tensor out = Tensor::empty(Shape{R, len}, a.device());
-    if (R == 0 || len == 0) return out;
-    std::vector<float> av(R * C, 0.f), ov(R * len, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    for (int64_t r = 0; r < R; ++r) {
-        for (int64_t c = 0; c < len; ++c) {
-            ov[r + R * c] = av[r + R * (start + c)];
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_row_slice(const Tensor& a, int64_t start, int64_t len) {
-    require_rank2("row_slice", a);
-    if (start < 0 || len <= 0 || start > rows_of(a) ||
-        len > rows_of(a) - start) {
-        std::ostringstream os;
-        os << "row_slice: out of range (rows=" << rows_of(a)
-           << ", start=" << start << ", len=" << len << ")";
-        throw std::invalid_argument(os.str());
-    }
-    const int64_t R = rows_of(a);
-    const int64_t C = cols_of(a);
-    Tensor out = Tensor::empty(Shape{len, C}, a.device());
-    if (len == 0 || C == 0) return out;
-    std::vector<float> av(R * C, 0.f), ov(len * C, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    for (int64_t r = 0; r < len; ++r) {
-        for (int64_t c = 0; c < C; ++c) {
-            ov[r + len * c] = av[(start + r) + R * c];
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-// Place g back into a zero tensor of shape (R, C) at cols [start, start+len).
-inline Tensor tensor_col_slice_backward(const Tensor& g,
-                                        int64_t rows,
-                                        int64_t cols,
-                                        int64_t start,
-                                        int64_t len) {
-    Tensor out = Tensor::zeros(Shape{rows, cols}, g.device());
-    if (rows == 0 || cols == 0) return out;
-    const int64_t Rg = rows_of(g);
-    const int64_t Cg = cols_of(g);
-    if (Rg != rows || Cg != len) {
-        std::ostringstream os;
-        os << "col_slice backward: gradient shape mismatch (got " << g.shape()
-           << ", expected Shape{" << rows << ", " << len << "})";
-        throw std::invalid_argument(os.str());
-    }
-    std::vector<float> gv(Rg * Cg, 0.f), ov(rows * cols, 0.f);
-    g.copy_to_host(gv.data(), gv.size());
-    for (int64_t r = 0; r < Rg; ++r) {
-        for (int64_t c = 0; c < Cg; ++c) {
-            ov[r + rows * (start + c)] = gv[r + Rg * c];
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-// Place g back into a zero tensor of shape (R, C) at rows [start, start+len).
-inline Tensor tensor_row_slice_backward(const Tensor& g,
-                                        int64_t rows,
-                                        int64_t cols,
-                                        int64_t start,
-                                        int64_t len) {
-    Tensor out = Tensor::zeros(Shape{rows, cols}, g.device());
-    if (rows == 0 || cols == 0) return out;
-    const int64_t Rg = rows_of(g);
-    const int64_t Cg = cols_of(g);
-    if (Rg != len || Cg != cols) {
-        std::ostringstream os;
-        os << "row_slice backward: gradient shape mismatch (got " << g.shape()
-           << ", expected Shape{" << len << ", " << cols << "})";
-        throw std::invalid_argument(os.str());
-    }
-    std::vector<float> gv(Rg * Cg, 0.f), ov(rows * cols, 0.f);
-    g.copy_to_host(gv.data(), gv.size());
-    for (int64_t r = 0; r < Rg; ++r) {
-        for (int64_t c = 0; c < Cg; ++c) {
-            ov[(start + r) + rows * c] = gv[r + Rg * c];
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-// Slice g (which has the same per-input row block size as concatenated)
-// back into N tensors matching the parent shapes.
-inline std::vector<Tensor> tensor_concat_backward(
-        const Tensor& g, const std::vector<int64_t>& rows_per_input) {
-    std::vector<Tensor> out;
-    out.reserve(rows_per_input.size());
-    int64_t row_off = 0;
-    const int64_t total_rows = rows_of(g);
-    const int64_t cols = cols_of(g);
-    std::vector<float> gv(total_rows * cols, 0.f);
-    g.copy_to_host(gv.data(), gv.size());
-    for (int64_t r : rows_per_input) {
-        Tensor piece = Tensor::empty(Shape{r, cols}, g.device());
-        if (r > 0 && cols > 0) {
-            std::vector<float> pv(r * cols, 0.f);
-            for (int64_t i = 0; i < r; ++i) {
-                for (int64_t c = 0; c < cols; ++c) {
-                    pv[i + r * c] = gv[(row_off + i) + total_rows * c];
-                }
-            }
-            piece.copy_from_host(pv.data(), pv.size());
-        }
-        out.push_back(std::move(piece));
-        row_off += r;
-    }
-    return out;
-}
-
-inline std::vector<Tensor> tensor_hcat_backward(
-        const Tensor& g, const std::vector<int64_t>& cols_per_input) {
-    std::vector<Tensor> out;
-    out.reserve(cols_per_input.size());
-    int64_t col_off = 0;
-    const int64_t rows = rows_of(g);
-    const int64_t total_cols = cols_of(g);
-    std::vector<float> gv(rows * total_cols, 0.f);
-    g.copy_to_host(gv.data(), gv.size());
-    for (int64_t c_count : cols_per_input) {
-        Tensor piece = Tensor::empty(Shape{rows, c_count}, g.device());
-        if (rows > 0 && c_count > 0) {
-            std::vector<float> pv(rows * c_count, 0.f);
-            for (int64_t r = 0; r < rows; ++r) {
-                for (int64_t c = 0; c < c_count; ++c) {
-                    pv[r + rows * c] = gv[r + rows * (col_off + c)];
-                }
-            }
-            piece.copy_from_host(pv.data(), pv.size());
-        }
-        out.push_back(std::move(piece));
-        col_off += c_count;
-    }
-    return out;
-}
-
-inline Tensor tensor_cumsum(const Tensor& a, int axis) {
-    require_rank2("cumsum", a);
-    if (axis != 0 && axis != 1) {
-        throw std::invalid_argument("cumsum: axis must be 0 or 1");
-    }
-    const int64_t R = rows_of(a);
-    const int64_t C = cols_of(a);
-    Tensor out = Tensor::empty(Shape{R, C}, a.device());
-    if (R == 0 || C == 0) return out;
-    std::vector<float> av(R * C, 0.f), ov(R * C, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    if (axis == 1) {
-        for (int64_t r = 0; r < R; ++r) {
-            float s = av[r + R * 0];
-            ov[r + R * 0] = s;
-            for (int64_t c = 1; c < C; ++c) {
-                s += av[r + R * c];
-                ov[r + R * c] = s;
-            }
-        }
-    } else {
-        for (int64_t c = 0; c < C; ++c) {
-            float s = av[0 + R * c];
-            ov[0 + R * c] = s;
-            for (int64_t r = 1; r < R; ++r) {
-                s += av[r + R * c];
-                ov[r + R * c] = s;
-            }
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_cumsum_backward(const Tensor& g, int axis) {
-    require_rank2("cumsum_backward", g);
-    const int64_t R = rows_of(g);
-    const int64_t C = cols_of(g);
-    Tensor out = Tensor::empty(Shape{R, C}, g.device());
-    if (R == 0 || C == 0) return out;
-    std::vector<float> gv(R * C, 0.f), ov(R * C, 0.f);
-    g.copy_to_host(gv.data(), gv.size());
-    if (axis == 1) {
-        for (int64_t r = 0; r < R; ++r) {
-            float s = gv[r + R * (C - 1)];
-            ov[r + R * (C - 1)] = s;
-            for (int64_t c = C - 2; c >= 0; --c) {
-                s += gv[r + R * c];
-                ov[r + R * c] = s;
-            }
-        }
-    } else {
-        for (int64_t c = 0; c < C; ++c) {
-            float s = gv[(R - 1) + R * c];
-            ov[(R - 1) + R * c] = s;
-            for (int64_t r = R - 2; r >= 0; --r) {
-                s += gv[r + R * c];
-                ov[r + R * c] = s;
-            }
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_flip(const Tensor& a, int axis) {
-    require_rank2("flip", a);
-    if (axis != 0 && axis != 1) {
-        throw std::invalid_argument("flip: axis must be 0 or 1");
-    }
-    const int64_t R = rows_of(a);
-    const int64_t C = cols_of(a);
-    Tensor out = Tensor::empty(Shape{R, C}, a.device());
-    if (R == 0 || C == 0) return out;
-    std::vector<float> av(R * C, 0.f), ov(R * C, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    if (axis == 1) {
-        // Reverse the column index inside each row.
-        for (int64_t r = 0; r < R; ++r) {
-            for (int64_t c = 0; c < C; ++c) {
-                ov[r + R * c] = av[r + R * (C - 1 - c)];
-            }
-        }
-    } else {
-        // Reverse the row index inside each column.
-        for (int64_t r = 0; r < R; ++r) {
-            for (int64_t c = 0; c < C; ++c) {
-                ov[r + R * c] = av[(R - 1 - r) + R * c];
-            }
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-// ── Activations and scalar functions ───────────────────────────────────
+// ── Activations and elementwise scalar functions ──────────────────────
 
 inline Tensor tensor_relu(const Tensor& a) {
     require_same_device("relu", a, a);
@@ -907,57 +528,6 @@ inline Tensor tensor_clamp_backward(const Tensor& g,
     return out;
 }
 
-inline Tensor tensor_broadcast_add(const Tensor& a, const Tensor& b) {
-    require_rank2("broadcast_add", a);
-    require_rank2("broadcast_add", b);
-    require_same_device("broadcast_add", a, b);
-    const int64_t R = rows_of(a);
-    const int64_t D = cols_of(a);
-    if (rows_of(b) != 1 || cols_of(b) != D) {
-        std::ostringstream os;
-        os << "broadcast_add: bias shape mismatch (got " << b.shape()
-           << ", want Shape{1, " << D << "})";
-        throw std::invalid_argument(os.str());
-    }
-    Tensor out = Tensor::empty(Shape{R, D}, a.device());
-    if (R * D == 0) return out;
-    std::vector<float> av(R * D, 0.f), bv(D, 0.f), ov(R * D, 0.f);
-    a.copy_to_host(av.data(), av.size());
-    b.copy_to_host(bv.data(), bv.size());
-    for (int64_t r = 0; r < R; ++r) {
-        for (int64_t c = 0; c < D; ++c) {
-            ov[r + R * c] = av[r + R * c] + bv[c];
-        }
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
-inline Tensor tensor_broadcast_add_backward_a(const Tensor& g) {
-    require_rank2("broadcast_add_backward_a", g);
-    return g.clone();
-}
-
-// Bias gradient: sum g over rows -> (1, D).
-inline Tensor tensor_broadcast_add_backward_b(const Tensor& g) {
-    require_rank2("broadcast_add_backward_b", g);
-    const int64_t R = rows_of(g);
-    const int64_t D = cols_of(g);
-    Tensor out = Tensor::empty(Shape{1, D}, g.device());
-    if (R * D == 0) return out;
-    std::vector<float> gv(R * D, 0.f), ov(D, 0.f);
-    g.copy_to_host(gv.data(), gv.size());
-    for (int64_t c = 0; c < D; ++c) {
-        float s = 0.f;
-        for (int64_t r = 0; r < R; ++r) {
-            s += gv[r + R * c];
-        }
-        ov[c] = s;
-    }
-    out.copy_from_host(ov.data(), ov.size());
-    return out;
-}
-
 inline Tensor tensor_sub(const Tensor& a, const Tensor& b) {
     require_same_shape("sub", a, b);
     require_same_device("sub", a, b);
@@ -1033,132 +603,1085 @@ inline Tensor tensor_div_backward_b(const Tensor& g,
     return out;
 }
 
-// ── Row reductions (softmax / log_softmax / mean bias) ────────────────
+// ── N-D ops (rank-agnostic) ─────────────────────────────────────────────
+//
+// Storage remains first-axis contiguous: stride[0] = 1,
+// stride[i] = stride[i-1] * D[i-1]. Rank-2 therefore preserves the
+// legacy column-major layout.
 
-// Per-row softmax on a rank-2 input. The reduced-max-per-row trick is
-// applied for numerical stability. Output Tensor has the same shape as
-// a; saved_softmax holds the post-softmax matrix for backward.
-inline Tensor tensor_softmax(const Tensor& a, Tensor& saved_softmax) {
-    require_rank2("softmax", a);
-    const int64_t R = rows_of(a);
-    const int64_t C = cols_of(a);
-    Tensor out = Tensor::empty(Shape{R, C}, a.device());
-    saved_softmax = Tensor::empty(Shape{R, C}, a.device());
-    if (R * C == 0) return out;
-    std::vector<float> av(R * C, 0.f), sv(R * C, 0.f), ov(R * C, 0.f);
+// softmax_nd: per-row-equivalent reduce along an arbitrary axis. The
+// shape of the output equals the shape of `a`. saved_softmax stores
+// the post-softmax tensor for backward.
+inline Tensor tensor_softmax_nd(const Tensor& a, int axis,
+                                Tensor& saved_softmax) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "softmax");
+    Tensor out = Tensor::empty(s, a.device());
+    saved_softmax = Tensor::empty(s, a.device());
+    if (a.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> av(a.elements()), ov(a.elements()), sv(a.elements());
     a.copy_to_host(av.data(), av.size());
 
-    std::vector<float> maxvals(R, 0.f);
-    for (int64_t r = 0; r < R; ++r) {
-        float m = av[r + R * 0];
-        for (int64_t c = 1; c < C; ++c) {
-            const float v = av[r + R * c];
-            if (v > m) m = v;
-        }
-        maxvals[r] = m;
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
     }
-    for (int64_t r = 0; r < R; ++r) {
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float maxval = -std::numeric_limits<float>::infinity();
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const float v = av[base + k * inner_stride];
+            if (v > maxval) maxval = v;
+        }
         float denom = 0.f;
-        for (int64_t c = 0; c < C; ++c) {
-            const float e = std::exp(av[r + R * c] - maxvals[r]);
-            sv[r + R * c] = e;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            const float e = std::exp(av[off] - maxval);
+            sv[off] = e;
             denom += e;
         }
-        const float inv_denom = 1.f / denom;
-        for (int64_t c = 0; c < C; ++c) {
-            ov[r + R * c] = sv[r + R * c] * inv_denom;
+        const float inv = 1.f / denom;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            ov[off] = sv[off] * inv;
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
         }
     }
+
     out.copy_from_host(ov.data(), ov.size());
     saved_softmax.copy_from_host(ov.data(), ov.size());
     return out;
 }
 
-inline Tensor tensor_softmax_backward(const Tensor& g,
-                                      const Tensor& saved_softmax) {
-    require_same_shape("softmax_backward", g, saved_softmax);
-    require_rank2("softmax_backward", g);
-    const int64_t R = rows_of(g);
-    const int64_t C = cols_of(g);
-    Tensor out = Tensor::empty(Shape{R, C}, g.device());
-    if (R * C == 0) return out;
-    std::vector<float> gv(R * C, 0.f), sv(R * C, 0.f), ov(R * C, 0.f);
+inline Tensor tensor_softmax_backward_nd(const Tensor& g,
+                                         const Tensor& saved_softmax,
+                                         int axis) {
+    const Shape& s = g.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "softmax_backward");
+    Tensor out = Tensor::empty(s, g.device());
+    if (g.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> gv(g.elements()), sv(g.elements()), ov(g.elements());
     g.copy_to_host(gv.data(), gv.size());
     saved_softmax.copy_to_host(sv.data(), sv.size());
 
-    std::vector<float> dot(R, 0.f);
-    for (int64_t r = 0; r < R; ++r) {
-        float s = 0.f;
-        for (int64_t c = 0; c < C; ++c) {
-            s += gv[r + R * c] * sv[r + R * c];
-        }
-        dot[r] = s;
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
     }
-    for (int64_t r = 0; r < R; ++r) {
-        for (int64_t c = 0; c < C; ++c) {
-            const float sm = sv[r + R * c];
-            ov[r + R * c] = sm * (gv[r + R * c] - dot[r]);
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float dot = 0.f;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            dot += gv[off] * sv[off];
+        }
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            ov[off] = sv[off] * (gv[off] - dot);
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
         }
     }
+
     out.copy_from_host(ov.data(), ov.size());
     return out;
 }
 
-inline Tensor tensor_log_softmax(const Tensor& a, Tensor& saved_lsm) {
-    require_rank2("log_softmax", a);
-    const int64_t R = rows_of(a);
-    const int64_t C = cols_of(a);
-    Tensor out = Tensor::empty(Shape{R, C}, a.device());
-    saved_lsm = Tensor::empty(Shape{R, C}, a.device());
-    if (R * C == 0) return out;
-    std::vector<float> av(R * C, 0.f), lv(R * C, 0.f), ov(R * C, 0.f);
+inline Tensor tensor_log_softmax_nd(const Tensor& a, int axis,
+                                    Tensor& saved_lsm) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "log_softmax");
+    Tensor out = Tensor::empty(s, a.device());
+    saved_lsm = Tensor::empty(s, a.device());
+    if (a.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> av(a.elements()), ov(a.elements()), lv(a.elements());
     a.copy_to_host(av.data(), av.size());
 
-    for (int64_t r = 0; r < R; ++r) {
-        float m = av[r + R * 0];
-        for (int64_t c = 1; c < C; ++c) {
-            const float v = av[r + R * c];
-            if (v > m) m = v;
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float maxval = av[base];
+        for (int64_t k = 1; k < inner_dim; ++k) {
+            const float v = av[base + k * inner_stride];
+            if (v > maxval) maxval = v;
         }
         float denom = 0.f;
-        for (int64_t c = 0; c < C; ++c) {
-            denom += std::exp(av[r + R * c] - m);
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            denom += std::exp(av[base + k * inner_stride] - maxval);
         }
-        const float log_sum = m + std::log(denom);
-        for (int64_t c = 0; c < C; ++c) {
-            lv[r + R * c] = av[r + R * c] - log_sum;
-            ov[r + R * c] = lv[r + R * c];
+        const float log_sum = maxval + std::log(denom);
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            const float v = av[off] - log_sum;
+            lv[off] = v;
+            ov[off] = v;
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
         }
     }
+
     out.copy_from_host(ov.data(), ov.size());
     saved_lsm.copy_from_host(lv.data(), lv.size());
     return out;
 }
 
-inline Tensor tensor_log_softmax_backward(const Tensor& g,
-                                          const Tensor& saved_lsm) {
-    require_same_shape("log_softmax_backward", g, saved_lsm);
-    require_rank2("log_softmax_backward", g);
-    const int64_t R = rows_of(g);
-    const int64_t C = cols_of(g);
-    Tensor out = Tensor::empty(Shape{R, C}, g.device());
-    if (R * C == 0) return out;
-    std::vector<float> gv(R * C, 0.f), lv(R * C, 0.f), ov(R * C, 0.f);
+inline Tensor tensor_log_softmax_backward_nd(const Tensor& g,
+                                             const Tensor& saved_lsm,
+                                             int axis) {
+    const Shape& s = g.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "log_softmax_backward");
+    Tensor out = Tensor::empty(s, g.device());
+    if (g.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> gv(g.elements()), lv(g.elements()), ov(g.elements());
     g.copy_to_host(gv.data(), gv.size());
     saved_lsm.copy_to_host(lv.data(), lv.size());
 
-    std::vector<float> row_sum(R, 0.f);
-    for (int64_t r = 0; r < R; ++r) {
-        float s = 0.f;
-        for (int64_t c = 0; c < C; ++c) {
-            s += gv[r + R * c];
-        }
-        row_sum[r] = s;
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
     }
-    for (int64_t r = 0; r < R; ++r) {
-        for (int64_t c = 0; c < C; ++c) {
-            const float sm = std::exp(lv[r + R * c]);
-            ov[r + R * c] = gv[r + R * c] - sm * row_sum[r];
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float row_sum = 0.f;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            row_sum += gv[base + k * inner_stride];
+        }
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            const float sm = std::exp(lv[off]);
+            ov[off] = gv[off] - sm * row_sum;
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_cumsum_nd(const Tensor& a, int axis) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "cumsum");
+    Tensor out = Tensor::empty(s, a.device());
+    if (a.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> av(a.elements()), ov(a.elements());
+    a.copy_to_host(av.data(), av.size());
+
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        if (inner_dim > 0) {
+            float acc = av[base];
+            ov[base] = acc;
+            for (int64_t k = 1; k < inner_dim; ++k) {
+                const int64_t off = base + k * inner_stride;
+                acc += av[off];
+                ov[off] = acc;
+            }
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_cumsum_backward_nd(const Tensor& g, int axis) {
+    const Shape& s = g.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "cumsum_backward");
+    Tensor out = Tensor::empty(s, g.device());
+    if (g.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> gv(g.elements()), ov(g.elements());
+    g.copy_to_host(gv.data(), gv.size());
+
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        if (inner_dim > 0) {
+            float acc = gv[base + (inner_dim - 1) * inner_stride];
+            ov[base + (inner_dim - 1) * inner_stride] = acc;
+            for (int64_t k = inner_dim - 2; k >= 0; --k) {
+                const int64_t off = base + k * inner_stride;
+                acc += gv[off];
+                ov[off] = acc;
+            }
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_flip_nd(const Tensor& a, int axis) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "flip");
+    Tensor out = Tensor::empty(s, a.device());
+    if (a.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> av(a.elements()), ov(a.elements());
+    a.copy_to_host(av.data(), av.size());
+
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t dst = base + k * inner_stride;
+            const int64_t src = base + (inner_dim - 1 - k) * inner_stride;
+            ov[dst] = av[src];
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_transpose_nd(const Tensor& a, int axis0, int axis1) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    int ax0 = normalize_axis(axis0, rank, "transpose");
+    int ax1 = normalize_axis(axis1, rank, "transpose");
+    if (ax0 == ax1) return a.clone();
+    Dims out_sizes(s.sizes.begin(), s.sizes.end());
+    std::swap(out_sizes[ax0], out_sizes[ax1]);
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, a.device());
+    if (a.elements() == 0) return out;
+
+    const std::vector<int64_t> in_strides = contiguous_strides(s);
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+
+    std::vector<float> av(a.elements()), ov(a.elements());
+    a.copy_to_host(av.data(), av.size());
+
+    std::vector<int64_t> out_idx(rank, 0);
+    std::vector<int64_t> in_idx(rank, 0);
+    const int64_t total = a.elements();
+    for (int64_t flat = 0; flat < total; ++flat) {
+        for (int i = 0; i < rank; ++i) in_idx[i] = out_idx[i];
+        std::swap(in_idx[ax0], in_idx[ax1]);
+        const int64_t in_off = linear_offset(in_idx, in_strides);
+        const int64_t out_off = linear_offset(out_idx, out_strides);
+        ov[out_off] = av[in_off];
+        for (int i = rank - 1; i >= 0; --i) {
+            if (++out_idx[i] < out_sizes[i]) break;
+            out_idx[i] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_concat_nd(const std::vector<Tensor>& inputs, int axis) {
+    if (inputs.empty()) {
+        throw std::invalid_argument("concat: requires at least one input");
+    }
+    const Shape& first = inputs[0].shape();
+    const int rank = static_cast<int>(first.rank());
+    const int ax = normalize_axis(axis, rank, "concat");
+    Dims out_sizes(first.sizes.begin(), first.sizes.end());
+    int64_t total = 0;
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+        if (inputs[i].device() != inputs[0].device()) {
+            throw std::invalid_argument("concat: device mismatch");
+        }
+        if (inputs[i].shape().rank() != static_cast<std::size_t>(rank)) {
+            std::ostringstream os;
+            os << "concat: rank mismatch at input " << i
+               << " (input rank " << inputs[i].shape().rank()
+               << " vs expected " << rank << ")";
+            throw std::invalid_argument(os.str());
+        }
+        for (int d = 0; d < rank; ++d) {
+            if (d == ax) continue;
+            if (inputs[i].shape()[d] != first[d]) {
+                std::ostringstream os;
+                os << "concat: dim " << d << " mismatch at input " << i
+                   << " (have " << inputs[i].shape()[d]
+                   << ", want " << first[d] << ")";
+                throw std::invalid_argument(os.str());
+            }
+        }
+        total = checked_dim_sum("concat", total, inputs[i].shape()[ax]);
+    }
+    out_sizes[ax] = total;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, inputs[0].device());
+    if (out.elements() == 0) return out;
+
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+    std::vector<float> ov(out.elements());
+    int64_t ax_offset = 0;
+    for (const auto& t : inputs) {
+        const int64_t along = t.shape()[ax];
+        if (along == 0) continue;
+        const std::vector<int64_t> in_strides =
+            contiguous_strides(t.shape());
+        std::vector<float> tv(t.elements());
+        t.copy_to_host(tv.data(), tv.size());
+        // For each outer position, copy along the axis.
+        std::vector<int64_t> outer_idx;
+        outer_idx.reserve(rank - 1);
+        for (int d = 0; d < rank; ++d) {
+            if (d != ax) outer_idx.push_back(out_sizes[d]);
+        }
+        int64_t outer_numel = 1;
+        for (int64_t d : outer_idx) outer_numel *= d;
+        std::vector<int64_t> outer(rank - 1, 0);
+        for (int64_t o = 0; o < outer_numel; ++o) {
+            int64_t in_base = 0;
+            int64_t out_base = 0;
+            int j = 0;
+            for (int d = 0; d < rank; ++d) {
+                if (d == ax) continue;
+                in_base += outer[j] * in_strides[d];
+                out_base += outer[j] * out_strides[d];
+                ++j;
+            }
+            for (int64_t k = 0; k < along; ++k) {
+                const int64_t in_off = in_base + k * in_strides[ax];
+                const int64_t out_off =
+                    out_base + (ax_offset + k) * out_strides[ax];
+                ov[out_off] = tv[in_off];
+            }
+            for (int j = static_cast<int>(outer.size()) - 1; j >= 0; --j) {
+                if (++outer[j] < outer_idx[j]) break;
+                outer[j] = 0;
+            }
+        }
+        ax_offset += along;
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_slice_nd(const Tensor& a, int axis,
+                              int64_t start, int64_t len) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = normalize_axis(axis, rank, "slice");
+    if (start < 0 || len <= 0 || start > s[ax] || len > s[ax] - start) {
+        std::ostringstream os;
+        os << "slice: out of range (axis " << ax << " dim " << s[ax]
+           << ", start " << start << ", len " << len << ")";
+        throw std::invalid_argument(os.str());
+    }
+    Dims out_sizes(s.sizes.begin(), s.sizes.end());
+    out_sizes[ax] = len;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, a.device());
+    if (out.elements() == 0) return out;
+
+    const std::vector<int64_t> in_strides = contiguous_strides(s);
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+    std::vector<float> av(a.elements()), ov(out.elements());
+    a.copy_to_host(av.data(), av.size());
+
+    std::vector<int64_t> outer_idx;
+    outer_idx.reserve(rank - 1);
+    for (int d = 0; d < rank; ++d) {
+        if (d != ax) outer_idx.push_back(s.sizes[d]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_idx) outer_numel *= d;
+
+    std::vector<int64_t> outer(rank - 1, 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t in_base = 0;
+        int64_t out_base = 0;
+        int j = 0;
+        for (int d = 0; d < rank; ++d) {
+            if (d == ax) continue;
+            in_base += outer[j] * in_strides[d];
+            out_base += outer[j] * out_strides[d];
+            ++j;
+        }
+        for (int64_t k = 0; k < len; ++k) {
+            const int64_t in_off = in_base + (start + k) * in_strides[ax];
+            const int64_t out_off = out_base + k * out_strides[ax];
+            ov[out_off] = av[in_off];
+        }
+        for (int j = static_cast<int>(outer.size()) - 1; j >= 0; --j) {
+            if (++outer[j] < outer_idx[j]) break;
+            outer[j] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+// Scatter g (same shape as slice output) into a zero tensor of input
+// shape along the given axis at [start, start+len).
+inline Tensor tensor_slice_backward_nd(const Tensor& g,
+                                       const Shape& input_shape,
+                                       int axis, int64_t start,
+                                       int64_t len) {
+    const int rank = static_cast<int>(input_shape.rank());
+    const int ax = normalize_axis(axis, rank, "slice_backward");
+    Tensor out = Tensor::zeros(input_shape, g.device());
+    if (out.elements() == 0) return out;
+
+    const std::vector<int64_t> out_strides = contiguous_strides(input_shape);
+    const std::vector<int64_t> g_strides = contiguous_strides([&]() {
+        Dims gdims(input_shape.sizes.begin(), input_shape.sizes.end());
+        gdims[ax] = len;
+        return Shape(gdims);
+    }());
+
+    std::vector<float> gv(g.elements()), ov(out.elements());
+    g.copy_to_host(gv.data(), gv.size());
+
+    std::vector<int64_t> outer_idx;
+    outer_idx.reserve(rank - 1);
+    for (int d = 0; d < rank; ++d) {
+        if (d != ax) outer_idx.push_back(input_shape.sizes[d]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_idx) outer_numel *= d;
+
+    std::vector<int64_t> outer(rank - 1, 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t out_base = 0;
+        int64_t g_base = 0;
+        int j = 0;
+        for (int d = 0; d < rank; ++d) {
+            if (d == ax) continue;
+            out_base += outer[j] * out_strides[d];
+            g_base += outer[j] * g_strides[d];
+            ++j;
+        }
+        for (int64_t k = 0; k < len; ++k) {
+            const int64_t out_off = out_base + (start + k) * out_strides[ax];
+            const int64_t g_off = g_base + k * g_strides[ax];
+            ov[out_off] = gv[g_off];
+        }
+        for (int j = static_cast<int>(outer.size()) - 1; j >= 0; --j) {
+            if (++outer[j] < outer_idx[j]) break;
+            outer[j] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline std::vector<Tensor> tensor_concat_backward_nd(
+        const Tensor& g, const std::vector<int64_t>& along_per_input,
+        const std::vector<Shape>& input_shapes, int axis) {
+    if (input_shapes.empty()) {
+        throw std::invalid_argument("concat_backward: empty inputs");
+    }
+    const int rank = static_cast<int>(input_shapes[0].rank());
+    const int ax = normalize_axis(axis, rank, "concat_backward");
+    if (along_per_input.size() != input_shapes.size()) {
+        throw std::invalid_argument(
+            "concat_backward: along/size count mismatch");
+    }
+    std::vector<Tensor> out;
+    out.reserve(input_shapes.size());
+    const std::vector<int64_t> g_strides = contiguous_strides(g.shape());
+    std::vector<float> gv(g.elements());
+    g.copy_to_host(gv.data(), gv.size());
+    int64_t ax_offset = 0;
+    for (std::size_t i = 0; i < input_shapes.size(); ++i) {
+        const int64_t along = along_per_input[i];
+        Tensor piece = Tensor::empty(input_shapes[i], g.device());
+        if (along > 0 && piece.elements() > 0) {
+            const std::vector<int64_t> p_strides =
+                contiguous_strides(input_shapes[i]);
+            std::vector<float> pv(piece.elements());
+            std::vector<int64_t> outer_idx;
+            outer_idx.reserve(rank - 1);
+            for (int d = 0; d < rank; ++d) {
+                if (d != ax) outer_idx.push_back(input_shapes[i][d]);
+            }
+            int64_t outer_numel = 1;
+            for (int64_t d : outer_idx) outer_numel *= d;
+            std::vector<int64_t> outer(rank - 1, 0);
+            for (int64_t o = 0; o < outer_numel; ++o) {
+                int64_t g_base = 0;
+                int64_t p_base = 0;
+                int j = 0;
+                for (int d = 0; d < rank; ++d) {
+                    if (d == ax) continue;
+                    g_base += outer[j] * g_strides[d];
+                    p_base += outer[j] * p_strides[d];
+                    ++j;
+                }
+                for (int64_t k = 0; k < along; ++k) {
+                    const int64_t g_off =
+                        g_base + (ax_offset + k) * g_strides[ax];
+                    const int64_t p_off = p_base + k * p_strides[ax];
+                    pv[p_off] = gv[g_off];
+                }
+                for (int j = static_cast<int>(outer.size()) - 1; j >= 0; --j) {
+                    if (++outer[j] < outer_idx[j]) break;
+                    outer[j] = 0;
+                }
+            }
+            piece.copy_from_host(pv.data(), pv.size());
+        }
+        out.push_back(std::move(piece));
+        ax_offset += along;
+    }
+    return out;
+}
+
+// sum_axes_nd: reduce along the given axes. Returns output shape with
+// reduced dims removed (keep_dims=false) or kept as 1s (keep_dims=true).
+inline Tensor tensor_sum_axes_nd(const Tensor& a,
+                                 const std::vector<int>& axes_in,
+                                 bool keep_dims) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const std::vector<int> axes = normalize_axes(axes_in, rank, "sum");
+    std::vector<bool> is_reduced(rank, false);
+    for (int axis : axes) is_reduced[axis] = true;
+
+    Dims out_sizes;
+    out_sizes.reserve(keep_dims ? rank : rank - axes.size());
+    for (int i = 0; i < rank; ++i) {
+        if (!is_reduced[i]) {
+            out_sizes.push_back(s.sizes[i]);
+        } else if (keep_dims) {
+            out_sizes.push_back(1);
+        }
+    }
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::zeros(out_shape, a.device());
+    if (out.elements() == 0 || a.elements() == 0) return out;
+
+    const std::vector<int64_t> in_strides = contiguous_strides(s);
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+    std::vector<float> av(a.elements()), ov(out.elements(), 0.f);
+    a.copy_to_host(av.data(), av.size());
+
+    std::vector<int64_t> in_idx(rank, 0);
+    const int64_t in_total = a.elements();
+    for (int64_t count = 0; count < in_total; ++count) {
+        int64_t out_off = 0;
+        int out_axis = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (is_reduced[i]) {
+                if (keep_dims) ++out_axis;
+            } else {
+                out_off += in_idx[i] * out_strides[out_axis++];
+            }
+        }
+        ov[out_off] += av[linear_offset(in_idx, in_strides)];
+        increment_index(in_idx, s);
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+// sum_axes_backward_nd: expand upstream gradient to the input shape.
+// For axes with keep_dims=false, the upstream dim was removed, so we
+// expand it to 1 along that axis before broadcasting.
+inline Tensor tensor_sum_axes_backward_nd(const Tensor& g,
+                                          const Shape& input_shape,
+                                          const std::vector<int>& axes_in,
+                                          bool keep_dims) {
+    const int rank = static_cast<int>(input_shape.rank());
+    const std::vector<int> axes = normalize_axes(axes_in, rank, "sum_backward");
+    std::vector<bool> is_reduced(rank, false);
+    for (int axis : axes) is_reduced[axis] = true;
+    Tensor out = Tensor::empty(input_shape, g.device());
+    if (out.elements() == 0) return out;
+    const std::vector<int64_t> out_strides =
+        contiguous_strides(input_shape);
+    const std::vector<int64_t> g_strides = contiguous_strides(g.shape());
+    std::vector<float> gv(g.elements()), ov(out.elements());
+    g.copy_to_host(gv.data(), gv.size());
+
+    std::vector<int64_t> out_idx(rank, 0);
+    const int64_t total = out.elements();
+    for (int64_t count = 0; count < total; ++count) {
+        int64_t g_off = 0;
+        int g_axis = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (is_reduced[i]) {
+                if (keep_dims) ++g_axis;
+            } else {
+                g_off += out_idx[i] * g_strides[g_axis++];
+            }
+        }
+        ov[linear_offset(out_idx, out_strides)] = gv[g_off];
+        increment_index(out_idx, input_shape);
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+// broadcast_add_nd: symmetric trailing-axis broadcasting.
+inline Tensor tensor_broadcast_add_nd(const Tensor& a, const Tensor& b) {
+    if (a.device() != b.device()) {
+        throw std::invalid_argument("broadcast_add: device mismatch");
+    }
+    const Shape& sa = a.shape();
+    const Shape& sb = b.shape();
+    const int rank_a = static_cast<int>(sa.rank());
+    const int rank_b = static_cast<int>(sb.rank());
+    const int out_rank = std::max(rank_a, rank_b);
+    Dims out_sizes(out_rank, 1);
+    for (int d = 0; d < out_rank; ++d) {
+        const int ai = d - (out_rank - rank_a);
+        const int bi = d - (out_rank - rank_b);
+        const int64_t ad = ai < 0 ? 1 : sa[ai];
+        const int64_t bd = bi < 0 ? 1 : sb[bi];
+        if (ad != bd && ad != 1 && bd != 1) {
+            std::ostringstream os;
+            os << "broadcast_add: dimension mismatch (" << sa
+               << " vs " << sb << ")";
+            throw std::invalid_argument(os.str());
+        }
+        out_sizes[d] = ad == 1 ? bd : ad;
+    }
+    const Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, a.device());
+    if (out.elements() == 0) return out;
+
+    const std::vector<int64_t> a_strides = contiguous_strides(sa);
+    const std::vector<int64_t> b_strides = contiguous_strides(sb);
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+    std::vector<float> av(a.elements()), bv(b.elements()), ov(out.elements());
+    a.copy_to_host(av.data(), av.size());
+    b.copy_to_host(bv.data(), bv.size());
+
+    std::vector<int64_t> out_idx(out_rank, 0);
+    for (std::size_t count = 0; count < out.elements(); ++count) {
+        int64_t a_off = 0;
+        int64_t b_off = 0;
+        for (int d = 0; d < out_rank; ++d) {
+            const int ai = d - (out_rank - rank_a);
+            const int bi = d - (out_rank - rank_b);
+            if (ai >= 0 && sa[ai] != 1) {
+                a_off += out_idx[d] * a_strides[ai];
+            }
+            if (bi >= 0 && sb[bi] != 1) {
+                b_off += out_idx[d] * b_strides[bi];
+            }
+        }
+        ov[linear_offset(out_idx, out_strides)] = av[a_off] + bv[b_off];
+        increment_index(out_idx, out_shape);
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_broadcast_add_backward_nd(const Tensor& g,
+                                               const Shape& input_shape) {
+    const Shape& output_shape = g.shape();
+    const int out_rank = static_cast<int>(output_shape.rank());
+    const int in_rank = static_cast<int>(input_shape.rank());
+    if (in_rank > out_rank) {
+        throw std::invalid_argument("broadcast_add_backward: rank mismatch");
+    }
+    Tensor out = Tensor::zeros(input_shape, g.device());
+    if (out.elements() == 0 || g.elements() == 0) return out;
+    const std::vector<int64_t> g_strides =
+        contiguous_strides(output_shape);
+    const std::vector<int64_t> out_strides =
+        contiguous_strides(input_shape);
+    std::vector<float> gv(g.elements()), ov(out.elements(), 0.f);
+    g.copy_to_host(gv.data(), gv.size());
+
+    std::vector<int64_t> g_idx(out_rank, 0);
+    for (std::size_t count = 0; count < g.elements(); ++count) {
+        int64_t in_off = 0;
+        for (int d = 0; d < in_rank; ++d) {
+            const int gd = out_rank - in_rank + d;
+            if (input_shape[d] != 1) {
+                in_off += g_idx[gd] * out_strides[d];
+            }
+        }
+        ov[in_off] += gv[linear_offset(g_idx, g_strides)];
+        increment_index(g_idx, output_shape);
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+// matmul_nd: rank >= 2 with last two axes as matrix dims and identical
+// leading batch dims. Numerically identical to the 2-D kernel: for each
+// batch, d_out = a @ b.
+inline Tensor tensor_matmul_nd(const Tensor& a, const Tensor& b) {
+    if (a.device() != b.device()) {
+        throw std::invalid_argument("matmul: device mismatch");
+    }
+    const Shape& sa = a.shape();
+    const Shape& sb = b.shape();
+    const int rank_a = static_cast<int>(sa.rank());
+    const int rank_b = static_cast<int>(sb.rank());
+    if (rank_a < 2 || rank_b < 2) {
+        std::ostringstream os;
+        os << "matmul: requires rank >= 2 (got " << sa << " vs " << sb << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (rank_a != rank_b) {
+        std::ostringstream os;
+        os << "matmul: rank mismatch (" << sa << " vs " << sb << ")";
+        throw std::invalid_argument(os.str());
+    }
+    const int64_t M = sa[rank_a - 2];
+    const int64_t K = sa[rank_a - 1];
+    const int64_t K2 = sb[rank_b - 2];
+    const int64_t N = sb[rank_b - 1];
+    if (K != K2) {
+        std::ostringstream os;
+        os << "matmul: inner dimensions mismatch ("
+           << sa << " vs " << sb << ")";
+        throw std::invalid_argument(os.str());
+    }
+    for (int d = 0; d < rank_a - 2; ++d) {
+        if (sa[d] != sb[d]) {
+            std::ostringstream os;
+            os << "matmul: batch dim " << d << " mismatch ("
+               << sa[d] << " vs " << sb[d] << ")";
+            throw std::invalid_argument(os.str());
+        }
+    }
+    Dims out_sizes(sa.sizes.begin(), sa.sizes.end());
+    out_sizes[rank_a - 2] = M;
+    out_sizes[rank_a - 1] = N;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, a.device());
+    if (out.elements() == 0) return out;
+
+    int64_t batch = 1;
+    for (int d = 0; d < rank_a - 2; ++d) batch *= sa[d];
+
+    const std::vector<int64_t> a_strides = contiguous_strides(sa);
+    const std::vector<int64_t> b_strides = contiguous_strides(sb);
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+    std::vector<float> av(a.elements()), bv(b.elements()), ov(out.elements());
+    a.copy_to_host(av.data(), av.size());
+    b.copy_to_host(bv.data(), bv.size());
+
+    std::vector<int64_t> batch_idx(rank_a - 2, 0);
+    for (int64_t b = 0; b < batch; ++b) {
+        int64_t a_base = 0;
+        int64_t b_base = 0;
+        int64_t out_base = 0;
+        for (int d = 0; d < rank_a - 2; ++d) {
+            a_base += batch_idx[d] * a_strides[d];
+            b_base += batch_idx[d] * b_strides[d];
+            out_base += batch_idx[d] * out_strides[d];
+        }
+        for (int64_t m = 0; m < M; ++m) {
+            for (int64_t n = 0; n < N; ++n) {
+                float s = 0.f;
+                for (int64_t k = 0; k < K; ++k) {
+                    s += av[a_base + m * a_strides[rank_a - 2]
+                               + k * a_strides[rank_a - 1]]
+                       * bv[b_base + k * b_strides[rank_b - 2]
+                               + n * b_strides[rank_b - 1]];
+                }
+                ov[out_base + m * out_strides[rank_a - 2]
+                            + n * out_strides[rank_a - 1]] = s;
+            }
+        }
+        for (int d = rank_a - 3; d >= 0; --d) {
+            if (++batch_idx[d] < sa[d]) break;
+            batch_idx[d] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_matmul_backward_a_nd(const Tensor& g,
+                                          const Tensor& b) {
+    // d_a = g @ b_swap_last2. Validate shapes:
+    // g.shape = (..., M, N); b.shape = (..., K, N).
+    const Shape& sg = g.shape();
+    const Shape& sb = b.shape();
+    const int rank_g = static_cast<int>(sg.rank());
+    const int rank_b = static_cast<int>(sb.rank());
+    if (rank_g < 2 || rank_b < 2) {
+        throw std::invalid_argument(
+            "matmul_backward_a: requires rank >= 2");
+    }
+    if (rank_g != rank_b) {
+        throw std::invalid_argument("matmul_backward_a: rank mismatch");
+    }
+    const int64_t M = sg[rank_g - 2];
+    const int64_t N = sg[rank_g - 1];
+    const int64_t K = sb[rank_b - 2];
+    if (N != sb[rank_b - 1]) {
+        throw std::invalid_argument(
+            "matmul_backward_a: g/b inner mismatch");
+    }
+    for (int d = 0; d < rank_g - 2; ++d) {
+        if (sg[d] != sb[d]) {
+            throw std::invalid_argument("matmul_backward_a: batch mismatch");
+        }
+    }
+    Dims out_sizes(sg.sizes.begin(), sg.sizes.end());
+    out_sizes[rank_g - 1] = K;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, g.device());
+    if (out.elements() == 0) return out;
+
+    int64_t batch = 1;
+    for (int d = 0; d < rank_g - 2; ++d) batch *= sg[d];
+
+    const std::vector<int64_t> g_strides = contiguous_strides(sg);
+    const std::vector<int64_t> b_strides = contiguous_strides(sb);
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+    std::vector<float> gv(g.elements()), bv(b.elements()), ov(out.elements());
+    g.copy_to_host(gv.data(), gv.size());
+    b.copy_to_host(bv.data(), bv.size());
+
+    std::vector<int64_t> batch_idx(rank_g - 2, 0);
+    for (int64_t b = 0; b < batch; ++b) {
+        int64_t g_base = 0, b_base = 0, out_base = 0;
+        for (int d = 0; d < rank_g - 2; ++d) {
+            g_base += batch_idx[d] * g_strides[d];
+            b_base += batch_idx[d] * b_strides[d];
+            out_base += batch_idx[d] * out_strides[d];
+        }
+        for (int64_t m = 0; m < M; ++m) {
+            for (int64_t k = 0; k < K; ++k) {
+                float s = 0.f;
+                for (int64_t n = 0; n < N; ++n) {
+                    s += gv[g_base + m * g_strides[rank_g - 2]
+                               + n * g_strides[rank_g - 1]]
+                       * bv[b_base + k * b_strides[rank_b - 2]
+                               + n * b_strides[rank_b - 1]];
+                }
+                ov[out_base + m * out_strides[rank_g - 2]
+                            + k * out_strides[rank_g - 1]] = s;
+            }
+        }
+        for (int d = rank_g - 3; d >= 0; --d) {
+            if (++batch_idx[d] < sg[d]) break;
+            batch_idx[d] = 0;
+        }
+    }
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+inline Tensor tensor_matmul_backward_b_nd(const Tensor& a,
+                                          const Tensor& g) {
+    // d_b = a_swap_last2 @ g. a.shape = (..., M, K); g.shape = (..., M, N).
+    const Shape& sa = a.shape();
+    const Shape& sg = g.shape();
+    const int rank_a = static_cast<int>(sa.rank());
+    const int rank_g = static_cast<int>(sg.rank());
+    if (rank_a < 2 || rank_g < 2) {
+        throw std::invalid_argument(
+            "matmul_backward_b: requires rank >= 2");
+    }
+    if (rank_a != rank_g) {
+        throw std::invalid_argument("matmul_backward_b: rank mismatch");
+    }
+    const int64_t M = sa[rank_a - 2];
+    const int64_t K = sa[rank_a - 1];
+    const int64_t N = sg[rank_g - 1];
+    if (sg[rank_g - 2] != M) {
+        throw std::invalid_argument(
+            "matmul_backward_b: a/g inner mismatch");
+    }
+    for (int d = 0; d < rank_a - 2; ++d) {
+        if (sa[d] != sg[d]) {
+            throw std::invalid_argument("matmul_backward_b: batch mismatch");
+        }
+    }
+    Dims out_sizes(sa.sizes.begin(), sa.sizes.end());
+    out_sizes[rank_a - 2] = K;
+    out_sizes[rank_a - 1] = N;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, g.device());
+    if (out.elements() == 0) return out;
+
+    int64_t batch = 1;
+    for (int d = 0; d < rank_a - 2; ++d) batch *= sa[d];
+
+    const std::vector<int64_t> a_strides = contiguous_strides(sa);
+    const std::vector<int64_t> g_strides = contiguous_strides(sg);
+    const std::vector<int64_t> out_strides = contiguous_strides(out_shape);
+    std::vector<float> av(a.elements()), gv(g.elements()), ov(out.elements());
+    a.copy_to_host(av.data(), av.size());
+    g.copy_to_host(gv.data(), gv.size());
+
+    std::vector<int64_t> batch_idx(rank_a - 2, 0);
+    for (int64_t b = 0; b < batch; ++b) {
+        int64_t a_base = 0, g_base = 0, out_base = 0;
+        for (int d = 0; d < rank_a - 2; ++d) {
+            a_base += batch_idx[d] * a_strides[d];
+            g_base += batch_idx[d] * g_strides[d];
+            out_base += batch_idx[d] * out_strides[d];
+        }
+        for (int64_t k = 0; k < K; ++k) {
+            for (int64_t n = 0; n < N; ++n) {
+                float s = 0.f;
+                for (int64_t m = 0; m < M; ++m) {
+                    s += av[a_base + m * a_strides[rank_a - 2]
+                               + k * a_strides[rank_a - 1]]
+                       * gv[g_base + m * g_strides[rank_g - 2]
+                               + n * g_strides[rank_g - 1]];
+                }
+                ov[out_base + k * out_strides[rank_a - 2]
+                            + n * out_strides[rank_a - 1]] = s;
+            }
+        }
+        for (int d = rank_a - 3; d >= 0; --d) {
+            if (++batch_idx[d] < sa[d]) break;
+            batch_idx[d] = 0;
         }
     }
     out.copy_from_host(ov.data(), ov.size());

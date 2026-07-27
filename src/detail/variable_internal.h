@@ -17,6 +17,7 @@ enum class OpKind {
     Mul,
     Scale,
     Sum,
+    SumAxes,
     MatMul,
     ReLU,
     BroadcastAdd,
@@ -25,7 +26,6 @@ enum class OpKind {
     Transpose,
     Reshape,
     Concat,
-    HCat,
     Sigmoid,
     Tanh,
     Exp,
@@ -40,8 +40,7 @@ enum class OpKind {
     Sin,
     Cos,
     Clamp,
-    ColSlice,
-    RowSlice,
+    Slice,
     Custom,
 };
 
@@ -60,14 +59,20 @@ struct VariableNode {
     //   scalar          : Scale factor
     //   extra_f0        : Clamp lo
     //   extra_f1        : Clamp hi
-    //   axis            : Cumsum / Flip axis (0 = rows, 1 = cols)
-    //   extra_i0        : ColSlice / RowSlice start
-    //   extra_i1        : ColSlice / RowSlice len
+    //   axis            : Single-axis axis (Cumsum / Flip / Softmax /
+    //                     LogSoftmax / Transpose first axis / Slice /
+    //                     Concat / Split).
+    //   extra_i0        : Slice start / Transpose second axis
+    //   extra_i1        : Slice len
+    //   axes            : Multi-axis axes (sum / mean with axes)
+    //   keep_dims       : sum / mean with axes keep_dims flag
     float extra_f0 = 0.f;
     float extra_f1 = 0.f;
     int   axis    = 1;
     int64_t extra_i0 = 0;
     int64_t extra_i1 = 0;
+    std::vector<int> axes;
+    bool keep_dims = false;
 
     std::vector<std::shared_ptr<VariableNode>> parents;
     std::vector<Tensor> saved;

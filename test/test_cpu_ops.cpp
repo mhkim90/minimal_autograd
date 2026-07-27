@@ -4,7 +4,7 @@
 // full CPU vertical slice: matmul, activations, reductions, elementwise
 // arithmetic, reshape/transpose, slice/concat, simple losses. Forward
 // values use tight numerical checks; gradients are cross-checked against
-// central finite differences for rank-2 inputs.
+// central finite differences where useful.
 
 #include "autograd/core/variable.h"
 #include "autograd/core/ops.h"
@@ -111,6 +111,27 @@ std::vector<float> fd_grad_rank2(Variable x,
 
             g[flat] = (v_plus - v_minus) / (2.f * eps);
         }
+    }
+    return g;
+}
+
+std::vector<float> fd_grad(Variable x,
+                           std::function<Variable(const Variable&)> f,
+                           float eps = 1e-3f) {
+    std::vector<float> data = to_vec(x.value());
+    Tensor storage = x.value();
+    std::vector<float> g(data.size());
+    for (std::size_t i = 0; i < data.size(); ++i) {
+        const float orig = data[i];
+        data[i] = orig + eps;
+        storage.copy_from_host(data.data(), data.size());
+        const float plus = to_vec(ag::sum(f(x)).value())[0];
+        data[i] = orig - eps;
+        storage.copy_from_host(data.data(), data.size());
+        const float minus = to_vec(ag::sum(f(x)).value())[0];
+        data[i] = orig;
+        storage.copy_from_host(data.data(), data.size());
+        g[i] = (plus - minus) / (2.f * eps);
     }
     return g;
 }
@@ -666,23 +687,180 @@ void test_losses() {
     report("mse_loss / cross_entropy forward and gradients");
 }
 
-// ── input validation: rank-2 enforcement ───────────────────────────────
+// ── N-D contract ───────────────────────────────────────────────────────
 
-void test_rank2_validation() {
+void test_nd_ops() {
+    std::vector<float> values(24);
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        values[i] = static_cast<float>(i + 1);
+    }
+
+    Variable x(make(values, Shape{2, 3, 4}), true);
+    Variable reshaped = ag::reshape(x, Shape{2, 2, 2, 3});
+    CHECK(reshaped.value().shape() == Shape({2, 2, 2, 3}));
+    ag::sum(reshaped).backward();
+    check_near(to_vec(x.grad()), std::vector<float>(24, 1.f));
+
+    x.zero_grad();
+    Variable transposed = ag::transpose(x, 0, -1);
+    CHECK(transposed.value().shape() == Shape({4, 3, 2}));
+    check_near(to_vec(ag::transpose(transposed, 0, -1).value()), values);
+    ag::sum(transposed).backward();
+    check_near(to_vec(x.grad()), std::vector<float>(24, 1.f));
+
+    Variable s(make({0.2f, -0.3f, 0.7f, 1.1f, -0.5f, 0.4f,
+                     0.9f, -0.2f, 0.3f, -0.8f, 0.6f, 0.1f},
+                    Shape{2, 3, 2}), true);
+    Variable weights(make({1.f, 2.f, 3.f, 4.f, 5.f, 6.f,
+                           7.f, 8.f, 9.f, 10.f, 11.f, 12.f},
+                          Shape{2, 3, 2}));
+    auto softmax_objective = [&](const Variable& v) {
+        return ag::mul(ag::softmax(v, 1), weights);
+    };
+    auto softmax_fd = fd_grad(s, softmax_objective);
+    ag::sum(softmax_objective(s)).backward();
+    compare_grads(to_vec(s.grad()), softmax_fd);
+    const auto sv = to_vec(ag::softmax(s, 1).value());
+    for (int k = 0; k < 2; ++k) {
+        for (int i = 0; i < 2; ++i) {
+            float total = 0.f;
+            for (int j = 0; j < 3; ++j) total += sv[i + 2 * j + 6 * k];
+            CHECK(std::fabs(total - 1.f) < 1e-5f);
+        }
+    }
+
+    Variable accum(make({1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f},
+                        Shape{2, 2, 2}), true);
+    check_near(to_vec(ag::cumsum(accum, -1).value()),
+               {1.f, 2.f, 3.f, 4.f, 6.f, 8.f, 10.f, 12.f});
+    check_near(to_vec(ag::flip(ag::flip(accum, 1), 1).value()),
+               to_vec(accum.value()));
+    ag::sum(ag::cumsum(accum, -1)).backward();
+    check_near(to_vec(accum.grad()),
+               {2.f, 2.f, 2.f, 2.f, 1.f, 1.f, 1.f, 1.f});
+
+    Variable left(make({1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f},
+                       Shape{2, 2, 2}), true);
+    Variable right(make({9.f, 10.f, 11.f, 12.f}, Shape{2, 1, 2}), true);
+    Variable joined = ag::concat({left, right}, 1);
+    CHECK(joined.value().shape() == Shape({2, 3, 2}));
+    check_near(to_vec(ag::slice(joined, 1, 0, 2).value()),
+               to_vec(left.value()));
+    check_near(to_vec(ag::slice(joined, 1, 2, 1).value()),
+               to_vec(right.value()));
+    ag::sum(joined).backward();
+    check_near(to_vec(left.grad()), std::vector<float>(8, 1.f));
+    check_near(to_vec(right.grad()), std::vector<float>(4, 1.f));
+    left.zero_grad();
+    ag::sum(ag::slice(left, 1, 1, 1)).backward();
+    check_near(to_vec(left.grad()),
+               {0.f, 0.f, 1.f, 1.f, 0.f, 0.f, 1.f, 1.f});
+    CHECK(ag::hcat({left, left}).value().shape() == Shape({2, 2, 4}));
+    CHECK(ag::split(left, -1).first.value().shape() == Shape({2, 2, 1}));
+    CHECK(ag::row_slice(left, 0, 1).value().shape() == Shape({1, 2, 2}));
+    CHECK(ag::col_slice(left, 0, 1).value().shape() == Shape({2, 1, 2}));
+
+    Variable ba(Tensor::ones(Shape{2, 1, 3}), true);
+    Variable bb(Tensor::ones(Shape{1, 4, 1}), true);
+    Variable broadcast = ag::broadcast_add(ba, bb);
+    CHECK(broadcast.value().shape() == Shape({2, 4, 3}));
+    check_near(to_vec(broadcast.value()), std::vector<float>(24, 2.f));
+    ag::sum(broadcast).backward();
+    check_near(to_vec(ba.grad()), std::vector<float>(6, 4.f));
+    check_near(to_vec(bb.grad()), std::vector<float>(4, 6.f));
+    Variable short_left(make({1.f, 2.f, 3.f}, Shape{3}), true);
+    Variable long_right(Tensor::zeros(Shape{2, 4, 3}), true);
+    Variable reverse_broadcast = ag::broadcast_add(short_left, long_right);
+    CHECK(reverse_broadcast.value().shape() == Shape({2, 4, 3}));
+    check_near(to_vec(reverse_broadcast.value()),
+               {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f,
+                2.f, 2.f, 2.f, 2.f, 2.f, 2.f, 2.f, 2.f,
+                3.f, 3.f, 3.f, 3.f, 3.f, 3.f, 3.f, 3.f});
+    ag::sum(reverse_broadcast).backward();
+    check_near(to_vec(short_left.grad()), std::vector<float>(3, 8.f));
+    check_near(to_vec(long_right.grad()), std::vector<float>(24, 1.f));
+
+    Variable reductions(make(values, Shape{2, 3, 4}), true);
+    Variable reduced = ag::sum(reductions, {0, -1});
+    CHECK(reduced.value().shape() == Shape({3}));
+    check_near(to_vec(reduced.value()), {84.f, 100.f, 116.f});
+    ag::sum(reduced).backward();
+    check_near(to_vec(reductions.grad()), std::vector<float>(24, 1.f));
+    reductions.zero_grad();
+    Variable averaged = ag::mean(reductions, {1}, true);
+    CHECK(averaged.value().shape() == Shape({2, 1, 4}));
+    check_near(to_vec(averaged.value()),
+               {3.f, 4.f, 9.f, 10.f, 15.f, 16.f, 21.f, 22.f});
+    ag::sum(averaged).backward();
+    check_near(to_vec(reductions.grad()), std::vector<float>(24, 1.f / 3.f));
+    reductions.zero_grad();
+    Variable no_reduction = ag::sum(reductions, {});
+    CHECK(no_reduction.value().shape() == Shape({2, 3, 4}));
+    ag::sum(no_reduction).backward();
+    check_near(to_vec(reductions.grad()), std::vector<float>(24, 1.f));
+
+    Variable ma(Tensor::ones(Shape{2, 2, 3}), true);
+    Variable mb(Tensor::ones(Shape{2, 3, 2}), true);
+    Variable mm = ag::matmul(ma, mb);
+    CHECK(mm.value().shape() == Shape({2, 2, 2}));
+    check_near(to_vec(mm.value()), std::vector<float>(8, 3.f));
+    ag::sum(mm).backward();
+    check_near(to_vec(ma.grad()), std::vector<float>(12, 2.f));
+    check_near(to_vec(mb.grad()), std::vector<float>(12, 2.f));
+    Variable ma_fd(make({0.1f, 0.2f, -0.3f, 0.4f,
+                         0.5f, -0.6f, 0.7f, 0.8f},
+                        Shape{2, 2, 2}), true);
+    Variable mb_fd(make({0.2f, -0.1f, 0.4f, 0.3f,
+                         -0.5f, 0.6f, 0.8f, -0.7f},
+                        Shape{2, 2, 2}), true);
+    Variable mm_weights(make({1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f},
+                             Shape{2, 2, 2}));
+    auto ma_objective = [&](const Variable& v) {
+        return ag::mul(ag::matmul(v, mb_fd), mm_weights);
+    };
+    auto ma_fd_expected = fd_grad(ma_fd, ma_objective);
+    ag::sum(ma_objective(ma_fd)).backward();
+    compare_grads(to_vec(ma_fd.grad()), ma_fd_expected);
+    auto mb_objective = [&](const Variable& v) {
+        return ag::mul(ag::matmul(ma_fd, v), mm_weights);
+    };
+    auto mb_fd_expected = fd_grad(mb_fd, mb_objective);
+    mb_fd.zero_grad();
+    ag::sum(mb_objective(mb_fd)).backward();
+    compare_grads(to_vec(mb_fd.grad()), mb_fd_expected);
+
+    Variable logits(Tensor::zeros(Shape{2, 2, 3}), true);
+    Tensor target = make({1.f, 1.f, 1.f, 1.f,
+                          0.f, 0.f, 0.f, 0.f,
+                          0.f, 0.f, 0.f, 0.f}, Shape{2, 2, 3});
+    Variable ce = ag::cross_entropy(logits, target);
+    CHECK(ce.value().shape() == Shape{});
+    check_near(to_vec(ce.value()), {std::log(3.f)}, 1e-5f);
+    ce.backward();
+    check_near(to_vec(logits.grad()),
+               {-1.f / 6.f, -1.f / 6.f, -1.f / 6.f, -1.f / 6.f,
+                 1.f / 12.f, 1.f / 12.f, 1.f / 12.f, 1.f / 12.f,
+                 1.f / 12.f, 1.f / 12.f, 1.f / 12.f, 1.f / 12.f});
+
     Variable rank1(make({1.f, 2.f, 3.f}, Shape{3}), true);
-    Variable rank2_a(make({1.f, 2.f, 3.f, 4.f}, Shape{2, 2}));
-    CHECK_THROWS(ag::matmul(rank1, rank2_a));
+    CHECK(ag::softmax(rank1).value().shape() == Shape({3}));
+    CHECK(ag::reshape(rank1, Shape{1, 1, 3}).value().shape()
+          == Shape({1, 1, 3}));
     CHECK_THROWS(ag::transpose(rank1));
-    CHECK_THROWS(ag::reshape(rank1, 1, 3));
-    CHECK_THROWS(ag::softmax(rank1));
-    CHECK_THROWS(ag::log_softmax(rank1));
-    CHECK_THROWS(ag::cumsum(rank1, 0));
-    CHECK_THROWS(ag::flip(rank1, 1));
-    Variable rank2_b(make({1.f, 2.f, 3.f, 4.f}, Shape{2, 2}));
-    CHECK_THROWS(ag::concat({rank1, rank2_b}));
-    CHECK_THROWS(ag::hcat({rank1, rank2_b}));
-    CHECK_THROWS(ag::clamp(rank2_a, 2.f, 1.f));
-    report("rank-2 enforcement");
+    CHECK_THROWS(ag::softmax(rank1, 1));
+    CHECK_THROWS(ag::sum(x, {0, -3}));
+    CHECK_THROWS(ag::sum(x, {3}));
+    CHECK_THROWS(ag::broadcast_add(
+        Variable(Tensor::ones(Shape{2, 3})),
+        Variable(Tensor::ones(Shape{4, 3}))));
+    CHECK_THROWS(ag::matmul(
+        Variable(Tensor::ones(Shape{2, 2, 3})),
+        Variable(Tensor::ones(Shape{3, 3, 2}))));
+    CHECK_THROWS(ag::cross_entropy(
+        Variable(Tensor::ones(Shape{})), Tensor::ones(Shape{})));
+    CHECK_THROWS(ag::clamp(rank1, 2.f, 1.f));
+
+    report("N-D operations, gradients, and validation");
 }
 
 }  // namespace
@@ -700,7 +878,7 @@ int main() {
     test_concat_hcat();
     test_cumsum_flip_slices_split();
     test_losses();
-    test_rank2_validation();
+    test_nd_ops();
 
     std::printf("\nALL CPU OPS TESTS PASSED (%d)\n", passed);
     return 0;
