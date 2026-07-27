@@ -80,6 +80,8 @@ set(_AUTOGRAD_LIB_SOURCES
     src/norm.cpp
     src/fft.cpp
     src/core/tensor.cpp
+    src/core/variable.cpp
+    src/core/ops.cpp
 )
 
 add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
@@ -95,7 +97,8 @@ target_compile_features(autograd PUBLIC cxx_std_${_AUTOGRAD_CXX_STD})
 
 target_include_directories(autograd PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>)
+    $<INSTALL_INTERFACE:include>
+    PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 
 target_link_libraries(autograd PUBLIC Eigen3::Eigen)
 
@@ -175,6 +178,11 @@ if(AUTOGRAD_BUILD_TESTS)
     target_link_libraries(test_tensor PRIVATE autograd::autograd)
     target_include_directories(test_tensor PRIVATE test)
     add_test(NAME test_tensor COMMAND test_tensor)
+
+    add_executable(test_autograd_core test/test_autograd_core.cpp)
+    target_link_libraries(test_autograd_core PRIVATE autograd::autograd)
+    target_include_directories(test_autograd_core PRIVATE test)
+    add_test(NAME test_autograd_core COMMAND test_autograd_core)
 
     add_executable(test_nn test/test_nn.cpp)
     target_link_libraries(test_nn PRIVATE autograd::autograd)
