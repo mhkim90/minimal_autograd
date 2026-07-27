@@ -1,5 +1,5 @@
 #pragma once
-// tensor.h — thin CPU Tensor value type (Phase 2.2).
+// tensor.h — thin CPU Tensor value type.
 //
 // Standalone public header:
 //   * No Eigen include. The public Tensor type holds no Eigen matrix.
