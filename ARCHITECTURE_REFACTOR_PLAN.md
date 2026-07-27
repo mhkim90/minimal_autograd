@@ -724,7 +724,59 @@ After all in-repository and downstream migration tests pass:
 Exit criterion: one implementation path remains and no normal public header
 leaks Eigen, CUDA, or graph internals.
 
-## 10. Validation Matrix
+## 10. Bundled Pull Request Delivery Plan
+
+The phased migration is delivered as 12 `minimal_autograd` PRs. Each PR may
+span multiple internal phase-gated commits; the PR is the unit of review,
+merge, and history.
+
+1. **PR #33 — Shape + Device foundation.** Introduce `Shape` and `Device`
+   value types without changing the existing public API.
+2. **PR #34 — Hidden-storage CPU Tensor + Eigen extension.** Move CPU tensor
+   storage behind PImpl, add checked host import/export, and ship
+   `extension/eigen.h` for explicit CPU interoperation.
+3. **Autograd core.** Private `VariableNode`, tape, backward, `detach`,
+   `zero_grad`, and the narrow vertical slice (`add`, `mul`, `scale`, `sum`,
+   custom-op boundary).
+4. **CPU operations.** Remaining ops, activations, matmul, losses, and their
+   gradients with CPU parity validation.
+5. **OOP training stack.** Module registry, `Linear`, `Sequential`, `SGD`,
+   `Adam`, and optimizer snapshot/restore.
+6. **CPU spatial and special modules.** `Conv2d`, `DepthwiseConv2d`,
+   `MaxPool2d`, `AvgPool2d`, `NearestUpsample2d`, `GroupNorm`, and diffusion
+   helpers (`randn`, sinusoidal time embeddings, `q_sample`).
+7. **CPU complex and FFT.** Minimal complex-tensor representation, forward
+   and backward FFT, and documented normalization conventions.
+8. **CUDA foundation.** RAII CUDA storage, explicit transfers, `Tensor::to`,
+   borrowed CUDA views, and lifetime rules. CPU-only builds expose clear
+   diagnostics.
+9. **CUDA core compute.** Elementwise ops, reductions, matmul, losses, and
+   optimizer kernels against the CPU path.
+10. **CUDA spatial and FFT.** `Conv2d`, pooling, and FFT migrated with parity
+    tests.
+11. **Extension and downstream qualification.** Eigen and CUDA custom-op
+    samples, installed-package consumers, optimizer checkpointing, and a
+    focused `CppResist` migration spike. The spike rewrites the linked
+    `CppResist` repository PR around `Tensor`/`Variable`, registered
+    parameters, stable optimizer state, custom-op APIs, and explicit device
+    boundaries.
+12. **Breaking cleanup and API freeze.** Remove legacy public API (`Mat`,
+    `VarPtr`, mutable graph fields, raw CUDA pointers, duplicated optimizer
+    state, old implementation paths), keep `autograd.h` as a forwarding
+    compatibility include, document breaking changes, and assign a version
+    to the new public API.
+
+A bundle is split only when its scope is independently reviewable or a
+blocker or risk requires separating it. CPU autograd is not combined with
+CUDA ownership; CUDA foundation is not combined with CUDA op migration;
+legacy removal does not precede downstream qualification.
+
+Normal workflow is sequential PRs from updated `main`, each merged before the
+next is opened. Stacking a PR on another is permitted only when explicitly
+chosen and noted in the PR description. PR #34 is currently stacked on
+PR #33 and will be rebased or retargeted after PR #33 merges.
+
+## 11. Validation Matrix
 
 | Area | CPU build | CUDA build | Installed consumer | CppResist spike |
 |---|---:|---:|---:|---:|
@@ -741,7 +793,7 @@ leaks Eigen, CUDA, or graph internals.
 The existing core, NN, convolution, extension, diffusion, smoke, and CUDA tests
 should be retained or replaced by equivalent tests rather than discarded.
 
-## 11. Completion Criteria
+## 12. Completion Criteria
 
 The refactor is complete when:
 
@@ -759,7 +811,7 @@ The refactor is complete when:
 - documentation clearly states supported operations, devices, ownership,
   copying, graph lifetime, and extension lifetimes.
 
-## 12. Risks and Controls
+## 13. Risks and Controls
 
 ### Risk: accidental framework expansion
 
@@ -793,7 +845,7 @@ Control: finish and stabilize the smaller `minimal_autograd` API first. Apply
 lessons to `minimal_tensor` later through a separate plan rather than coupling
 both migrations or extracting a shared core prematurely.
 
-## 13. Recommended Execution Order
+## 14. Recommended Execution Order
 
 Start with Phase 0 and Phase 1. Then implement one complete CPU vertical slice
 through Phases 2–4 before migrating all operations. Stabilize modules,
