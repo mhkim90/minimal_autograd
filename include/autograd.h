@@ -7,6 +7,7 @@
 #include "autograd/device.h"
 #include "autograd/core/variable.h"
 #include "autograd/core/ops.h"
+#include "autograd/core/loss.h"
 #include "autograd/extension/custom_op.h"
 // The legacy `Mat` / `Mats` / `shape(Mat)` / `numel(Mat)` aliases
 // used by the existing Var / Function / ops / modules surface live in
