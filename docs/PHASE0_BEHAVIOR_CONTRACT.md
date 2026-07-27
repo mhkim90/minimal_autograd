@@ -1,18 +1,20 @@
 # Phase 0 — Behavior Contract
 
-This document records the observable behavior of the current
-`minimal_autograd` public API that **must survive** the architecture refactor
-described in `ARCHITECTURE_REFACTOR_PLAN.md`. Each row maps a current surface
-to either:
+This document records observable behavior of the legacy
+`minimal_autograd` public API and classifies what must survive the architecture
+refactor described in `ARCHITECTURE_REFACTOR_PLAN.md`. Unless a row is labeled
+legacy-only, explicitly unpinned, a known gap, or code-inspection-only, it is
+guaranteed replacement behavior.
+Each row maps a current surface to either:
 
 - an existing test (no new test needed), or
 - a focused test added in `test_characterization` to fill a Phase 0 gap, or
 - an explicitly documented known gap (no public coverage; tracked for
   follow-up phases).
 
-This is a *characterization contract* — it pins current behavior, not the
-post-refactor API. The refactor may rewrite the implementation under each
-surface; it must not regress any checked row.
+Characterization is evidence of what the legacy code does, not proof that
+every observed side effect is desirable. Legacy-only tests may remain while
+the compatibility facade exists without constraining the replacement API.
 
 The contract is intentionally scoped to the CPU build (which is the
 first-class build). CUDA parity rows are mapped to existing
@@ -23,11 +25,11 @@ characterization.
 
 ## 1. Tensor, Shape, Stride
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `Mat = Eigen::MatrixXf` | 2D dense float32 column-major | implicit in all tests | — |
 | `Dims` / `Shape` | rank, indexed access, equality, `numel` | `test_core::test_logical_4d_shape` | — |
-| `Stride::contiguous_stride(Shape)` | row-major-equivalent strides | `test_core::test_logical_4d_shape` | — |
+| Legacy logical stride metadata | not explicitly asserted; target Tensor order is first-axis-contiguous and specified in the architecture plan | — | known gap |
 | `Var::make(Mat)` | leaf with `data` and zero `grad` | all tests | — |
 | `Var::make4d(Mat, N, C, H, W)` | flat 2D + 4D shape metadata | `test_core::test_logical_4d_shape` | — |
 | `Var::set_shape(...)` | numel must equal data size; assert-only | `test_core::test_logical_4d_shape` (via `view`) | — |
@@ -39,16 +41,17 @@ refactor must replace it with a runtime error. Documented for Phase 2.
 
 ## 2. Variable, backward, zero_grad, gradient accumulation
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `Var::backward()` (scalar loss) | topo-sorted reverse traversal; shared nodes visited once | `test_core::test_shared_x_plus_x`, `test_shared_x_cubed` | — |
 | Repeated-parent grad accumulation | `d/dx (x+x)` = 2, not 4 | `test_core::test_shared_x_plus_x`, `test_shared_x_cubed` | — |
-| `backward()` accumulating | second `backward()` without zeroing grows leaf grad by exactly one pass; intermediate grads also accumulate, so non-leaf-passing graphs grow by more than 2x | — | `test_backward_accumulates_without_zero` |
+| Legacy `backward()` intermediate amplification | **legacy-only / unpinned:** stored intermediate gradients can amplify a later traversal | — | `test_backward_accumulates_without_zero` |
+| Replacement `Variable::backward()` accumulation | each call propagates from a fresh seed and adds exactly one newly computed pass to stored gradients | `test_autograd_core::test_shared_graph_and_repeated_backward` | — |
 | `Var::zero_grad()` | zeros every reachable node's `grad` (leaf + intermediate + loss) | — | `test_var_zero_grad_reaches_all_reachable` |
 | `Module::zero_grad()` | zeros only registered parameter leaves, not intermediate activations | — | `test_module_zero_grad_isolates_intermediates` |
 | `Optimizer::zero_grad()` (SGD/Adam) | equivalent to `Module::zero_grad()` (no internal buffers zeroed) | — | `test_optimizer_zero_grad_semantics` |
 | Backward exception rollback | if any `back_fn` throws, all grads are restored to their pre-`backward()` values | `test_core::test_backward_exception_rolls_back_grads` | — |
-| Backward non-scalar guard | `backward()` asserts `data.rows()==1 && data.cols()==1` | implicit (never called non-scalar in suite) | — |
+| Backward non-scalar guard | non-scalar implicit backward is rejected; legacy assertion mechanism is unpinned and replacement uses a runtime error | `test_autograd_core::test_upstream_detach_and_zero_grad` | — |
 
 ---
 
@@ -94,11 +97,11 @@ default tol 5e-2, eps 1e-3).
 
 ### 3.2 Conv / pool / upsample (test_conv / test_extensions / test_cuda_core)
 
-| Op / module | Forward pinned | Grad pinned | Existing test | New test |
+| Op / module | Forward / classification | Gradient / classification | Existing test | New test |
 | --- | --- | --- | --- | --- |
 | `im2col` / `col2im` | receptive-field pack/unpack; `+=` on overlap | n/a (pure) | `test_conv::im2col/col2im round-trip` | — |
 | `conv2d_op` | matches naive nested-loop reference | grad_check dInput/dWeight/dBias | `test_conv` | — |
-| `conv2d_op` accumulation across repeated `backward()` calls | follows the global accumulation rule; intermediate `y.grad` also accumulates, so 2 passes grow Conv weights by 3x | — | `test_conv_repeated_backward_accumulates` | — |
+| Legacy `conv2d_op` repeated `backward()` amplification | **legacy-only / unpinned:** two calls currently grow Conv weights by `3x` because an intermediate gradient is reused | — | `test_conv_repeated_backward_accumulates` | — |
 | `Conv2d::forward(x, H, W)` | module wrapper, kaiming-uniform init | n/a | `test_conv::end-to-end Conv+Pool+Linear` | — |
 | `Conv2d::forward(x)` (4D) | shape inferred; throws on channel/geometry mismatch | n/a | `test_conv::validation rejections` | — |
 | `maxpool2d_op` | max over kernel window | grad_check | `test_conv::grad_check MaxPool2d` | — |
@@ -118,7 +121,7 @@ covered by the same accumulation contract as `add(x, x)` and `x*x*x` in
 
 ## 4. Modules
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `Linear(in, out)` | `W:(in,out)` Xavier-scale init `sqrt(2/in)`; `b:(1,out)` zeros | `test_nn::test_linear_forward` | — |
 | `Linear::parameters()` order | `{W, b}` | — | `test_module_parameter_order` |
@@ -134,13 +137,13 @@ covered by the same accumulation contract as `add(x, x)` and `x*x*x` in
 
 Known gap: `GroupNorm` does not register `gamma`/`beta` in the
 autograd graph (forward-only leaf). Documented; the refactor's
-backward story for GroupNorm remains Phase 5c work.
+backward story for GroupNorm remains Phase 6 bundle 3 work.
 
 ---
 
 ## 5. Optimizers
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `SGD::step()` | `p -= lr * p->grad` | `test_nn::test_sgd_step` (1 step, scalar) | `test_sgd_trajectory` (multi-step, matrix) |
 | `SGD::zero_grad()` | clears `grad` on every parameter | — | `test_optimizer_zero_grad_semantics` |
@@ -156,13 +159,14 @@ currently accesses `Adam.t`, `Adam.m`, `Adam.v` directly to serialize
 optimizer state. The Phase 0 contract pins the current state-layout
 behavior (per-param `m`/`v`/`t` kept inside `Adam`, separate from
 parameters' `data`/`grad`) but **does not require any test** for
-serialization. The refactor must introduce an explicit `AdamState` (Phase 6).
+serialization. The refactor must introduce an explicit `AdamState`
+(Phase 5b).
 
 ---
 
 ## 6. Losses
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `mse_loss(pred, target)` | `mean((pred-target)²)` over all elements | `test_nn::test_xor` (drives convergence) | — |
 | `cross_entropy(pred, target)` | `-mean(sum(target·log_softmax(pred)))` for one-hot `target` | `test_nn::test_cross_entropy`, `test_multibatch_cross_entropy_adam` | — |
@@ -173,7 +177,7 @@ Both losses are compositions of existing ops; no new Function subclass.
 
 ## 7. Diffusion helpers
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `randn(r, c, seed)` | leaf; `std::mt19937`+`std::normal_distribution(0,1)` | `test_diffusion::test_randn_*` | — |
 | `randn_like(x, seed)` | leaf; same shape as `x` | `test_diffusion::test_randn_like_*` | — |
@@ -181,13 +185,13 @@ Both losses are compositions of existing ops; no new Function subclass.
 | `q_sample` | `sqrt_ab·x0 + sqrt_1mab·noise`; differentiable w.r.t. `x0` and `noise` | `test_diffusion::test_q_sample_*` | — |
 
 Known gap: `sinusoidal_time_embedding` uses `assert(dim%2==0)` (debug-only).
-The refactor must convert to a runtime error. Documented for Phase 5d.
+The refactor must convert to a runtime error. Documented for Phase 6 bundle 4.
 
 ---
 
 ## 8. Complex and FFT
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `real_to_complex` / `make_complex` / `real` / `imag` | pair of `Var` with shape and device validation | `test_fft::test_real_to_complex_and_accessors`, `test_complex_*` | — |
 | `complex_mul`, `conj`, `complex_scale`, `abs2` | standard formulas; grad_check | `test_fft::test_complex_grad_check` | — |
@@ -212,7 +216,7 @@ When `AUTOGRAD_USE_CUDA=OFF`:
 
 When `AUTOGRAD_USE_CUDA=ON`:
 
-| Surface | Behavior pinned | Existing test | New test |
+| Surface | Behavior / classification | Existing test | New test |
 | --- | --- | --- | --- |
 | `Var::cuda()` / `cpu()` round-trip | preserves data and grad; copies both directions | `test_cuda_core::shaped_*` | — |
 | `cuda_add_op`, `cuda_mul_op`, `cuda_matmul_op`, `cuda_broadcast_add_op`, `cuda_scale_op`, `cuda_relu_op`, `cuda_sigmoid_op`, `cuda_tanh_op`, `cuda_exp_op`, `cuda_log_op`, `cuda_sqrt_op`, `cuda_silu_op`, `cuda_softplus_op`, `cuda_sub_op`, `cuda_div_op`, `cuda_sum_op`, `cuda_col_slice_op`, `cuda_row_slice_op`, `cuda_softmax_op`, `cuda_log_softmax_op` | CUDA forward and grad match CPU within `1e-4` | `test_cuda_core::check_unary_op`, `check_binary_op`, etc. | — |
@@ -248,19 +252,38 @@ must not change CUDA production code.
 Phase 0 is a freeze, not a redesign. The following are explicitly **not**
 contract yet and may change during Phases 1-11:
 
+- legacy repeated-backward amplification through stored intermediate
+  gradients, including the Conv2d `3x` result after two calls;
 - Internal representation of `Mat` (Phase 2 introduces `Tensor`).
 - Public visibility of `parents`, `back_fn`, `cuda_data_`, `cuda_grad_`,
   `grad`, `data` (Phase 11 removes direct access).
-- Optimizer state snapshot/restore (Phase 6 introduces explicit
+- Optimizer state snapshot/restore (Phase 5b introduces explicit
   `AdamState`).
-- Per-CUDA-moment `cuda_m` / `cuda_v` duplication on `Adam` (Phase 6
-  collapses them onto the parameter device).
-- GroupNorm backward (Phase 5c).
+- Per-CUDA-moment `cuda_m` / `cuda_v` duplication on `Adam` (Phase 5b defines
+  unified state; Phase 9 migrates CUDA optimizer kernels).
+- GroupNorm backward (Phase 6 bundle 3).
 - FFT non-`Backward` normalizations.
+
+The replacement API instead guarantees a fresh propagation seed per
+`backward()` call. Previously committed gradients accumulate only at commit
+time and are not inputs to the next traversal.
+
+## 12. Executable coverage policy
+
+Every guaranteed CPU row must map to a registered test that CI executes with
+CTest. Merely building `test_characterization`, `test_shape_device`,
+`test_tensor`, `test_autograd_core`, or `test_cpu_ops` does not satisfy the
+contract.
+
+CUDA parity rows require execution of `test_cuda_core` and `test_cuda_fft` on
+CUDA-capable hardware. Until hosted CUDA CI exists, CUDA PRs must record the
+exact external/manual command, hardware, and result. Rows covered only by code
+inspection remain labeled gaps and must not be described as executable
+coverage.
 
 ---
 
-## 12. Files added or modified by Phase 0
+## 13. Files added or modified by Phase 0
 
 - `docs/PHASE0_BEHAVIOR_CONTRACT.md` — this document.
 - `test/test_characterization.cpp` — focused tests for the gaps in §2, §4, §5.

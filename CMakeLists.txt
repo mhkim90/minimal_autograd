@@ -82,6 +82,7 @@ set(_AUTOGRAD_LIB_SOURCES
     src/core/tensor.cpp
     src/core/variable.cpp
     src/core/ops.cpp
+    src/core/loss.cpp
 )
 
 add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
@@ -183,6 +184,11 @@ if(AUTOGRAD_BUILD_TESTS)
     target_link_libraries(test_autograd_core PRIVATE autograd::autograd)
     target_include_directories(test_autograd_core PRIVATE test)
     add_test(NAME test_autograd_core COMMAND test_autograd_core)
+
+    add_executable(test_cpu_ops test/test_cpu_ops.cpp)
+    target_link_libraries(test_cpu_ops PRIVATE autograd::autograd)
+    target_include_directories(test_cpu_ops PRIVATE test)
+    add_test(NAME test_cpu_ops COMMAND test_cpu_ops)
 
     add_executable(test_nn test/test_nn.cpp)
     target_link_libraries(test_nn PRIVATE autograd::autograd)

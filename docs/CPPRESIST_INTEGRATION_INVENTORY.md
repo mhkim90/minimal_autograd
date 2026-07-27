@@ -58,12 +58,35 @@ Required replacement:
 - controlled parameter initialization and restoration;
 - read-only value and gradient access through `Variable`.
 
+Mutation and aliasing contract:
+
+- ordinary Tensor handles share mutable storage;
+- explicit bulk import/update is visible through aliases;
+- `clone()` is required for isolation;
+- optimizers and checkpoint restoration use controlled library mutation APIs,
+  never public writable pointers;
+- CppResist tests must verify that parameter handles retain identity across an
+  optimizer step and restored state.
+
 Image layout contract to preserve explicitly:
 
 - rows represent image height;
 - columns represent image width;
 - `(y, x)` indexing;
 - existing host/CUDA transfers assume Eigen-compatible column-major order.
+
+This legacy image convention is a rank-2 compatibility view, not a restriction
+on the replacement API. `Tensor` and `Variable` operations must preserve
+arbitrary logical rank so CppResist can move from flattened matrices to
+explicit batch/channel/spatial shapes without changing the autograd graph
+abstraction. Axis-aware operations must define negative-axis normalization,
+broadcasting, slicing, concatenation, reductions, and class-axis behavior.
+
+Migration follows slice-local retirement: after a CppResist subsystem moves to
+the replacement API, its corresponding legacy implementation is adapted or
+deleted immediately. If a subsystem cannot move yet, the plan records that
+specific consumer and deletion gate; it does not add new features to the
+legacy path.
 
 ## Autograd graph coupling
 
@@ -82,6 +105,7 @@ Required replacement:
 
 - a supported custom-operation constructor;
 - validated input/output gradient counts, shapes, and devices;
+- N-D saved tensors and gradients without flattening graph metadata;
 - saved-tensor lifetime rules;
 - library-owned graph traversal and gradient accumulation.
 

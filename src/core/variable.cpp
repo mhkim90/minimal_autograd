@@ -71,8 +71,126 @@ std::vector<Tensor> backward_step(Node& node, const Tensor& output_grad) {
             return {detail::tensor_scale(output_grad, node.scalar)};
         case detail::OpKind::Sum:
             return {
-                detail::tensor_broadcast_scalar(output_grad,
-                                                node.parents[0]->value.shape()),
+                detail::tensor_broadcast_scalar(
+                    output_grad, node.parents[0]->value.shape()),
+            };
+        case detail::OpKind::SumAxes:
+            return {detail::tensor_sum_axes_backward_nd(
+                output_grad, node.parents[0]->value.shape(),
+                node.axes, node.keep_dims)};
+        case detail::OpKind::MatMul:
+            return {
+                detail::tensor_matmul_backward_a_nd(output_grad, node.saved[1]),
+                detail::tensor_matmul_backward_b_nd(node.saved[0], output_grad),
+            };
+        case detail::OpKind::ReLU:
+            return {detail::tensor_relu_backward(output_grad, node.saved[0])};
+        case detail::OpKind::BroadcastAdd:
+            return {
+                detail::tensor_broadcast_add_backward_nd(
+                    output_grad, node.parents[0]->value.shape()),
+                detail::tensor_broadcast_add_backward_nd(
+                    output_grad, node.parents[1]->value.shape()),
+            };
+        case detail::OpKind::Softmax:
+            return {
+                detail::tensor_softmax_backward_nd(
+                    output_grad, node.saved[0], node.axis),
+            };
+        case detail::OpKind::LogSoftmax:
+            return {
+                detail::tensor_log_softmax_backward_nd(
+                    output_grad, node.saved[0], node.axis),
+            };
+        case detail::OpKind::Transpose:
+            return {
+                detail::tensor_transpose_nd(output_grad,
+                                            node.axis, node.extra_i1),
+            };
+        case detail::OpKind::Reshape:
+            return {
+                detail::tensor_reshape_view(output_grad,
+                                            node.saved[0].shape()),
+            };
+        case detail::OpKind::Concat: {
+            // saved[i] holds each parent's value; their `axis` dim
+            // indicates the corresponding slice of the gradient.
+            std::vector<int64_t> along;
+            std::vector<Shape> shapes;
+            along.reserve(node.saved.size());
+            shapes.reserve(node.saved.size());
+            for (const auto& t : node.saved) {
+                along.push_back(t.shape()[node.axis]);
+                shapes.push_back(t.shape());
+            }
+            return detail::tensor_concat_backward_nd(
+                output_grad, along, shapes, node.axis);
+        }
+        case detail::OpKind::Sigmoid:
+            return {
+                detail::tensor_sigmoid_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::Tanh:
+            return {
+                detail::tensor_tanh_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::Exp:
+            return {
+                detail::tensor_exp_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::Log:
+            return {
+                detail::tensor_log_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::Sqrt:
+            return {
+                detail::tensor_sqrt_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::SiLU:
+            return {
+                detail::tensor_silu_backward(output_grad,
+                                             node.saved[0], node.saved[1]),
+            };
+        case detail::OpKind::Softplus:
+            return {
+                detail::tensor_softplus_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::Sub:
+            return {
+                detail::tensor_sub_backward_a(output_grad),
+                detail::tensor_sub_backward_b(output_grad),
+            };
+        case detail::OpKind::Div:
+            return {
+                detail::tensor_div_backward_a(output_grad, node.saved[1]),
+                detail::tensor_div_backward_b(output_grad,
+                                               node.saved[0], node.saved[1]),
+            };
+        case detail::OpKind::Cumsum:
+            return {
+                detail::tensor_cumsum_backward_nd(output_grad, node.axis),
+            };
+        case detail::OpKind::Flip:
+            return {detail::tensor_flip_nd(output_grad, node.axis)};
+        case detail::OpKind::Sin:
+            return {
+                detail::tensor_sin_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::Cos:
+            return {
+                detail::tensor_cos_backward(output_grad, node.saved[0]),
+            };
+        case detail::OpKind::Clamp:
+            return {
+                detail::tensor_clamp_backward(output_grad, node.saved[0],
+                                              node.extra_f0, node.extra_f1),
+            };
+        case detail::OpKind::Slice:
+            return {
+                detail::tensor_slice_backward_nd(
+                    output_grad,
+                    node.saved[0].shape(),
+                    node.axis, node.extra_i0, node.extra_i1),
             };
         case detail::OpKind::Custom:
             return node.custom_backward(output_grad);
