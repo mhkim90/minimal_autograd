@@ -1,4 +1,4 @@
-// src/core/tensor.cpp — Phase 2.2 thin CPU Tensor implementation.
+// src/core/tensor.cpp — thin CPU Tensor implementation.
 //
 // Hidden in this translation unit:
 //   * detail::Storage — the library-owned float32 buffer plus its

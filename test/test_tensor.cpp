@@ -1,4 +1,4 @@
-// test_tensor.cpp — Phase 2.2: thin CPU Tensor foundation tests.
+// test_tensor.cpp — thin CPU Tensor foundation tests.
 //
 // Exercises the additive Tensor type declared in autograd/tensor.h with
 // implementation hidden in src/core/tensor.cpp. Storage and per-Tensor
