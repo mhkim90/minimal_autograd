@@ -65,6 +65,13 @@ Image layout contract to preserve explicitly:
 - `(y, x)` indexing;
 - existing host/CUDA transfers assume Eigen-compatible column-major order.
 
+This legacy image convention is a rank-2 compatibility view, not a restriction
+on the replacement API. `Tensor` and `Variable` operations must preserve
+arbitrary logical rank so CppResist can move from flattened matrices to
+explicit batch/channel/spatial shapes without changing the autograd graph
+abstraction. Axis-aware operations must define negative-axis normalization,
+broadcasting, slicing, concatenation, reductions, and class-axis behavior.
+
 ## Autograd graph coupling
 
 CPU and CUDA domain operations construct graph nodes by assigning:
@@ -82,6 +89,7 @@ Required replacement:
 
 - a supported custom-operation constructor;
 - validated input/output gradient counts, shapes, and devices;
+- N-D saved tensors and gradients without flattening graph metadata;
 - saved-tensor lifetime rules;
 - library-owned graph traversal and gradient accumulation.
 

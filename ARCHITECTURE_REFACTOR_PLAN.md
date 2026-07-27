@@ -54,6 +54,13 @@ The library will use OOP for long-lived objects and state:
 Mathematical operations remain free functions. This keeps expressions simple
 and avoids turning every operation into a large virtual class hierarchy.
 
+`Variable` operations are N-dimensional by contract. No operation in the new
+API may reject an input merely because its rank is greater than two. Operations
+that need axes expose them explicitly; operations that need matrix dimensions
+use the final two axes and preserve leading batch axes. The legacy Eigen API
+may retain 2-D adapters during migration, but those adapters do not define the
+new core API.
+
 ```text
 Application
     |
@@ -305,8 +312,34 @@ Variable add(const Variable&, const Variable&);
 Variable mul(const Variable&, const Variable&);
 Variable matmul(const Variable&, const Variable&);
 Variable sum(const Variable&);
+Variable sum(const Variable&, const std::vector<int>& axes, bool keep_dims);
 Variable relu(const Variable&);
+Variable softmax(const Variable&, int axis = -1);
+Variable reshape(const Variable&, const Shape&);
+Variable transpose(const Variable&, int axis0, int axis1);
+Variable concat(std::vector<Variable>, int axis = 0);
+Variable slice(const Variable&, int axis, int64_t start, int64_t length);
 ```
+
+N-D operation rules:
+
+- elementwise operations preserve the complete logical shape;
+- broadcasting aligns trailing axes and permits an input dimension of one;
+- negative axes are normalized against the input rank and validated;
+- `reshape` accepts any validated `Shape` with the same element count;
+- `transpose` swaps two selected axes;
+- reductions, softmax, cumulative operations, slicing, concatenation, and
+  splitting operate on explicit axes;
+- `matmul` requires rank two or greater, treats the final two axes as matrix
+  dimensions, and initially requires identical leading batch dimensions;
+- cross-entropy treats the final axis as classes and averages over all leading
+  sample axes;
+- dense storage remains first-axis-contiguous, which preserves the existing
+  Eigen column-major byte order for rank-2 tensors.
+
+Convenience names such as `row_slice`, `col_slice`, and `hcat` may remain as
+thin compatibility wrappers over axis-aware N-D operations. They must not own
+separate 2-D-only kernels.
 
 Each operation follows one path:
 
@@ -462,6 +495,8 @@ The refactor retains:
 
 - float32 tensors;
 - dense contiguous storage;
+- N-dimensional `Tensor` and `Variable` operations with explicit axis
+  semantics;
 - reverse-mode autograd;
 - current mathematical operations;
 - current module set;
@@ -582,11 +617,21 @@ Move the remaining current operations and losses to the new architecture:
 - backward formulas;
 - implementation bodies out of public headers.
 
+The migrated API must be N-dimensional:
+
+- no new operation is rank-2-only;
+- axis-taking operations accept normalized positive or negative axes;
+- matrix multiplication batches over identical leading dimensions;
+- broadcasting follows trailing-axis compatibility;
+- existing 2-D behavior remains a tested compatibility subset.
+
 For each operation, require:
 
 - forward parity with the characterized result;
 - analytical or finite-difference gradient checks;
 - invalid-input tests;
+- rank-1, rank-3, or rank-4 coverage as applicable;
+- axis, broadcasting, and batched-shape validation;
 - shared-node and gradient-accumulation coverage where applicable.
 
 Exit criterion: the old operation implementation is no longer needed by the
@@ -738,8 +783,9 @@ merge, and history.
 3. **Autograd core.** Private `VariableNode`, tape, backward, `detach`,
    `zero_grad`, and the narrow vertical slice (`add`, `mul`, `scale`, `sum`,
    custom-op boundary).
-4. **CPU operations.** Remaining ops, activations, matmul, losses, and their
-   gradients with CPU parity validation.
+4. **CPU N-D operations.** Remaining ops, activations, axis-aware reductions
+   and layout transforms, batched matmul, broadcasting, losses, and their
+   gradients with 2-D parity plus N-D validation.
 5. **OOP training stack.** Module registry, `Linear`, `Sequential`, `SGD`,
    `Adam`, and optimizer snapshot/restore.
 6. **CPU spatial and special modules.** `Conv2d`, `DepthwiseConv2d`,
