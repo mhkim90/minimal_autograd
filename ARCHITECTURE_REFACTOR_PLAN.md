@@ -9,6 +9,16 @@ It is a planning document, not authorization to implement all phases at once.
 Each phase should be implemented and reviewed separately, with compatibility
 tests established before old interfaces are removed.
 
+Current delivery state:
+
+- Shape/Device, hidden CPU Tensor, and private Variable/tape foundations are
+  merged;
+- CPU N-D operations and losses are implemented in PR #36;
+- Phase 4 is not closed until PR #36 merges and Gate 4.5 proves the registered
+  CPU contract inventory executes in hosted CI;
+- the immediate closeout gate is executable-contract CI correction;
+- the next feature gate is the Phase 5a Linear + SGD vertical training slice.
+
 ## 2. Purpose
 
 `minimal_autograd` is a deliberately small descendant of `minimal_tensor`.
@@ -253,12 +263,31 @@ Initial guarantees:
 - float32 only;
 - dense, contiguous storage only;
 - N-dimensional logical shape;
+- first-axis-contiguous element order:
+  `stride[0] = 1` and
+  `stride[i] = stride[i - 1] * shape[i - 1]`;
+- rank-2 storage therefore has Eigen-compatible column-major byte order;
 - ordinary copies share storage;
 - `clone()` makes an independent deep copy;
+- `reshape()` changes logical metadata without reordering elements and shares
+  the same storage;
 - one authoritative storage allocation per tensor;
 - no public Eigen matrix member;
 - no public raw CUDA allocation member;
 - no host mirror that can silently become stale.
+
+Tensor storage is deliberately shared-mutable rather than copy-on-write:
+
+- explicit `copy_from_host()` mutation is visible through ordinary aliases;
+- callers use `clone()` when mutation isolation is required;
+- optimizers and backend kernels update parameters through a narrow internal
+  mutation boundary, not public writable pointers or element references;
+- public API documentation identifies every mutating operation and its
+  aliasing effect.
+
+This policy preserves parameter identity and keeps optimizer behavior
+understandable. Hidden copy-on-write and unrestricted public mutation are both
+out of scope.
 
 Adding dtype polymorphism or arbitrary strided views is explicitly outside this
 refactor.
@@ -544,12 +573,26 @@ Before replacing interfaces, record current observable behavior:
 - CPU/CUDA numerical parity;
 - unsupported-operation and wrong-device diagnostics.
 
+Characterization is not automatically a permanent guarantee. The behavior
+contract labels each observed behavior as one of:
+
+- **guaranteed** — the replacement API must preserve it;
+- **legacy-only** — retained only while the legacy facade exists;
+- **known defect / explicitly unpinned** — observed by a test but intentionally
+  not carried into the replacement API.
+
+Repeated `backward()` calls must accumulate one newly computed gradient pass
+per call. Legacy amplification caused by feeding previously stored
+intermediate gradients into a later traversal—including the Conv2d `3x`
+result after two calls—is characterized but not guaranteed.
+
 Also create a small `CppResist` integration inventory: which tensor, graph,
 optimizer, Eigen, and CUDA details it currently touches. This is an input to
 the extension API, not a reason to preserve unsafe public fields.
 
-Exit criterion: behavior that must survive the refactor is executable and
-documented.
+Exit criterion: every guaranteed behavior maps to an executable test, every
+legacy-only or unpinned behavior is labeled, and applicable CPU contract tests
+run in CI rather than merely compile.
 
 ### Phase 1 — Build and package boundary
 
@@ -575,12 +618,15 @@ Add the new value layer without deleting the old API:
 - implement `Shape` and `Device`;
 - implement CPU `Tensor` with hidden storage;
 - define shallow-copy and `clone()` semantics;
+- define first-axis-contiguous order and reshape semantics;
+- define shared-mutable aliasing and the controlled internal mutation boundary;
 - add checked host import/export;
 - add reshape and basic factory functions;
 - ensure errors are runtime validations, not debug-only assertions.
 
-Test ownership, copying, empty tensors, invalid shapes, overflow, host
-round-trips, and reshape rules.
+Test ownership, alias-visible mutation, clone isolation, copying, empty
+tensors, invalid shapes, overflow, host round-trips, byte order, and reshape
+rules.
 
 Exit criterion: CPU numerical storage works without exposing Eigen in normal
 public headers.
@@ -595,6 +641,12 @@ Implement:
 - `backward`, `detach`, and `zero_grad`;
 - exception-safe graph traversal;
 - the custom-operation extension boundary.
+
+Each `backward()` traversal computes propagation from a fresh seed. Existing
+stored gradients may be accumulated into committed node gradients, but they
+must not become inputs to the next traversal. Two identical calls therefore
+add two identical leaf-gradient passes unless the caller changes the graph or
+upstream gradient.
 
 Prove the design with a narrow vertical slice:
 
@@ -634,51 +686,104 @@ For each operation, require:
 - axis, broadcasting, and batched-shape validation;
 - shared-node and gradient-accumulation coverage where applicable.
 
-Exit criterion: the old operation implementation is no longer needed by the
-new API.
+Exit criterion: the new API has one N-D kernel path. Any still-live legacy
+implementation has a named remaining consumer and retirement gate.
 
-### Phase 5 — Migrate modules in bounded bundles
+#### Legacy retirement rule for every migrated slice
 
-#### Phase 5a — Module, Linear, and Sequential
+For each operation, module, optimizer, or backend bundle:
 
-- implement registration and deterministic traversal;
+1. establish replacement API and consumer coverage;
+2. route the compatibility facade through the replacement implementation when
+   that remains simpler than a hybrid adapter;
+3. remove the superseded implementation immediately after its last consumer
+   moves;
+4. if adaptation is temporarily unsafe, record the exact remaining consumer
+   and deletion gate, and add no new feature to the legacy path.
+
+The goal is one implementation with two facades during compatibility—not two
+implementations until final cleanup. A facade may remain until downstream
+qualification; duplicated kernels or state should not.
+
+Current recorded exception: the legacy `Mat`/`VarPtr` operation path remains
+for legacy modules and `CppResist`, whose graph representation has not yet
+migrated. It receives no new features. Its core operations are adapted or
+deleted as the Phase 5–10 consumers move, with final facade deletion in
+Phase 11.
+
+### Gate 4.5 — Executable-contract closeout
+
+Before Phase 5 feature work:
+
+- run the default and advanced registered CTest inventories in hosted CPU CI;
+- confirm every guaranteed Phase-0 row maps to a test that CI executes;
+- label code-inspection-only and CUDA-hardware-only rows honestly;
+- keep legacy repeated-backward amplification tests only as legacy
+  characterization;
+- verify the replacement Variable test enforces fresh-seed, one-pass-per-call
+  accumulation;
+- verify Tensor tests cover byte order, alias-visible mutation, reshape
+  sharing, and clone isolation.
+
+Exit criterion: the words “executable contract” describe tests that actually
+run, and remaining hardware/manual gaps are explicit.
+
+### Phase 5 — OOP training stack, vertical gate first
+
+Do not begin with a bulk module hierarchy. First prove the complete training
+boundary using only the replacement API.
+
+#### Phase 5a — Linear + SGD vertical training gate
+
+- implement the minimal parameter registry and deterministic traversal;
 - migrate `Linear`;
-- migrate `Sequential`;
-- validate nested-module parameter discovery.
-
-#### Phase 5b — Convolution and pooling
-
-- migrate `Conv2d`;
-- migrate `DepthwiseConv2d`;
-- migrate `MaxPool2d`;
-- migrate `AvgPool2d`;
-- migrate `NearestUpsample2d`.
-
-#### Phase 5c — Normalization
-
-- migrate `GroupNorm`;
-- validate parameter and gradient behavior separately.
-
-#### Phase 5d — Diffusion helpers
-
-- migrate `randn`;
-- migrate sinusoidal time embeddings;
-- migrate `q_sample`.
-
-Exit criterion: all current modules use private registered state and the new
-public value types.
-
-### Phase 6 — Migrate optimizers and state
-
+- implement controlled parameter mutation through the private Tensor/Variable
+  boundary;
 - migrate SGD;
+- run a complete two-layer MLP or equivalent nontrivial training loop:
+
+```text
+Tensor input
+    -> Linear
+    -> activation
+    -> Linear
+    -> loss
+    -> backward
+    -> SGD step
+    -> measurable loss decrease
+```
+
+This gate verifies parameter identity, alias-visible optimizer updates,
+gradient clearing, deterministic parameter order, and absence of Eigen in the
+consumer translation unit.
+
+#### Phase 5b — Composition and Adam
+
+- migrate `Sequential` and nested-module registration;
 - migrate Adam;
 - place moment tensors with their parameters;
-- define explicit state snapshot and restore;
-- validate a complete state before applying it;
-- preserve exact update trajectories within documented tolerance.
+- define explicit optimizer state snapshot and restore;
+- validate complete state before mutating a live optimizer;
+- preserve exact SGD and Adam trajectories within documented tolerance.
 
-Exit criterion: downstream code can checkpoint and restore optimizer state
-without accessing implementation fields.
+Exit criterion: an end-to-end MLP trains through the new API, nested parameter
+discovery is deterministic, and optimizer state can be restored without
+accessing implementation fields.
+
+### Phase 6 — CPU spatial and special modules
+
+Migrate in bounded bundles:
+
+1. `Conv2d` and `MaxPool2d`;
+2. `DepthwiseConv2d`, `AvgPool2d`, and `NearestUpsample2d`;
+3. `GroupNorm`, including parameter and gradient behavior;
+4. `randn`, sinusoidal time embeddings, and `q_sample`.
+
+Each bundle must have a replacement consumer test before its corresponding
+legacy implementation is adapted or retired.
+
+Exit criterion: all current CPU modules and diffusion helpers use private
+registered state and the new public value types.
 
 ### Phase 7 — Migrate complex and FFT support
 
@@ -757,17 +862,29 @@ After all in-repository and downstream migration tests pass:
 
 - remove public `Mat`;
 - remove `VarPtr`;
+- delete the compatibility facade after it has become a thin adapter;
 - remove mutable public graph fields;
 - remove normal-API raw CUDA pointers;
 - remove duplicated host/device optimizer state;
 - remove old implementation paths;
+- make Eigen an implementation-only (`PRIVATE`) target dependency;
+- remove the public `AUTOGRAD_USE_CUDA` compile definition, or replace it with
+  a narrowly documented installed-package feature mechanism that does not
+  expose conditional graph/storage fields;
+- verify a CPU-only installed package does not require Eigen or CUDA for a
+  normal consumer using only the canonical API;
+- in a CUDA-enabled package, propagate only linker/runtime dependencies that
+  are technically required—never CUDA headers, raw types, or ABI-changing
+  compile definitions;
 - retain root `autograd.h` only as a compatibility include path that forwards
   to the canonical umbrella header;
 - document breaking changes and migration examples;
 - assign a version to the new public API.
 
-Exit criterion: one implementation path remains and no normal public header
-leaks Eigen, CUDA, or graph internals.
+Exit criterion: one implementation path remains, CPU-only consumers receive no
+Eigen/CUDA dependency, CUDA-enabled consumers receive no public CUDA types or
+ABI-changing macro, and no normal public header leaks Eigen, CUDA, or graph
+internals.
 
 ## 10. Bundled Pull Request Delivery Plan
 
@@ -785,9 +902,10 @@ merge, and history.
    custom-op boundary).
 4. **CPU N-D operations.** Remaining ops, activations, axis-aware reductions
    and layout transforms, batched matmul, broadcasting, losses, and their
-   gradients with 2-D parity plus N-D validation.
-5. **OOP training stack.** Module registry, `Linear`, `Sequential`, `SGD`,
-   `Adam`, and optimizer snapshot/restore.
+   gradients with 2-D parity plus N-D validation. Close the bundle by making
+   hosted CPU CI execute the complete registered contract inventory.
+5. **OOP training stack.** Begin with the Linear + SGD end-to-end training
+   gate, then add module composition, Adam, and optimizer snapshot/restore.
 6. **CPU spatial and special modules.** `Conv2d`, `DepthwiseConv2d`,
    `MaxPool2d`, `AvgPool2d`, `NearestUpsample2d`, `GroupNorm`, and diffusion
    helpers (`randn`, sinusoidal time embeddings, `q_sample`).
@@ -806,11 +924,12 @@ merge, and history.
     `CppResist` repository PR around `Tensor`/`Variable`, registered
     parameters, stable optimizer state, custom-op APIs, and explicit device
     boundaries.
-12. **Breaking cleanup and API freeze.** Remove legacy public API (`Mat`,
-    `VarPtr`, mutable graph fields, raw CUDA pointers, duplicated optimizer
-    state, old implementation paths), keep `autograd.h` as a forwarding
-    compatibility include, document breaking changes, and assign a version
-    to the new public API.
+12. **Breaking cleanup and API freeze.** Remove the thin legacy facade and
+    public API (`Mat`, `VarPtr`, mutable graph fields, raw CUDA pointers,
+    duplicated optimizer state, old implementation paths), make Eigen and
+    CUDA implementation dependencies non-public, keep `autograd.h` as a
+    forwarding compatibility include, document breaking changes, and assign a
+    version to the new public API.
 
 A bundle is split only when its scope is independently reviewable or a
 blocker or risk requires separating it. CPU autograd is not combined with
@@ -819,8 +938,7 @@ legacy removal does not precede downstream qualification.
 
 Normal workflow is sequential PRs from updated `main`, each merged before the
 next is opened. Stacking a PR on another is permitted only when explicitly
-chosen and noted in the PR description. PR #34 is currently stacked on
-PR #33 and will be rebased or retargeted after PR #33 merges.
+chosen and noted in the PR description.
 
 ## 11. Validation Matrix
 
@@ -839,12 +957,34 @@ PR #33 and will be rebased or retargeted after PR #33 merges.
 The existing core, NN, convolution, extension, diffusion, smoke, and CUDA tests
 should be retained or replaced by equivalent tests rather than discarded.
 
+Building a test executable is not contract execution. CPU CI must run the
+complete registered inventory:
+
+```bash
+ctest --test-dir build --output-on-failure
+ctest --test-dir build-advanced --output-on-failure
+```
+
+New characterization, Shape/Tensor, autograd-core, and N-D operation tests are
+part of this inventory. CUDA parity requires execution on a CUDA-capable
+runner before merging CUDA bundles; when hosted CI lacks a GPU, the PR records
+the external/manual CUDA command, hardware, and result rather than presenting
+a CPU-only build as CUDA validation.
+
+Automated model reviews are review aids, not acceptance evidence. They may be
+recorded under review notes, but completion gates rely on executable tests,
+sanitizers/static analysis where applicable, reproducible measurements, and
+human review when available.
+
 ## 12. Completion Criteria
 
 The refactor is complete when:
 
 - normal public headers expose no Eigen or CUDA types;
+- a CPU-only installed target does not propagate Eigen or CUDA;
 - `Tensor` contains numerical/device state only;
+- Tensor memory order, aliasing, and mutation semantics are documented and
+  tested;
 - `Variable` graph internals are private;
 - modules expose parameters through registration and traversal;
 - optimizers expose stable state without backend-specific duplicate fields;
@@ -877,8 +1017,16 @@ migrated CUDA operation.
 
 ### Risk: long-lived dual architecture
 
-Control: migrate in vertical slices, record removal criteria per phase, and
-remove the old path immediately after all consumers of a slice move.
+Control: migrate in vertical slices, record the last legacy consumer and
+removal criterion per slice, adapt the facade when that is simpler, and remove
+the old implementation immediately after the last consumer moves. No new
+feature is added only to a superseded path.
+
+### Risk: tests compile but contract behavior is not executed
+
+Control: run complete CTest inventories in CPU CI, require explicit CUDA
+execution evidence for CUDA bundles, and label code-inspection-only gaps rather
+than calling them executable coverage.
 
 ### Risk: opaque abstractions make a teaching library harder to read
 
@@ -893,20 +1041,20 @@ both migrations or extracting a shared core prematurely.
 
 ## 14. Recommended Execution Order
 
-Start with Phase 0 and Phase 1. Then implement one complete CPU vertical slice
-through Phases 2–4 before migrating all operations. Stabilize modules,
-optimizers, and FFT on CPU before introducing the new CUDA storage model.
-
-The first implementation milestone should therefore be:
+Phases 0–4 establish the CPU Tensor, Variable, and N-D operation foundation.
+The next implementation milestone is the Phase 5a training slice:
 
 ```text
-external consumer
-    -> Tensor(CPU)
-    -> Variable
-    -> add/mul/sum
+Eigen-free consumer
+    -> Tensor / Variable
+    -> Linear
+    -> activation
+    -> Linear
+    -> loss
     -> backward
-    -> custom operation
+    -> SGD step
+    -> loss decreases
 ```
 
-This milestone tests the important architectural boundaries with the smallest
-possible feature surface.
+Only after this gate passes should `Sequential`, Adam state, and the remaining
+module bundles expand the surface.

@@ -29,19 +29,11 @@ jobs:
           cmake .. -DCMAKE_BUILD_TYPE=Release
           make -j$(nproc)
       - name: Run tests
-        run: |
-          cd build
-          ./test_core
-          ./test_nn
-          ./test_conv
+        run: ctest --test-dir build --output-on-failure
       - name: Build advanced tests
         run: |
           mkdir build-advanced && cd build-advanced
           cmake .. -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
           make -j$(nproc)
       - name: Run advanced tests
-        run: |
-          cd build-advanced
-          ./test_extensions
-          ./test_diffusion
-          ./test_smoke
+        run: ctest --test-dir build-advanced --output-on-failure
