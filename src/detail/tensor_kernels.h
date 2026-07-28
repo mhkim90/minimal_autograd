@@ -1,13 +1,13 @@
 #pragma once
 // Private CPU tensor arithmetic for the autograd vertical slice.
 //
-// All kernels act on Tensor-backed dense storage laid out first-axis
-// contiguous: for shape (D0, D1, ..., D{n-1}) the strides are
-// stride[0] = 1, stride[i] = stride[i-1] * D[i-1]. For rank-2 this
-// matches the legacy Eigen column-major convention (flat index for
-// (R, C) is `i + R * j`). Host copies go through Tensor::copy_to_host
-// / copy_from_host; shapes and devices are validated by callers. New
-// kernels are rank-agnostic and accept any rank + axis.
+// All kernels act on Tensor-backed dense storage laid out last-axis
+// contiguous (canonical row-major): for shape (D0, D1, ..., D{n-1})
+// the strides are stride[n-1] = 1, stride[i] = stride[i+1] * D[i+1].
+// For rank-2 the flat index for (row, col) is `row * C + col`. Host
+// copies go through Tensor::copy_to_host / copy_from_host; shapes
+// and devices are validated by callers. New kernels are rank-agnostic
+// and accept any rank + axis.
 
 #include "autograd/tensor.h"
 
@@ -51,8 +51,9 @@ inline int64_t checked_dim_sum(const char* op, int64_t a, int64_t b) {
 }
 
 // ── Shape / stride / index helpers ─────────────────────────────────────
-// First-axis-contiguous strides: stride[0] = 1, stride[i] = stride[i-1] *
-// shape[i-1]. Matches Eigen column-major for rank-2.
+// Last-axis-contiguous strides (row-major): stride[n-1] = 1,
+// stride[i] = stride[i+1] * shape[i+1]. For rank-2 (R, C): flat
+// index = row * C + col.
 inline std::vector<int64_t> contiguous_strides(const Shape& s) {
     return contiguous_stride(s).strides;
 }
@@ -105,9 +106,11 @@ inline std::vector<int> normalize_axes(const std::vector<int>& axes,
     return out;
 }
 
-// Increment a multi-index in first-axis-contiguous order.
+// Increment a multi-index in last-axis-contiguous (row-major) order:
+// the LAST index advances fastest, matching the byte order in
+// contiguous row-major storage.
 inline bool increment_index(std::vector<int64_t>& idx, const Shape& s) {
-    for (std::size_t i = 0; i < idx.size(); ++i) {
+    for (int i = static_cast<int>(idx.size()) - 1; i >= 0; --i) {
         if (idx[i] + 1 < s.sizes[i]) {
             ++idx[i];
             return true;
@@ -605,9 +608,9 @@ inline Tensor tensor_div_backward_b(const Tensor& g,
 
 // ── N-D ops (rank-agnostic) ─────────────────────────────────────────────
 //
-// Storage remains first-axis contiguous: stride[0] = 1,
-// stride[i] = stride[i-1] * D[i-1]. Rank-2 therefore preserves the
-// legacy column-major layout.
+// Storage is last-axis contiguous (row-major): stride[n-1] = 1,
+// stride[i] = stride[i+1] * D[i+1]. For rank-2 the flat index for
+// (row, col) is `row * C + col`.
 
 // softmax_nd: per-row-equivalent reduce along an arbitrary axis. The
 // shape of the output equals the shape of `a`. saved_softmax stores
@@ -1691,10 +1694,8 @@ inline Tensor tensor_matmul_backward_b_nd(const Tensor& a,
 // ── NCHW spatial kernels ───────────────────────────────────────────────
 //
 // All spatial kernels operate on rank-4 tensors in NCHW logical layout
-// with first-axis-contiguous storage: stride = (1, N, N*C, N*C*H).
-// Storage layouts differ from the standard NCHW (N outer-most) view;
-// see ARCHITECTURE_REFACTOR_PLAN.md §5.3. The flat index for
-// (n, c, h, w) is n + c*N + h*N*C + w*N*C*H.
+// with last-axis-contiguous (row-major) storage: stride = (C*H*W, H*W,
+// W, 1). The flat index for (n, c, h, w) is ((n*C + c)*H + h)*W + w.
 //
 // stride > 0 and pad >= 0 are required. The output extent formulas
 // match the legacy plan: oH = (H + 2*pad - kH) / stride + 1, etc.
@@ -1741,13 +1742,13 @@ inline Tensor tensor_im2col_nchw(const Tensor& input,
     std::vector<float> in_data(input.elements()), col_data(col.elements());
     input.copy_to_host(in_data.data(), in_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int col_stride_n = 1;
-    const int col_stride_k = N;
-    const int col_stride_p = N * K_flat;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int col_stride_n = K_flat * P_flat;
+    const int col_stride_k = P_flat;
+    const int col_stride_p = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -1797,13 +1798,13 @@ inline Tensor tensor_col2im_nchw(const Tensor& col,
     col.copy_to_host(col_data.data(), col_data.size());
     out.copy_to_host(out_data.data(), out_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int col_stride_n = 1;
-    const int col_stride_k = N;
-    const int col_stride_p = N * K_flat;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int col_stride_n = K_flat * P_flat;
+    const int col_stride_k = P_flat;
+    const int col_stride_p = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -1867,17 +1868,17 @@ inline Tensor tensor_conv2d_nchw_forward(const Tensor& input,
     bias.copy_to_host(b_data.data(), b_data.size());
     saved_col.copy_to_host(col_data.data(), col_data.size());
 
-    const int w_stride_oc = 1;
-    const int w_stride_c  = OC;
-    const int w_stride_kh = OC * C;
-    const int w_stride_kw = OC * C * kH;
-    const int col_stride_n = 1;
-    const int col_stride_k = N;
-    const int col_stride_p = N * K_flat;
-    const int out_stride_n = 1;
-    const int out_stride_oc = N;
-    const int out_stride_oh = N * OC;
-    const int out_stride_ow = N * OC * oH;
+    const int w_stride_oc = C * kH * kW;
+    const int w_stride_c  = kH * kW;
+    const int w_stride_kh = kW;
+    const int w_stride_kw = 1;
+    const int col_stride_n = K_flat * P_flat;
+    const int col_stride_k = P_flat;
+    const int col_stride_p = 1;
+    const int out_stride_n = OC * oH * oW;
+    const int out_stride_oc = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int oc = 0; oc < OC; ++oc) {
@@ -1934,17 +1935,17 @@ inline Tensor tensor_conv2d_nchw_backward_input(
     g.copy_to_host(g_data.data(), g_data.size());
     weight.copy_to_host(w_data.data(), w_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_oc = N;
-    const int g_stride_oh = N * OC;
-    const int g_stride_ow = N * OC * oH;
-    const int w_stride_oc = 1;
-    const int w_stride_c  = OC;
-    const int w_stride_kh = OC * C;
-    const int w_stride_kw = OC * C * kH;
-    const int dc_stride_n = 1;
-    const int dc_stride_k = N;
-    const int dc_stride_p = N * K_flat;
+    const int g_stride_n = OC * oH * oW;
+    const int g_stride_oc = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
+    const int w_stride_oc = C * kH * kW;
+    const int w_stride_c  = kH * kW;
+    const int w_stride_kh = kW;
+    const int w_stride_kw = 1;
+    const int dc_stride_n = K_flat * P_flat;
+    const int dc_stride_k = P_flat;
+    const int dc_stride_p = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int oc = 0; oc < OC; ++oc) {
@@ -1985,6 +1986,7 @@ inline Tensor tensor_conv2d_nchw_backward_weight(
     const int kH = static_cast<int>(w_shape[2]);
     const int kW = static_cast<int>(w_shape[3]);
     const int N  = static_cast<int>(col.shape()[0]);
+    const int P_flat = static_cast<int>(col.shape()[2]);
     const int oH = static_cast<int>(g.shape()[2]);
     const int oW = static_cast<int>(g.shape()[3]);
 
@@ -1997,17 +1999,17 @@ inline Tensor tensor_conv2d_nchw_backward_weight(
     g.copy_to_host(g_data.data(), g_data.size());
     col.copy_to_host(col_data.data(), col_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_oc = N;
-    const int g_stride_oh = N * OC;
-    const int g_stride_ow = N * OC * oH;
-    const int col_stride_n = 1;
-    const int col_stride_k = N;
-    const int col_stride_p = N * (C * kH * kW);
-    const int dw_stride_oc = 1;
-    const int dw_stride_c  = OC;
-    const int dw_stride_kh = OC * C;
-    const int dw_stride_kw = OC * C * kH;
+    const int g_stride_n = OC * oH * oW;
+    const int g_stride_oc = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
+    const int col_stride_n = (C * kH * kW) * P_flat;
+    const int col_stride_k = P_flat;
+    const int col_stride_p = 1;
+    const int dw_stride_oc = C * kH * kW;
+    const int dw_stride_c  = kH * kW;
+    const int dw_stride_kh = kW;
+    const int dw_stride_kw = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int oc = 0; oc < OC; ++oc) {
@@ -2055,10 +2057,10 @@ inline Tensor tensor_conv2d_nchw_backward_bias(const Tensor& g) {
     std::vector<float> db_data(d_b.elements());
     g.copy_to_host(g_data.data(), g_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_oc = N;
-    const int g_stride_oh = N * OC;
-    const int g_stride_ow = N * OC * oH;
+    const int g_stride_n = OC * oH * oW;
+    const int g_stride_oc = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
 
     for (int oc = 0; oc < OC; ++oc) {
         double s = 0.0;
@@ -2106,14 +2108,14 @@ inline Tensor tensor_maxpool2d_nchw_forward(const Tensor& input,
     std::vector<float> mask_data(saved_mask.elements());
     input.copy_to_host(in_data.data(), in_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2168,13 +2170,13 @@ inline Tensor tensor_maxpool2d_nchw_backward(const Tensor& g,
     g.copy_to_host(g_data.data(), g_data.size());
     mask.copy_to_host(mask_data.data(), mask_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_c = N;
-    const int g_stride_oh = N * C;
-    const int g_stride_ow = N * C * oH;
-    const int dc_stride_n = 1;
-    const int dc_stride_k = N;
-    const int dc_stride_p = N * K_flat;
+    const int g_stride_n = C * oH * oW;
+    const int g_stride_c = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
+    const int dc_stride_n = K_flat * P_flat;
+    const int dc_stride_k = P_flat;
+    const int dc_stride_p = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2208,10 +2210,10 @@ inline Tensor tensor_maxpool2d_nchw_backward(const Tensor& g,
 // bias is rank-1 (C,). The forward is decomposed through the existing
 // im2col + col2im helpers by reusing the rank-3 col matrix view.
 //
-// Storage layout (first-axis-contiguous):
-//   col shape: (N, C*kH*kW, oH*oW), strides (1, N, N*C*kH*kW)
+// Storage layout (last-axis contiguous / row-major):
+//   col shape: (N, C*kH*kW, oH*oW), strides (C*kH*kW*oH*oW, oH*oW, 1)
 //   For each (n, c, k, p): col[n, c*kH*kW + k, p] = input[n, c, ...]
-//   weight[c, kh, kw] index: c + kh*C + kw*C*kH
+//   weight[c, kh, kw] index: c*kH*kW + kh*kW + kw
 //   For each (n, c, oh, ow):
 //     out[n, c, oh, ow] = bias[c] + sum_{kh, kw} weight[c, kh, kw]
 //                                                * col[n, c*kH*kW + kh*kW + kw, oh*oW + ow]
@@ -2246,16 +2248,16 @@ inline Tensor tensor_depthwise_conv2d_nchw_forward(
     bias.copy_to_host(b_data.data(), b_data.size());
     saved_col.copy_to_host(col_data.data(), col_data.size());
 
-    const int w_stride_c = 1;
-    const int w_stride_kh = C;
-    const int w_stride_kw = C * kH;
-    const int col_stride_n = 1;
-    const int col_stride_k = N;
-    const int col_stride_p = N * K_flat;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int w_stride_c = kH * kW;
+    const int w_stride_kh = kW;
+    const int w_stride_kw = 1;
+    const int col_stride_n = K_flat * P_flat;
+    const int col_stride_k = P_flat;
+    const int col_stride_p = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2315,16 +2317,16 @@ inline Tensor tensor_depthwise_conv2d_nchw_backward_input(
     g.copy_to_host(g_data.data(), g_data.size());
     weight.copy_to_host(w_data.data(), w_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_c = N;
-    const int g_stride_oh = N * C;
-    const int g_stride_ow = N * C * oH;
-    const int w_stride_c = 1;
-    const int w_stride_kh = C;
-    const int w_stride_kw = C * kH;
-    const int dc_stride_n = 1;
-    const int dc_stride_k = N;
-    const int dc_stride_p = N * K_flat;
+    const int g_stride_n = C * oH * oW;
+    const int g_stride_c = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
+    const int w_stride_c = kH * kW;
+    const int w_stride_kh = kW;
+    const int w_stride_kw = 1;
+    const int dc_stride_n = K_flat * P_flat;
+    const int dc_stride_k = P_flat;
+    const int dc_stride_p = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2360,6 +2362,7 @@ inline Tensor tensor_depthwise_conv2d_nchw_backward_weight(
     const Shape& cs = col.shape();
     const Shape& gs = g.shape();
     const int N = static_cast<int>(cs[0]);
+    const int P_flat = static_cast<int>(cs[2]);
     const int C = static_cast<int>(gs[1]);
     const int oH = static_cast<int>(gs[2]);
     const int oW = static_cast<int>(gs[3]);
@@ -2374,16 +2377,16 @@ inline Tensor tensor_depthwise_conv2d_nchw_backward_weight(
     g.copy_to_host(g_data.data(), g_data.size());
     col.copy_to_host(col_data.data(), col_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_c = N;
-    const int g_stride_oh = N * C;
-    const int g_stride_ow = N * C * oH;
-    const int col_stride_n = 1;
-    const int col_stride_k = N;
-    const int col_stride_p = N * (C * ksz);
-    const int dw_stride_c = 1;
-    const int dw_stride_kh = C;
-    const int dw_stride_kw = C * kH;
+    const int g_stride_n = C * oH * oW;
+    const int g_stride_c = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
+    const int col_stride_n = (C * ksz) * P_flat;
+    const int col_stride_k = P_flat;
+    const int col_stride_p = 1;
+    const int dw_stride_c = kH * kW;
+    const int dw_stride_kh = kW;
+    const int dw_stride_kw = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2431,10 +2434,10 @@ inline Tensor tensor_depthwise_conv2d_nchw_backward_bias(const Tensor& g) {
     std::vector<float> db_data(d_b.elements());
     g.copy_to_host(g_data.data(), g_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_c = N;
-    const int g_stride_oh = N * C;
-    const int g_stride_ow = N * C * oH;
+    const int g_stride_n = C * oH * oW;
+    const int g_stride_c = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
 
     for (int c = 0; c < C; ++c) {
         double s = 0.0;
@@ -2484,14 +2487,14 @@ inline Tensor tensor_avgpool2d_nchw_forward(const Tensor& input,
     std::vector<float> out_data(out.elements());
     input.copy_to_host(in_data.data(), in_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2537,14 +2540,14 @@ inline Tensor tensor_avgpool2d_nchw_backward(const Tensor& g,
     std::vector<float> d_in_data(d_in.elements());
     g.copy_to_host(g_data.data(), g_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_c = N;
-    const int g_stride_oh = N * C;
-    const int g_stride_ow = N * C * oH;
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
+    const int g_stride_n = C * oH * oW;
+    const int g_stride_c = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2595,14 +2598,14 @@ inline Tensor tensor_nearest_upsample2d_nchw_forward(const Tensor& input,
     std::vector<float> out_data(out.elements());
     input.copy_to_host(in_data.data(), in_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2644,14 +2647,14 @@ inline Tensor tensor_nearest_upsample2d_nchw_backward(const Tensor& g,
     std::vector<float> d_in_data(d_in.elements());
     g.copy_to_host(g_data.data(), g_data.size());
 
-    const int g_stride_n = 1;
-    const int g_stride_c = N;
-    const int g_stride_oh = N * C;
-    const int g_stride_ow = N * C * oH;
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
+    const int g_stride_n = C * oH * oW;
+    const int g_stride_c = oH * oW;
+    const int g_stride_oh = oW;
+    const int g_stride_ow = 1;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -2736,14 +2739,14 @@ inline Tensor tensor_group_norm_nchw_forward(
     gamma.copy_to_host(gamma_data.data(), gamma_data.size());
     beta.copy_to_host(beta_data.data(), beta_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_h = N * C;
-    const int out_stride_w = N * C * H;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * H * W;
+    const int out_stride_c = H * W;
+    const int out_stride_h = W;
+    const int out_stride_w = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int g = 0; g < num_groups; ++g) {
@@ -2827,10 +2830,10 @@ inline Tensor tensor_group_norm_nchw_backward_input(
     gamma.copy_to_host(gamma_data.data(), gamma_data.size());
     inv_std.copy_to_host(inv_std_data.data(), inv_std_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
 
     for (int n = 0; n < N; ++n) {
         for (int grp = 0; grp < num_groups; ++grp) {
@@ -2897,10 +2900,10 @@ inline Tensor tensor_group_norm_nchw_backward_weight(
     g.copy_to_host(g_data.data(), g_data.size());
     xhat.copy_to_host(xhat_data.data(), xhat_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
 
     for (int c = 0; c < C; ++c) {
         double s = 0.0;
@@ -2936,10 +2939,10 @@ inline Tensor tensor_group_norm_nchw_backward_bias(const Tensor& g) {
     std::vector<float> db_data(d_beta.elements());
     g.copy_to_host(g_data.data(), g_data.size());
 
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
 
     for (int c = 0; c < C; ++c) {
         double s = 0.0;

@@ -8,7 +8,7 @@
 // Conv2d; argmax mask for MaxPool2d), and registers a private graph
 // node whose saved metadata encodes the geometry.
 //
-// Shape contract (rank-4 NCHW; first-axis-contiguous storage):
+// Shape contract (rank-4 NCHW; last-axis-contiguous row-major storage):
 //   input  : (N, C, H, W)
 //   weight : (OC, C, kH, kW)
 //   bias   : (OC,)  rank-1

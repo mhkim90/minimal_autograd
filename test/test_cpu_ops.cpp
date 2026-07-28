@@ -93,7 +93,7 @@ std::vector<float> fd_grad_rank2(Variable x,
 
     for (int64_t r = 0; r < R; ++r) {
         for (int64_t c = 0; c < C; ++c) {
-            const int flat = static_cast<int>(r + R * c);
+            const int flat = static_cast<int>(r * C + c);
             const float orig = data[flat];
 
             data[flat] = orig + eps;
@@ -168,19 +168,18 @@ void test_matmul() {
     Variable b(make({7.f, 8.f, 9.f, 10.f, 11.f, 12.f}, Shape{3, 2}), true);
     Variable out = ag::matmul(a, b);
     CHECK(out.value().shape() == Shape{2, 2});
-    // A column-major: [[1,3,5],[2,4,6]]; B: [[7,10],[8,11],[9,12]].
-    // C = A @ B: row 0 = [76, 103], row 1 = [100, 136]; flat = [76, 100, 103, 136].
-    check_near(to_vec(out.value()), {76.f, 100.f, 103.f, 136.f});
+    // A = [[1,2,3],[4,5,6]], B = [[7,8],[9,10],[11,12]].
+    // C = [[58,64],[139,154]] in row-major flat order.
+    check_near(to_vec(out.value()), {58.f, 64.f, 139.f, 154.f});
 
     Variable wrong(make({1.f, 2.f, 3.f}, Shape{1, 3}));
     CHECK_THROWS(ag::matmul(a, wrong));
 
     ag::sum(out).backward();
     // da[i, k] = sum_c B[k, c] = col-sum of B at index k
-    check_near(to_vec(a.grad()), {17.f, 17.f, 19.f, 19.f, 21.f, 21.f});
-    // db[k, n] = sum_m A[m, k] (dC is ones); flat = col sums of A stacked
-    //   col 0 = [3, 7, 11], col 1 = [3, 7, 11]
-    check_near(to_vec(b.grad()), {3.f, 7.f, 11.f, 3.f, 7.f, 11.f});
+    check_near(to_vec(a.grad()), {15.f, 19.f, 23.f, 15.f, 19.f, 23.f});
+    // db[k, n] = sum_m A[m, k] (dC is ones).
+    check_near(to_vec(b.grad()), {5.f, 5.f, 7.f, 7.f, 9.f, 9.f});
 
     Variable x(make({0.1f, 0.2f, 0.3f, -0.4f}, Shape{2, 2}), true);
     Variable y(make({0.5f, -0.6f, 0.7f, 0.8f}, Shape{2, 2}), true);
@@ -361,8 +360,8 @@ void test_silu_softplus_clamp() {
 // ── softmax, log_softmax ────────────────────────────────────────────────
 
 void test_softmax_logsoftmax() {
-    // Column-major storage for rows [1, 2, 3] and [-1, 0, 1].
-    Variable x(make({1.f, -1.f, 2.f, 0.f, 3.f, 1.f}, Shape{2, 3}), true);
+    // Row-major storage for rows [1, 2, 3] and [-1, 0, 1].
+    Variable x(make({1.f, 2.f, 3.f, -1.f, 0.f, 1.f}, Shape{2, 3}), true);
 
     Variable s = ag::softmax(x);
     // row 0: e^1, e^2, e^3 normalized
@@ -371,13 +370,13 @@ void test_softmax_logsoftmax() {
         const float z = a + b + c;
         const float z1 = std::exp(-1.f) + 1.f + std::exp(1.f);
         check_near(to_vec(s.value()),
-                   {a / z, std::exp(-1.f) / z1,
-                    b / z, 1.f / z1,
-                    c / z, std::exp(1.f) / z1});
+                   {a / z, b / z, c / z,
+                    std::exp(-1.f) / z1, 1.f / z1, std::exp(1.f) / z1});
     }
 
-    Variable weights(make({0.5f, -1.f, 2.f, 0.25f, -0.75f, 1.5f},
-                          Shape{2, 3}));
+     Variable weights(make({0.5f, 2.f, -0.75f,
+                            -1.f, 0.25f, 1.5f},
+                           Shape{2, 3}));
     auto fd = fd_grad_rank2(x, [&](const Variable& v) {
         return ag::mul(ag::softmax(v), weights);
     });
@@ -396,9 +395,8 @@ void test_softmax_logsoftmax() {
                                   + std::exp(0.f - m1)
                                   + std::exp(1.f - m1)) + m1;
         check_near(to_vec(lsm.value()),
-                   {1.f - lse0, -1.f - lse1,
-                    2.f - lse0, 0.f - lse1,
-                    3.f - lse0, 1.f - lse1}, 1e-4f);
+                   {1.f - lse0, 2.f - lse0, 3.f - lse0,
+                    -1.f - lse1, 0.f - lse1, 1.f - lse1}, 1e-4f);
     }
     fd = fd_grad_rank2(x,
         [](const Variable& v) { return ag::sum(ag::log_softmax(v)); });
@@ -416,15 +414,9 @@ void test_transpose_reshape_mean() {
 
     Variable t = ag::transpose(x);
     CHECK(t.value().shape() == Shape{3, 2});
-    // transpose of [[1,3,5],[2,4,6]] (column-major) = [[1,2],[3,4],[5,6]]
-    // in column-major flat layout.
-    // x flat (column-major): col0=[1,2], col1=[3,4], col2=[5,6] -> [1,2,3,4,5,6]
-    // t[r,c] = x[c, r]
-    // t flat (col-major of shape 3x2): col0=[t00,t10], col1=[t01,t11], col2=[t02,t12]
-    // t[0,0]=x[0,0]=1; t[1,0]=x[0,1]=3; t[2,0]=x[0,2]=5
-    // t[0,1]=x[1,0]=2; t[1,1]=x[1,1]=4; t[2,1]=x[1,2]=6
-    // t flat = [1,3,5,2,4,6]
-    check_near(to_vec(t.value()), {1.f, 3.f, 5.f, 2.f, 4.f, 6.f});
+    // transpose of [[1,2,3],[4,5,6]] = [[1,4],[2,5],[3,6]];
+    // row-major flat output is [1,4,2,5,3,6].
+    check_near(to_vec(t.value()), {1.f, 4.f, 2.f, 5.f, 3.f, 6.f});
 
     ag::sum(t).backward();
     // transpose is a permutation, grad passes through unchanged.
@@ -461,8 +453,8 @@ void test_broadcast_add_sub_div() {
 
     Variable y = ag::broadcast_add(a, bias);
     CHECK(y.value().shape() == Shape{2, 3});
-    // a rows are [1, 3, 5] and [2, 4, 6].
-    check_near(to_vec(y.value()), {11.f, 12.f, 23.f, 24.f, 35.f, 36.f});
+    // a rows are [1, 2, 3] and [4, 5, 6].
+    check_near(to_vec(y.value()), {11.f, 22.f, 33.f, 14.f, 25.f, 36.f});
 
     ag::sum(y).backward();
     // db = sum over rows of g = ones(2,3) -> [2, 2, 2] (1, 3)
@@ -513,8 +505,8 @@ void test_concat_hcat() {
     Variable b2(make({5.f, 6.f, 7.f, 8.f}, Shape{2, 2}), true);
     Variable c2 = ag::concat({a2, b2});
     CHECK(c2.value().shape() == Shape{4, 2});
-    check_near(to_vec(c2.value()), {1.f, 2.f, 5.f, 6.f,
-                                    3.f, 4.f, 7.f, 8.f});
+    check_near(to_vec(c2.value()), {1.f, 2.f, 3.f, 4.f,
+                                    5.f, 6.f, 7.f, 8.f});
 
     ag::sum(c2).backward();
     check_near(to_vec(a2.grad()), {1.f, 1.f, 1.f, 1.f});
@@ -531,9 +523,9 @@ void test_concat_hcat() {
     b2.zero_grad();
     Variable h = ag::hcat({a2, b2});
     CHECK(h.value().shape() == Shape{2, 4});
-    // hcat stacks columns: [a2 | b2]. col0=[1,2], col1=[3,4], col2=[5,6], col3=[7,8]
-    // flat (column-major): [1,2,3,4,5,6,7,8]
-    check_near(to_vec(h.value()), {1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f});
+    // hcat stacks columns: rows [1,2,5,6] and [3,4,7,8].
+    check_near(to_vec(h.value()), {1.f, 2.f, 5.f, 6.f,
+                                   3.f, 4.f, 7.f, 8.f});
 
     ag::sum(h).backward();
     check_near(to_vec(a2.grad()), {1.f, 1.f, 1.f, 1.f});
@@ -553,12 +545,12 @@ void test_cumsum_flip_slices_split() {
 
     // cumsum along axis 1 (cols)
     Variable y1 = ag::cumsum(x, 1);
-    // Input rows are [1, 3, 5] and [2, 4, 6].
-    check_near(to_vec(y1.value()), {1.f, 2.f, 4.f, 6.f, 9.f, 12.f});
+    // Input rows are [1, 2, 3] and [4, 5, 6].
+    check_near(to_vec(y1.value()), {1.f, 3.f, 6.f, 4.f, 9.f, 15.f});
 
     ag::sum(y1).backward();
     // suffix sum of ones: [3, 2, 1] per row
-    check_near(to_vec(x.grad()), {3.f, 3.f, 2.f, 2.f, 1.f, 1.f});
+    check_near(to_vec(x.grad()), {3.f, 2.f, 1.f, 3.f, 2.f, 1.f});
 
     auto fd = fd_grad_rank2(x, [](const Variable& v) {
         return ag::cumsum(v, 1);
@@ -569,21 +561,18 @@ void test_cumsum_flip_slices_split() {
 
     // cumsum along axis 0 (rows)
     Variable y0 = ag::cumsum(x, 0);
-    // col 0: [1, 3]; col 1: [2, 7]; col 2: [3, 15]; wait
-    // col 0 r0=1, r1=1+2=3 -> ov col0 = [1, 3]
-    // col 1 r0=3, r1=3+4=7 -> ov col1 = [3, 7]
-    // col 2 r0=5, r1=5+6=11 -> ov col2 = [5, 11]
-    check_near(to_vec(y0.value()), {1.f, 3.f, 3.f, 7.f, 5.f, 11.f});
+    // Rows accumulate down axis 0: [1,2,3] then [5,7,9].
+    check_near(to_vec(y0.value()), {1.f, 2.f, 3.f, 5.f, 7.f, 9.f});
 
     // flip along axis 1 (reverse each row's columns)
     Variable f1 = ag::flip(x, 1);
-    // Rows [1,3,5] and [2,4,6] reverse independently.
-    check_near(to_vec(f1.value()), {5.f, 6.f, 3.f, 4.f, 1.f, 2.f});
+    // Rows [1,2,3] and [4,5,6] reverse independently.
+    check_near(to_vec(f1.value()), {3.f, 2.f, 1.f, 6.f, 5.f, 4.f});
 
     // flip along axis 0 (reverse each col's rows)
     Variable f0 = ag::flip(x, 0);
-    // col 0 reversed: [2, 1]; col 1: [4, 3]; col 2: [6, 5]
-    check_near(to_vec(f0.value()), {2.f, 1.f, 4.f, 3.f, 6.f, 5.f});
+    // Rows reverse: [4,5,6] then [1,2,3].
+    check_near(to_vec(f0.value()), {4.f, 5.f, 6.f, 1.f, 2.f, 3.f});
 
     fd = fd_grad_rank2(x, [](const Variable& v) { return ag::flip(v, 1); });
     x.zero_grad();
@@ -593,25 +582,23 @@ void test_cumsum_flip_slices_split() {
     // col_slice and row_slice
     Variable col = ag::col_slice(x, 1, 2);
     CHECK(col.value().shape() == Shape{2, 2});
-    // cols 1..2 of x: col 1=[3,4], col 2=[5,6] -> shape (2,2)
-    // flat: [3, 4, 5, 6]
-    check_near(to_vec(col.value()), {3.f, 4.f, 5.f, 6.f});
+    // cols 1..2 of x: rows [2,3] and [5,6] -> flat [2,3,5,6]
+    check_near(to_vec(col.value()), {2.f, 3.f, 5.f, 6.f});
     x.zero_grad();
     ag::sum(col).backward();
     // g has shape (2, 2); we scatter back: zeros, with cols 1..2 = ones
-    check_near(to_vec(x.grad()), {0.f, 0.f, 1.f, 1.f, 1.f, 1.f});
+    check_near(to_vec(x.grad()), {0.f, 1.f, 1.f, 0.f, 1.f, 1.f});
 
     CHECK_THROWS(ag::col_slice(x, 1, 10));
 
     Variable row = ag::row_slice(x, 1, 1);
     CHECK(row.value().shape() == Shape{1, 3});
-    // row 1 of x: [2, 4, 6]
-    // flat (1, 3) col-major: [2, 4, 6]
-    check_near(to_vec(row.value()), {2.f, 4.f, 6.f});
+    // row 1 of x: [4, 5, 6]
+    check_near(to_vec(row.value()), {4.f, 5.f, 6.f});
     x.zero_grad();
     ag::sum(row).backward();
     // grad: row 0 = zeros, row 1 = ones
-    check_near(to_vec(x.grad()), {0.f, 1.f, 0.f, 1.f, 0.f, 1.f});
+    check_near(to_vec(x.grad()), {0.f, 0.f, 0.f, 1.f, 1.f, 1.f});
 
     CHECK_THROWS(ag::row_slice(x, 5, 1));
 
@@ -621,8 +608,8 @@ void test_cumsum_flip_slices_split() {
     auto halves = ag::split(s_var);
     CHECK(halves.first.value().shape() == Shape{2, 2});
     CHECK(halves.second.value().shape() == Shape{2, 2});
-    check_near(to_vec(halves.first.value()), {1.f, 2.f, 3.f, 4.f});
-    check_near(to_vec(halves.second.value()), {5.f, 6.f, 7.f, 8.f});
+    check_near(to_vec(halves.first.value()), {1.f, 2.f, 5.f, 6.f});
+    check_near(to_vec(halves.second.value()), {3.f, 4.f, 7.f, 8.f});
 
     report("cumsum/flip/col_slice/row_slice/split");
 }
@@ -652,9 +639,9 @@ void test_losses() {
     compare_grads(to_vec(pred2.grad()), fd);
 
     // cross_entropy with one-hot target
-    Variable p(make({1.f, -1.f, 2.f, 0.f, 3.f, 1.f},
+    Variable p(make({1.f, 2.f, 3.f, -1.f, 0.f, 1.f},
                     Shape{2, 3}), true);
-    Tensor tg = make({0.f, 1.f, 1.f, 0.f, 0.f, 0.f}, Shape{2, 3});
+    Tensor tg = make({0.f, 1.f, 0.f, 1.f, 0.f, 0.f}, Shape{2, 3});
     Variable ce = ag::cross_entropy(p, tg);
     CHECK(ce.value().shape() == Shape{});
     {
@@ -724,7 +711,7 @@ void test_nd_ops() {
     for (int k = 0; k < 2; ++k) {
         for (int i = 0; i < 2; ++i) {
             float total = 0.f;
-            for (int j = 0; j < 3; ++j) total += sv[i + 2 * j + 6 * k];
+            for (int j = 0; j < 3; ++j) total += sv[i * 6 + j * 2 + k];
             CHECK(std::fabs(total - 1.f) < 1e-5f);
         }
     }
@@ -732,12 +719,12 @@ void test_nd_ops() {
     Variable accum(make({1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f},
                         Shape{2, 2, 2}), true);
     check_near(to_vec(ag::cumsum(accum, -1).value()),
-               {1.f, 2.f, 3.f, 4.f, 6.f, 8.f, 10.f, 12.f});
+               {1.f, 3.f, 3.f, 7.f, 5.f, 11.f, 7.f, 15.f});
     check_near(to_vec(ag::flip(ag::flip(accum, 1), 1).value()),
                to_vec(accum.value()));
     ag::sum(ag::cumsum(accum, -1)).backward();
     check_near(to_vec(accum.grad()),
-               {2.f, 2.f, 2.f, 2.f, 1.f, 1.f, 1.f, 1.f});
+               {2.f, 1.f, 2.f, 1.f, 2.f, 1.f, 2.f, 1.f});
 
     Variable left(make({1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f},
                        Shape{2, 2, 2}), true);
@@ -773,9 +760,10 @@ void test_nd_ops() {
     Variable reverse_broadcast = ag::broadcast_add(short_left, long_right);
     CHECK(reverse_broadcast.value().shape() == Shape({2, 4, 3}));
     check_near(to_vec(reverse_broadcast.value()),
-               {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f,
-                2.f, 2.f, 2.f, 2.f, 2.f, 2.f, 2.f, 2.f,
-                3.f, 3.f, 3.f, 3.f, 3.f, 3.f, 3.f, 3.f});
+               {1.f, 2.f, 3.f, 1.f, 2.f, 3.f,
+                1.f, 2.f, 3.f, 1.f, 2.f, 3.f,
+                1.f, 2.f, 3.f, 1.f, 2.f, 3.f,
+                1.f, 2.f, 3.f, 1.f, 2.f, 3.f});
     ag::sum(reverse_broadcast).backward();
     check_near(to_vec(short_left.grad()), std::vector<float>(3, 8.f));
     check_near(to_vec(long_right.grad()), std::vector<float>(24, 1.f));
@@ -783,14 +771,14 @@ void test_nd_ops() {
     Variable reductions(make(values, Shape{2, 3, 4}), true);
     Variable reduced = ag::sum(reductions, {0, -1});
     CHECK(reduced.value().shape() == Shape({3}));
-    check_near(to_vec(reduced.value()), {84.f, 100.f, 116.f});
+    check_near(to_vec(reduced.value()), {68.f, 100.f, 132.f});
     ag::sum(reduced).backward();
     check_near(to_vec(reductions.grad()), std::vector<float>(24, 1.f));
     reductions.zero_grad();
     Variable averaged = ag::mean(reductions, {1}, true);
     CHECK(averaged.value().shape() == Shape({2, 1, 4}));
     check_near(to_vec(averaged.value()),
-               {3.f, 4.f, 9.f, 10.f, 15.f, 16.f, 21.f, 22.f});
+                {5.f, 6.f, 7.f, 8.f, 17.f, 18.f, 19.f, 20.f});
     ag::sum(averaged).backward();
     check_near(to_vec(reductions.grad()), std::vector<float>(24, 1.f / 3.f));
     reductions.zero_grad();
@@ -830,17 +818,19 @@ void test_nd_ops() {
     compare_grads(to_vec(mb_fd.grad()), mb_fd_expected);
 
     Variable logits(Tensor::zeros(Shape{2, 2, 3}), true);
-    Tensor target = make({1.f, 1.f, 1.f, 1.f,
-                          0.f, 0.f, 0.f, 0.f,
-                          0.f, 0.f, 0.f, 0.f}, Shape{2, 2, 3});
+    Tensor target = make({1.f, 0.f, 0.f,
+                          1.f, 0.f, 0.f,
+                          1.f, 0.f, 0.f,
+                          1.f, 0.f, 0.f}, Shape{2, 2, 3});
     Variable ce = ag::cross_entropy(logits, target);
     CHECK(ce.value().shape() == Shape{});
     check_near(to_vec(ce.value()), {std::log(3.f)}, 1e-5f);
     ce.backward();
     check_near(to_vec(logits.grad()),
-               {-1.f / 6.f, -1.f / 6.f, -1.f / 6.f, -1.f / 6.f,
-                 1.f / 12.f, 1.f / 12.f, 1.f / 12.f, 1.f / 12.f,
-                 1.f / 12.f, 1.f / 12.f, 1.f / 12.f, 1.f / 12.f});
+               {-1.f / 6.f, 1.f / 12.f, 1.f / 12.f,
+                -1.f / 6.f, 1.f / 12.f, 1.f / 12.f,
+                -1.f / 6.f, 1.f / 12.f, 1.f / 12.f,
+                -1.f / 6.f, 1.f / 12.f, 1.f / 12.f});
 
     Variable rank1(make({1.f, 2.f, 3.f}, Shape{3}), true);
     CHECK(ag::softmax(rank1).value().shape() == Shape({3}));

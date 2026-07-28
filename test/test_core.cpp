@@ -164,6 +164,7 @@ void test_logical_4d_shape() {
     CHECK(x->dim(1) == 3);
     CHECK(x->dim(2) == 4);
     CHECK(x->dim(3) == 5);
+    CHECK(x->stride() == Stride({1, 2, 6, 24}));
 
     auto y = relu(x);
     CHECK(y->is4d());
@@ -172,6 +173,7 @@ void test_logical_4d_shape() {
     y->view({2, 3 * 4 * 5});
     CHECK(y->ndim() == 2);
     CHECK(y->dim(0) == 2 && y->dim(1) == 60);
+    CHECK(y->stride() == Stride({1, 2}));
 
     auto reshaped = reshape(x, 4, 30);
     CHECK(reshaped->ndim() == 2);

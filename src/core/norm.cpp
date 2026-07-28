@@ -9,7 +9,7 @@
 // private graph node whose extras metadata encodes num_groups and
 // eps.
 //
-// Shape contract (rank-4 NCHW; first-axis-contiguous storage):
+// Shape contract (rank-4 NCHW; last-axis-contiguous row-major storage):
 //   input : (N, C, H, W)
 //   gamma : (C,)  rank-1
 //   beta  : (C,)  rank-1

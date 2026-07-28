@@ -264,10 +264,9 @@ Initial guarantees:
 - float32 only;
 - dense, contiguous storage only;
 - N-dimensional logical shape;
-- first-axis-contiguous element order:
-  `stride[0] = 1` and
-  `stride[i] = stride[i - 1] * shape[i - 1]`;
-- rank-2 storage therefore has Eigen-compatible column-major byte order;
+- last-axis-contiguous element order (canonical row-major):
+  `stride[n-1] = 1` and `stride[i] = stride[i + 1] * shape[i + 1]`;
+- rank-2 storage uses flat index `row * columns + col`;
 - ordinary copies share storage;
 - `clone()` makes an independent deep copy;
 - `reshape()` changes logical metadata without reordering elements and shares
@@ -364,8 +363,8 @@ N-D operation rules:
   dimensions, and initially requires identical leading batch dimensions;
 - cross-entropy treats the final axis as classes and averages over all leading
   sample axes;
-- dense storage remains first-axis-contiguous, which preserves the existing
-  Eigen column-major byte order for rank-2 tensors.
+- dense storage remains last-axis-contiguous (canonical row-major), with the
+  final axis varying fastest;
 
 Convenience names such as `row_slice`, `col_slice`, and `hcat` may remain as
 thin compatibility wrappers over axis-aware N-D operations. They must not own
@@ -619,7 +618,7 @@ Add the new value layer without deleting the old API:
 - implement `Shape` and `Device`;
 - implement CPU `Tensor` with hidden storage;
 - define shallow-copy and `clone()` semantics;
-- define first-axis-contiguous order and reshape semantics;
+- define last-axis-contiguous order and reshape semantics;
 - define shared-mutable aliasing and the controlled internal mutation boundary;
 - add checked host import/export;
 - add reshape and basic factory functions;

@@ -2,10 +2,10 @@
 // Tensor-based autograd operations.
 //
 // Conventions:
-//   * All operations are rank-agnostic. Storage is first-axis contiguous
-//     (stride 0 = 1; stride[i] = stride[i-1] * dim[i-1]). For rank-2
-//     this matches the legacy Eigen column-major layout (flat index
-//     = row + rows * col).
+//   * All operations are rank-agnostic. Storage is last-axis contiguous
+//     (canonical row-major): stride[n-1] = 1 and
+//     stride[i] = stride[i+1] * dim[i+1]. For rank-2, flat index is
+//     row * columns + col.
 //   * Elementwise binary operations require identical shapes and
 //     devices. Matrix multiplication validates its inner dimensions
 //     and requires identical leading batch dims with rank >= 2.

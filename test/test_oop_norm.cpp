@@ -125,22 +125,22 @@ std::vector<float> finite_difference(
 }
 
 // Naive NCHW GroupNorm reference. Input (N, C, H, W), gamma/beta (C,),
-// num_groups divides C, eps > 0. Returns flat (N*C*H*W) in the same
-// first-axis-contiguous storage order as the replacement Tensor API.
+// num_groups divides C, eps > 0. Returns flat (N*C*H*W) in row-major,
+// last-axis-contiguous order.
 std::vector<float> group_norm_reference(
         const std::vector<float>& in, int N, int C, int H, int W,
         const std::vector<float>& gamma, const std::vector<float>& beta,
         int num_groups, float eps) {
     const int ch_per_g = C / num_groups;
     const int M = ch_per_g * H * W;
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_h = N * C;
-    const int out_stride_w = N * C * H;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * H * W;
+    const int out_stride_c = H * W;
+    const int out_stride_h = W;
+    const int out_stride_w = 1;
     std::vector<float> out(static_cast<std::size_t>(N) * C * H * W, 0.f);
     for (int n = 0; n < N; ++n) {
         for (int g = 0; g < num_groups; ++g) {
@@ -234,10 +234,10 @@ void test_group_norm_forward_matches_naive() {
                         true);
     ag::Variable y2 = ag::group_norm(xv2, ones, zeros, G, eps);
     std::vector<float> y2v = read_values(y2.value());
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
     for (int n = 0; n < N; ++n) {
         for (int g = 0; g < G; ++g) {
             double mean = 0.0;

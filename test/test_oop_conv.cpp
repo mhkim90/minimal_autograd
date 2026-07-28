@@ -99,12 +99,10 @@ void check_close(const std::vector<float>& a, const std::vector<float>& b,
 }
 
 // Naive NCHW Conv2d reference. Input (N, C, H, W), weight (OC, C, kH, kW),
-// bias (OC,). Returns flat (N * OC * oH * oW) vector in the same
-// first-axis-contiguous storage order the replacement Tensor API uses
-// (stride[0]=1, stride[i]=stride[i-1]*shape[i-1]). The host buffer
-// handed to Tensor::from_host is read with the same stride pattern, so
-// the reference output can be compared element-wise against
-// Tensor::copy_to_host.
+// bias (OC,). Returns flat (N * OC * oH * oW) vector in row-major,
+// last-axis-contiguous order: offset = ((n * C + c) * H + h) * W + w.
+// The host buffer handed to Tensor::from_host uses the same order, so the
+// reference output can be compared element-wise against Tensor::copy_to_host.
 std::vector<float> conv2d_reference(
         const std::vector<float>& in, int N, int C, int H, int W,
         const std::vector<float>& w, int OC, int kH, int kW,
@@ -112,18 +110,18 @@ std::vector<float> conv2d_reference(
         int stride, int pad) {
     const int oH = (H + 2 * pad - kH) / stride + 1;
     const int oW = (W + 2 * pad - kW) / stride + 1;
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int w_stride_oc = 1;
-    const int w_stride_c  = OC;
-    const int w_stride_kh = OC * C;
-    const int w_stride_kw = OC * C * kH;
-    const int out_stride_n = 1;
-    const int out_stride_oc = N;
-    const int out_stride_oh = N * OC;
-    const int out_stride_ow = N * OC * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int w_stride_oc = C * kH * kW;
+    const int w_stride_c  = kH * kW;
+    const int w_stride_kh = kW;
+    const int w_stride_kw = 1;
+    const int out_stride_n = OC * oH * oW;
+    const int out_stride_oc = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
     std::vector<float> out(static_cast<std::size_t>(N) * OC * oH * oW, 0.f);
     for (int n = 0; n < N; ++n) {
         for (int oc = 0; oc < OC; ++oc) {
@@ -367,14 +365,14 @@ void test_maxpool2d_forward_matches_naive() {
     CHECK((y.value().shape() == ag::Shape{N, C, oH, oW}));
 
     std::vector<float> got = read_values(y.value());
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
     std::vector<float> ref(static_cast<std::size_t>(N) * C * oH * oW, 0.f);
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -620,8 +618,8 @@ void test_maxpool2d_invalid_arguments() {
 
 // Naive NCHW DepthwiseConv2d reference. Input (N, C, H, W),
 // weight (C, kH, kW), bias (C,). One per-channel filter shared across
-// batches. Returns flat (N * C * oH * oW) in first-axis-contiguous
-// layout matching the replacement Tensor API.
+// batches. Returns flat (N * C * oH * oW) in last-axis-contiguous
+// row-major layout matching the replacement Tensor API.
 std::vector<float> depthwise_conv2d_reference(
         const std::vector<float>& in, int N, int C, int H, int W,
         const std::vector<float>& w, int kH, int kW,
@@ -629,17 +627,17 @@ std::vector<float> depthwise_conv2d_reference(
         int stride, int pad) {
     const int oH = (H + 2 * pad - kH) / stride + 1;
     const int oW = (W + 2 * pad - kW) / stride + 1;
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int w_stride_c = 1;
-    const int w_stride_kh = C;
-    const int w_stride_kw = C * kH;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int w_stride_c = kH * kW;
+    const int w_stride_kh = kW;
+    const int w_stride_kw = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
     std::vector<float> out(static_cast<std::size_t>(N) * C * oH * oW, 0.f);
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -817,14 +815,14 @@ void test_avgpool2d_forward_matches_naive() {
     std::vector<float> got = read_values(y.value());
     const int ksz = kH * kW;
     const float inv_k = 1.f / static_cast<float>(ksz);
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
     std::vector<float> ref(static_cast<std::size_t>(N) * C * oH * oW, 0.f);
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {
@@ -873,8 +871,8 @@ void test_avgpool2d_gradient_overlap() {
     // The 4 edges (0,1), (1,0), (1,2), (2,1) belong to two windows
     // each -> gradient = 2/4 = 0.5.
     // The center (1,1) belongs to four windows -> gradient = 4/4 = 1.
-    // First-axis-contig flat index for (n, c, h, w) is n + c*N + h*N*C
-    // + w*N*C*H. With N=1, C=1, H=3, W=3: idx = h + 3*w.
+    // Row-major NCHW flat index is ((n*C+c)*H+h)*W+w.
+    // With N=1, C=1, H=3, W=3: idx = 3*h + w.
     std::vector<float> expected = {
         inv_k,
         2.f * inv_k,
@@ -933,14 +931,14 @@ void test_nearest_upsample2d_forward_matches_naive() {
     CHECK((y.value().shape() == ag::Shape{N, C, oH, oW}));
 
     std::vector<float> got = read_values(y.value());
-    const int in_stride_n = 1;
-    const int in_stride_c = N;
-    const int in_stride_h = N * C;
-    const int in_stride_w = N * C * H;
-    const int out_stride_n = 1;
-    const int out_stride_c = N;
-    const int out_stride_oh = N * C;
-    const int out_stride_ow = N * C * oH;
+    const int in_stride_n = C * H * W;
+    const int in_stride_c = H * W;
+    const int in_stride_h = W;
+    const int in_stride_w = 1;
+    const int out_stride_n = C * oH * oW;
+    const int out_stride_c = oH * oW;
+    const int out_stride_oh = oW;
+    const int out_stride_ow = 1;
     std::vector<float> ref(static_cast<std::size_t>(N) * C * oH * oW, 0.f);
     for (int n = 0; n < N; ++n) {
         for (int c = 0; c < C; ++c) {

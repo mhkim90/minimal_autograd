@@ -9,13 +9,15 @@
 //   * No autograd-graph state. Tensor is numerical storage only; Variable
 //     (Phase 3) will own a Tensor plus the autograd node.
 //
-// Storage and per-Tensor logical metadata are hidden in the .cpp. The
-// public handle holds a single std::shared_ptr<detail::TensorImpl>.
-// Each TensorImpl owns a Shape + Device + shared_ptr<Storage>, where
-// Storage is the library-owned float32 buffer. Ordinary Tensor copies
-// share the TensorImpl; reshape() returns a new TensorImpl that
-// references the same Storage (data is shared, logical metadata is
-// independent); clone() deep-copies the Storage.
+// Storage and per-Tensor logical metadata are hidden in the .cpp. Storage is
+// dense, contiguous, and last-axis contiguous (canonical row-major): for
+// shape (D0, ..., D{n-1}), stride[n-1] = 1 and
+// stride[i] = stride[i+1] * shape[i+1]. The public handle holds a single
+// std::shared_ptr<detail::TensorImpl>. Each TensorImpl owns a Shape + Device +
+// shared_ptr<Storage>, where Storage is the library-owned float32 buffer.
+// Ordinary Tensor copies share the TensorImpl; reshape() returns a new
+// TensorImpl that references the same Storage (data is shared, logical
+// metadata is independent); clone() deep-copies the Storage.
 //
 // Initial guarantees (per ARCHITECTURE_REFACTOR_PLAN.md §5.3):
 //   * float32 only (host-pointer APIs take const float* / float*).
