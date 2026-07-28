@@ -90,6 +90,42 @@ struct VariableAccess {
     static Variable make(std::shared_ptr<VariableNode> node) {
         return Variable(std::move(node));
     }
+
+    // Internal optimizer mutation boundary.
+    //
+    // Applies f(element, index) to each element of the underlying
+    // Tensor storage in place, mutating v.node_->value directly through
+    // friend access. Storage identity is preserved: any Tensor alias
+    // taken before the call observes the updated values after the call
+    // returns. The Variable's node Tensor is NOT replaced.
+    //
+    // f signature: void(float& element, std::size_t index).
+    // Empty Tensors are a no-op.
+    //
+    // This helper exists so optimizer kernels can update parameter
+    // storage through a narrow internal boundary instead of going
+    // through public Tensor copy_from_host at every arithmetic step.
+    // Production optimizers reach leaf gradients through the public
+    // Variable::grad() accessor (after a has_grad() check).
+    template <typename F>
+    static void apply_to_storage(Variable& v, F&& f) {
+        Tensor& t = v.node_->value;
+        if (t.empty()) return;
+        std::vector<float> data(t.elements());
+        t.copy_to_host(data.empty() ? nullptr : data.data(), data.size());
+        for (std::size_t i = 0; i < data.size(); ++i) {
+            f(data[i], i);
+        }
+        t.copy_from_host(data.empty() ? nullptr : data.data(), data.size());
+    }
+
+    // Copies prepared values into existing parameter storage without
+    // allocating. Callers validate count before entering their commit phase.
+    static void copy_to_storage(Variable& v,
+                                const std::vector<float>& data) {
+        Tensor& t = v.node_->value;
+        t.copy_from_host(data.empty() ? nullptr : data.data(), data.size());
+    }
 };
 
 }  // namespace detail
