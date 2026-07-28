@@ -293,6 +293,26 @@ std::vector<Tensor> backward_step(Node& node, const Tensor& output_grad) {
                     output_grad, N, C, H, W, scale),
             };
         }
+        case detail::OpKind::GroupNorm: {
+            // saved[0] = xhat (rank-4, N, C, H, W): pre-affine normalized
+            // saved[1] = inv_std (rank-2, N, num_groups)
+            // saved[2] = gamma snapshot (rank-1, C): forward-time affine
+            //            weights, cloned so backward-input is robust to
+            //            later mutations of the live gamma variable.
+            // parents  = {input, gamma, beta}
+            // extras   : extra_i2=num_groups
+            const Tensor& xhat = node.saved[0];
+            const Tensor& inv_std = node.saved[1];
+            const Tensor& gamma_snapshot = node.saved[2];
+            const int num_groups = static_cast<int>(node.extra_i2);
+            return {
+                detail::tensor_group_norm_nchw_backward_input(
+                    output_grad, xhat, inv_std, gamma_snapshot, num_groups),
+                detail::tensor_group_norm_nchw_backward_weight(
+                    output_grad, xhat),
+                detail::tensor_group_norm_nchw_backward_bias(output_grad),
+            };
+        }
         case detail::OpKind::Custom:
             return node.custom_backward(output_grad);
     }

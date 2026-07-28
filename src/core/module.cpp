@@ -460,5 +460,64 @@ Variable NearestUpsample2d::forward(const Variable& input) {
     return nearest_upsample2d(input, scale_);
 }
 
+// ── GroupNorm ────────────────────────────────────────────────────────
+
+GroupNorm::GroupNorm(int num_groups, int channels, float eps)
+    : num_groups_(num_groups), channels_(channels), eps_(eps) {
+    if (num_groups_ <= 0) {
+        std::ostringstream os;
+        os << "nn::GroupNorm: num_groups must be positive (got "
+           << num_groups_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (channels_ <= 0) {
+        std::ostringstream os;
+        os << "nn::GroupNorm: channels must be positive (got "
+           << channels_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (channels_ % num_groups_ != 0) {
+        std::ostringstream os;
+        os << "nn::GroupNorm: channels=" << channels_
+           << " not divisible by num_groups=" << num_groups_;
+        throw std::invalid_argument(os.str());
+    }
+    if (std::isnan(eps_) || !std::isfinite(eps_) || eps_ <= 0.f) {
+        std::ostringstream os;
+        os << "nn::GroupNorm: eps must be finite and positive (got "
+           << eps_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+
+    Tensor weight_tensor = Tensor::ones(Shape{static_cast<int64_t>(
+                                                   channels_)});
+    Tensor bias_tensor = Tensor::zeros(Shape{static_cast<int64_t>(
+                                                   channels_)});
+    Variable weight_var(std::move(weight_tensor), true);
+    Variable bias_var(std::move(bias_tensor), true);
+
+    register_parameter("weight", weight_var);
+    register_parameter("bias", bias_var);
+    weight_ = weight_var;
+    bias_ = bias_var;
+}
+
+Variable GroupNorm::forward(const Variable& input) {
+    const Shape& s = input.value().shape();
+    if (s.rank() != 4) {
+        std::ostringstream os;
+        os << "nn::GroupNorm::forward: input must be rank-4 "
+              "(N, C, H, W); got " << s;
+        throw std::invalid_argument(os.str());
+    }
+    if (static_cast<int>(s[1]) != channels_) {
+        std::ostringstream os;
+        os << "nn::GroupNorm::forward: input channel mismatch (input C="
+           << s[1] << ", module channels=" << channels_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    return group_norm(input, weight_, bias_, num_groups_, eps_);
+}
+
 }  // namespace nn
 }  // namespace ag

@@ -2681,5 +2681,284 @@ inline Tensor tensor_nearest_upsample2d_nchw_backward(const Tensor& g,
     return d_in;
 }
 
+// ── GroupNorm (NCHW) ─────────────────────────────────────────────────
+//
+// Normalizes over (channels_per_group * H * W) elements per (sample,
+// group). Channels are partitioned into num_groups contiguous groups:
+// group g contains channels [g * ch_per_g, (g+1) * ch_per_g).
+//
+//   mean[n, g]      = (1/M) * sum x[n, c, h, w]
+//   var[n, g]       = (1/M) * sum (x[n, c, h, w] - mean[n, g])^2
+//   inv_std[n, g]   = 1 / sqrt(var[n, g] + eps)
+//   xhat[n, c, h, w] = (x[n, c, h, w] - mean[n, g]) * inv_std[n, g]
+//   y[n, c, h, w]   = gamma[c] * xhat[n, c, h, w] + beta[c]
+//
+// Backward uses the closed-form mean/var reduction, expressed in
+// terms of xhat to avoid recomputing mean/var from the input.
+//
+//   dyh[n, c, h, w] = grad[n, c, h, w] * gamma[c]
+//   sum_dyh[n, g]   = sum dyh over the group
+//   sum_dyh_x[n, g] = sum dyh * xhat over the group
+//   d_x[n, c, h, w] = inv_std[n, g] *
+//                      (dyh[n, c, h, w]
+//                       - (1/M) * (sum_dyh[n, g]
+//                                  + xhat[n, c, h, w] * sum_dyh_x[n, g]))
+//   d_gamma[c]      = sum_{n, h, w} grad[n, c, h, w] * xhat[n, c, h, w]
+//   d_beta[c]       = sum_{n, h, w} grad[n, c, h, w]
+//
+// Saved tensors for backward:
+//   saved_xhat : (N, C, H, W) - normalized pre-affine values
+//   saved_inv_std : (N, num_groups) - per-(sample, group) inv_std
+inline Tensor tensor_group_norm_nchw_forward(
+        const Tensor& input, const Tensor& gamma, const Tensor& beta,
+        int num_groups, float eps,
+        Tensor& saved_xhat, Tensor& saved_inv_std) {
+    const Shape& in_s = input.shape();
+    const int N = static_cast<int>(in_s[0]);
+    const int C = static_cast<int>(in_s[1]);
+    const int H = static_cast<int>(in_s[2]);
+    const int W = static_cast<int>(in_s[3]);
+    const int ch_per_g = C / num_groups;
+    const int M = ch_per_g * H * W;
+
+    Tensor out = Tensor::empty(in_s, input.device());
+    saved_xhat = Tensor::empty(in_s, input.device());
+    saved_inv_std = Tensor::empty(Shape({N, num_groups}), input.device());
+    if (out.elements() == 0) return out;
+
+    std::vector<float> in_data(input.elements());
+    std::vector<float> gamma_data(gamma.elements());
+    std::vector<float> beta_data(beta.elements());
+    std::vector<float> out_data(out.elements());
+    std::vector<float> xhat_data(out.elements());
+    std::vector<float> inv_std_data(static_cast<std::size_t>(N) * num_groups);
+    input.copy_to_host(in_data.data(), in_data.size());
+    gamma.copy_to_host(gamma_data.data(), gamma_data.size());
+    beta.copy_to_host(beta_data.data(), beta_data.size());
+
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+    const int out_stride_n = 1;
+    const int out_stride_c = N;
+    const int out_stride_h = N * C;
+    const int out_stride_w = N * C * H;
+
+    for (int n = 0; n < N; ++n) {
+        for (int g = 0; g < num_groups; ++g) {
+            const int ch0 = g * ch_per_g;
+            double mean = 0.0;
+            for (int c = ch0; c < ch0 + ch_per_g; ++c) {
+                for (int h = 0; h < H; ++h) {
+                    for (int w = 0; w < W; ++w) {
+                        mean += static_cast<double>(
+                            in_data[n * in_stride_n
+                                  + c * in_stride_c
+                                  + h * in_stride_h
+                                  + w * in_stride_w]);
+                    }
+                }
+            }
+            mean /= static_cast<double>(M);
+            double var = 0.0;
+            for (int c = ch0; c < ch0 + ch_per_g; ++c) {
+                for (int h = 0; h < H; ++h) {
+                    for (int w = 0; w < W; ++w) {
+                        const double diff = static_cast<double>(
+                            in_data[n * in_stride_n
+                                  + c * in_stride_c
+                                  + h * in_stride_h
+                                  + w * in_stride_w]) - mean;
+                        var += diff * diff;
+                    }
+                }
+            }
+            var /= static_cast<double>(M);
+            const double inv_std = 1.0 /
+                std::sqrt(var + static_cast<double>(eps));
+            inv_std_data[n * num_groups + g] = static_cast<float>(inv_std);
+            for (int c = ch0; c < ch0 + ch_per_g; ++c) {
+                const float gc = gamma_data[c];
+                const float bc = beta_data[c];
+                for (int h = 0; h < H; ++h) {
+                    for (int w = 0; w < W; ++w) {
+                        const int off = n * in_stride_n
+                                      + c * in_stride_c
+                                      + h * in_stride_h
+                                      + w * in_stride_w;
+                        const double diff = static_cast<double>(
+                            in_data[off]) - mean;
+                        const float xn = static_cast<float>(diff * inv_std);
+                        xhat_data[off] = xn;
+                        out_data[off] = gc * xn + bc;
+                    }
+                }
+            }
+        }
+    }
+    out.copy_from_host(out_data.data(), out_data.size());
+    saved_xhat.copy_from_host(xhat_data.data(), xhat_data.size());
+    saved_inv_std.copy_from_host(inv_std_data.data(), inv_std_data.size());
+    return out;
+}
+
+inline Tensor tensor_group_norm_nchw_backward_input(
+        const Tensor& g, const Tensor& xhat, const Tensor& inv_std,
+        const Tensor& gamma, int num_groups) {
+    const Shape& in_s = g.shape();
+    const int N = static_cast<int>(in_s[0]);
+    const int C = static_cast<int>(in_s[1]);
+    const int H = static_cast<int>(in_s[2]);
+    const int W = static_cast<int>(in_s[3]);
+    const int ch_per_g = C / num_groups;
+    const int M = ch_per_g * H * W;
+
+    Tensor d_in = Tensor::empty(in_s, g.device());
+    if (d_in.elements() == 0) return d_in;
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> xhat_data(xhat.elements());
+    std::vector<float> gamma_data(gamma.elements());
+    std::vector<float> inv_std_data(inv_std.elements());
+    std::vector<float> d_in_data(d_in.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+    xhat.copy_to_host(xhat_data.data(), xhat_data.size());
+    gamma.copy_to_host(gamma_data.data(), gamma_data.size());
+    inv_std.copy_to_host(inv_std_data.data(), inv_std_data.size());
+
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+
+    for (int n = 0; n < N; ++n) {
+        for (int grp = 0; grp < num_groups; ++grp) {
+            const int ch0 = grp * ch_per_g;
+            const float inv_std = inv_std_data[n * num_groups + grp];
+            double sum_dyh = 0.0;
+            double sum_dyh_x = 0.0;
+            for (int c = ch0; c < ch0 + ch_per_g; ++c) {
+                const float gc = gamma_data[c];
+                for (int h = 0; h < H; ++h) {
+                    for (int w = 0; w < W; ++w) {
+                        const int off = n * in_stride_n
+                                      + c * in_stride_c
+                                      + h * in_stride_h
+                                      + w * in_stride_w;
+                        const double dyh = static_cast<double>(
+                            g_data[off]) * static_cast<double>(gc);
+                        sum_dyh += dyh;
+                        sum_dyh_x += dyh *
+                            static_cast<double>(xhat_data[off]);
+                    }
+                }
+            }
+            const double inv_M = 1.0 / static_cast<double>(M);
+            for (int c = ch0; c < ch0 + ch_per_g; ++c) {
+                const float gc = gamma_data[c];
+                for (int h = 0; h < H; ++h) {
+                    for (int w = 0; w < W; ++w) {
+                        const int off = n * in_stride_n
+                                      + c * in_stride_c
+                                      + h * in_stride_h
+                                      + w * in_stride_w;
+                        const double dyh = static_cast<double>(
+                            g_data[off]) * static_cast<double>(gc);
+                        const double xn = static_cast<double>(
+                            xhat_data[off]);
+                        const double v = dyh
+                            - inv_M * (sum_dyh + xn * sum_dyh_x);
+                        d_in_data[off] = static_cast<float>(
+                            inv_std * v);
+                    }
+                }
+            }
+        }
+    }
+    d_in.copy_from_host(d_in_data.data(), d_in_data.size());
+    return d_in;
+}
+
+inline Tensor tensor_group_norm_nchw_backward_weight(
+        const Tensor& g, const Tensor& xhat) {
+    const Shape& in_s = g.shape();
+    const int N = static_cast<int>(in_s[0]);
+    const int C = static_cast<int>(in_s[1]);
+    const int H = static_cast<int>(in_s[2]);
+    const int W = static_cast<int>(in_s[3]);
+
+    Tensor d_gamma = Tensor::zeros(Shape({C}), g.device());
+    if (d_gamma.elements() == 0) return d_gamma;
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> xhat_data(xhat.elements());
+    std::vector<float> dg_data(d_gamma.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+    xhat.copy_to_host(xhat_data.data(), xhat_data.size());
+
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+
+    for (int c = 0; c < C; ++c) {
+        double s = 0.0;
+        for (int n = 0; n < N; ++n) {
+            for (int h = 0; h < H; ++h) {
+                for (int w = 0; w < W; ++w) {
+                    const int off = n * in_stride_n
+                                  + c * in_stride_c
+                                  + h * in_stride_h
+                                  + w * in_stride_w;
+                    s += static_cast<double>(g_data[off]) *
+                         static_cast<double>(xhat_data[off]);
+                }
+            }
+        }
+        dg_data[c] = static_cast<float>(s);
+    }
+    d_gamma.copy_from_host(dg_data.data(), dg_data.size());
+    return d_gamma;
+}
+
+inline Tensor tensor_group_norm_nchw_backward_bias(const Tensor& g) {
+    const Shape& in_s = g.shape();
+    const int N = static_cast<int>(in_s[0]);
+    const int C = static_cast<int>(in_s[1]);
+    const int H = static_cast<int>(in_s[2]);
+    const int W = static_cast<int>(in_s[3]);
+
+    Tensor d_beta = Tensor::zeros(Shape({C}), g.device());
+    if (d_beta.elements() == 0) return d_beta;
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> db_data(d_beta.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+
+    for (int c = 0; c < C; ++c) {
+        double s = 0.0;
+        for (int n = 0; n < N; ++n) {
+            for (int h = 0; h < H; ++h) {
+                for (int w = 0; w < W; ++w) {
+                    const int off = n * in_stride_n
+                                  + c * in_stride_c
+                                  + h * in_stride_h
+                                  + w * in_stride_w;
+                    s += static_cast<double>(g_data[off]);
+                }
+            }
+        }
+        db_data[c] = static_cast<float>(s);
+    }
+    d_beta.copy_from_host(db_data.data(), db_data.size());
+    return d_beta;
+}
+
 }  // namespace detail
 }  // namespace ag

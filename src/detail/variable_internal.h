@@ -46,6 +46,7 @@ enum class OpKind {
     DepthwiseConv2d,
     AvgPool2d,
     NearestUpsample2d,
+    GroupNorm,
     Custom,
 };
 
@@ -74,9 +75,12 @@ struct VariableNode {
     //                     / AvgPool2d kH
     //   extra_i1        : Slice len / Conv2d kW / MaxPool2d kW /
     //                     DepthwiseConv2d kW / AvgPool2d kW
-    //   extra_i2        : NearestUpsample2d scale
+    //   extra_i2        : NearestUpsample2d scale / GroupNorm num_groups
     //   axes            : Multi-axis axes (sum / mean with axes)
     //   keep_dims       : sum / mean with axes keep_dims flag
+    // Notes on GroupNorm: eps is no longer stored as a node extra;
+    // backward reads only num_groups (extra_i2) plus the saved xhat,
+    // inv_std, and the gamma snapshot.
     float extra_f0 = 0.f;
     float extra_f1 = 0.f;
     int   axis    = 1;

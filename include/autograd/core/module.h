@@ -272,5 +272,33 @@ private:
     int scale_;
 };
 
+// GroupNorm(num_groups, channels, eps) is the NCHW rank-4 group
+// normalization module. It owns privately-registered "weight" of
+// shape (channels,) initialized to 1 and "bias" of shape (channels,)
+// initialized to 0. The forward route uses the public ag::group_norm
+// free function and the module is responsible for raising on a
+// non-rank-4 input or a channel-count mismatch on forward.
+class GroupNorm : public Module {
+public:
+    GroupNorm(int num_groups, int channels, float eps = 1e-5f);
+
+    Variable forward(const Variable& input) override;
+
+    const Variable& weight() const noexcept { return weight_; }
+    const Variable& bias() const noexcept { return bias_; }
+
+    int num_groups() const noexcept { return num_groups_; }
+    int channels() const noexcept { return channels_; }
+    float eps() const noexcept { return eps_; }
+
+private:
+    int num_groups_;
+    int channels_;
+    float eps_;
+
+    Variable weight_;
+    Variable bias_;
+};
+
 }  // namespace nn
 }  // namespace ag

@@ -176,4 +176,18 @@ Variable avg_pool2d(const Variable& input,
 Variable nearest_upsample2d(const Variable& input,
                             int scale);
 
+// Group normalization. Normalizes over (channels_per_group * H * W)
+// elements per (sample, group) where channels are partitioned into
+// num_groups contiguous groups of channels_per_group = C / num_groups
+// channels each. Returns the per-channel affine transform
+//   y[n, c, h, w] = gamma[c] * xhat[n, c, h, w] + beta[c]
+// where xhat is the normalized value with zero mean and unit variance
+// over the group. num_groups must be a positive integer and must
+// divide C. eps must be finite and positive.
+Variable group_norm(const Variable& input,
+                    const Variable& gamma,
+                    const Variable& beta,
+                    int num_groups,
+                    float eps);
+
 }  // namespace ag
