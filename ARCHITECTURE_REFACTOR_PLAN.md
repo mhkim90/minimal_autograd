@@ -16,15 +16,9 @@ Current delivery state:
 - CPU N-D operations and losses are merged through PR #36;
 - Phase 4 is closed: Gate 4.5 runs the registered CPU contract inventory in
   hosted CI;
-- Phase 5a (`nn::Module`, `nn::Linear`, `optim::SGD`) is implemented in the
-  current Bundle 5 branch;
-- Phase 5b (`nn::Sequential`, `nn::ReLU`, `nn::Module::register_module`,
-  recursive parameter traversal, `optim::Adam` with `AdamState` snapshot and
-  `load_state` restore) is the current delivery. Legacy flat
-  `ag::Module`/`ag::Linear`/`ag::Sequential`/`ag::SGD`/`ag::Adam` remains
-  untouched; its retirement remains gated on the Phase 6 spatial modules,
-  Phase 8–9 CUDA bundles, and the Phase 10 CppResist spike, with the final
-  facade deletion in Phase 11.
+- the OOP training stack is merged through PR #37;
+- the CPU spatial, normalization, and diffusion replacement APIs are
+  implemented in the current branch, pending review.
 
 ## 2. Purpose
 
@@ -1104,20 +1098,7 @@ both migrations or extracting a shared core prematurely.
 
 ## 14. Recommended Execution Order
 
-Phases 0–4 establish the CPU Tensor, Variable, and N-D operation foundation.
-The next implementation milestone is the Phase 5a training slice:
-
-```text
-Eigen-free consumer
-    -> Tensor / Variable
-    -> Linear
-    -> activation
-    -> Linear
-    -> loss
-    -> backward
-    -> SGD step
-    -> loss decreases
-```
-
-Only after this gate passes should `Sequential`, Adam state, and the remaining
-module bundles expand the surface.
+Phases 0–6 establish the CPU Tensor, Variable, operation, training, spatial,
+normalization, and diffusion foundation. The next implementation milestone is
+Phase 7: migrate complex values and CPU FFT support before beginning the CUDA
+Tensor foundation.
