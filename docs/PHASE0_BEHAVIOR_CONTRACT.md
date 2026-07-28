@@ -29,7 +29,7 @@ characterization.
 | --- | --- | --- | --- |
 | `Mat = Eigen::MatrixXf` | 2D dense float32 column-major | implicit in all tests | — |
 | `Dims` / `Shape` | rank, indexed access, equality, `numel` | `test_core::test_logical_4d_shape` | — |
-| Legacy logical stride metadata | not explicitly asserted; target Tensor order is first-axis-contiguous and specified in the architecture plan | — | known gap |
+| Legacy logical stride metadata | first-axis-contiguous to match Eigen; replacement Tensor order is last-axis-contiguous row-major | `test_core::test_logical_4d_shape` | — |
 | `Var::make(Mat)` | leaf with `data` and zero `grad` | all tests | — |
 | `Var::make4d(Mat, N, C, H, W)` | flat 2D + 4D shape metadata | `test_core::test_logical_4d_shape` | — |
 | `Var::set_shape(...)` | numel must equal data size; assert-only | `test_core::test_logical_4d_shape` (via `view`) | — |

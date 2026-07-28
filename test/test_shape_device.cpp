@@ -230,27 +230,32 @@ void test_shape_queries_revalidate_public_field() {
 // ── Stride ─────────────────────────────────────────────────────────────
 
 void test_stride_normal() {
+    // Canonical row-major / last-axis-contiguous (D0...D{n-1}):
+    //   stride[n-1] = 1, stride[i] = stride[i+1] * shape[i+1]
+    // For Shape{2,3,4}: outer stride = 3*4 = 12, next = 4, last = 1.
     Stride st = contiguous_stride(Shape{2, 3, 4});
     CHECK(st.strides.size() == static_cast<std::size_t>(3));
-    CHECK(st[0] == 1);
-    CHECK(st[1] == 2);
-    CHECK(st[2] == 6);
-    CHECK((st == Stride({1, 2, 6})));
-    CHECK(st.to_string() == "Stride[1, 2, 6]");
+    CHECK(st[0] == 12);
+    CHECK(st[1] == 4);
+    CHECK(st[2] == 1);
+    CHECK((st == Stride({12, 4, 1})));
+    CHECK(st.to_string() == "Stride[12, 4, 1]");
     std::ostringstream os;
     os << st;
-    CHECK(os.str() == "Stride[1, 2, 6]");
-    report("Stride: contiguous_stride normal + format");
+    CHECK(os.str() == "Stride[12, 4, 1]");
+    report("Stride: contiguous_stride is last-axis contiguous (row-major)");
 }
 
 void test_stride_zero_dim() {
+    // With a zero middle dim, the trailing dim still has stride 1 and
+    // the leading dims collapse to zero (the running product).
     Stride st = contiguous_stride(Shape{2, 0, 4});
     CHECK(st.strides.size() == static_cast<std::size_t>(3));
-    CHECK(st[0] == 1);
-    CHECK(st[1] == 2);
-    CHECK(st[2] == 0);
-    CHECK((st == Stride({1, 2, 0})));
-    report("Stride: contiguous_stride with zero dim yields trailing zeros");
+    CHECK(st[0] == 0);
+    CHECK(st[1] == 4);
+    CHECK(st[2] == 1);
+    CHECK((st == Stride({0, 4, 1})));
+    report("Stride: contiguous_stride with zero dim yields 0 outer + 1 inner");
 }
 
 void test_stride_rank_zero() {
@@ -262,13 +267,13 @@ void test_stride_rank_zero() {
 
 void test_stride_overflow() {
     constexpr int64_t big = std::numeric_limits<int64_t>::max();
-    // Running product of strides reaches int64 max overflow on the third
-    // multiplication: 1 * big = big (fits), big * big = overflow.
-    CHECK_THROWS_AS(std::overflow_error,
-                    contiguous_stride(Shape{big, big, 2}));
-    // Intermediate stride 2 * big = overflow before reaching dim 3.
+    // Row-major: stride[n-1]=1, stride[i]=stride[i+1]*shape[i+1].
+    // For Shape{2, big, big}: outer stride = big*big → overflow.
     CHECK_THROWS_AS(std::overflow_error,
                     contiguous_stride(Shape{2, big, big}));
+    // For Shape{big, 2, big}: stride[1] = 2 * big → overflow.
+    CHECK_THROWS_AS(std::overflow_error,
+                    contiguous_stride(Shape{big, 2, big}));
     report("Stride: contiguous_stride overflow throws std::overflow_error");
 }
 
@@ -395,7 +400,8 @@ void test_umbrella_header_exports() {
     Stride st = contiguous_stride(s);
     Device d = Device::cpu();
     CHECK(s.numel() == 6);
-    CHECK(st[0] == 1);
+    CHECK(st[0] == 3);
+    CHECK(st[1] == 1);
     CHECK(d.is_cpu());
     report("Public API: autograd.h re-exports Shape/Device/Stride");
 }

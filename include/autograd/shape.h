@@ -1,8 +1,11 @@
 #pragma once
 // shape.h — lightweight logical tensor shape metadata.
 //
-// Storage and compute remain Eigen::MatrixXf. Shape only records the logical
-// view, e.g. a flat Mat(N, C*H*W) can carry Shape{N, C, H, W}.
+// Canonical memory layout is dense row-major /
+// last-axis contiguous: for shape (D0, D1, ..., D{n-1}) the strides
+// are stride[n-1] = 1 and stride[i] = stride[i+1] * shape[i+1]. For
+// rank-2 the flat index for (row, col) is `row * cols + col`. Storage
+// no longer preserves Eigen's column-major byte order.
 //
 // Validation contract (Phase 2):
 //   * Construction rejects negative dimensions with std::invalid_argument.
@@ -187,14 +190,18 @@ inline Shape make_shape(int64_t a, int64_t b) {
 }
 
 inline Stride contiguous_stride(const Shape& s) {
+    // Canonical row-major / last-axis-contiguous strides:
+    //   stride[n-1] = 1, stride[i] = stride[i+1] * shape[i+1]
+    // For Shape{2, 3, 4}: strides = {12, 4, 1}. For rank-2 (R, C):
+    // flat index = row * C + col.
     detail::validate_dims_non_negative(s.sizes, "contiguous_stride");
     Stride st;
     st.strides.assign(s.ndim(), 0);
     if (s.ndim() == 0) return st;
-    st.strides[0] = 1;
-    for (int i = 1; i < s.ndim(); ++i) {
+    st.strides[s.ndim() - 1] = 1;
+    for (int i = s.ndim() - 2; i >= 0; --i) {
         st.strides[i] = detail::mul_check_overflow(
-            st.strides[i - 1], s.sizes[i - 1], "contiguous_stride");
+            st.strides[i + 1], s.sizes[i + 1], "contiguous_stride");
     }
     return st;
 }

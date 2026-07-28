@@ -141,5 +141,164 @@ public:
     Variable forward(const Variable& input) override;
 };
 
+// Conv2d(in_C, out_C, kH, kW, stride, pad) is the NCHW rank-4
+// convolution module on the replacement Tensor/Variable API. It owns
+// privately-registered "weight" of shape (out_C, in_C, kH, kW) and
+// "bias" of shape (out_C,). Initialization is a deterministic
+// Kaiming-like uniform distribution with bound sqrt(1 / fan_in).
+// forward(...) routes through the public ag::conv2d free function.
+class Conv2d : public Module {
+public:
+    Conv2d(int in_channels,
+           int out_channels,
+           int kH, int kW,
+           int stride = 1,
+           int pad = 0);
+
+    Variable forward(const Variable& input) override;
+
+    const Variable& weight() const noexcept { return weight_; }
+    const Variable& bias() const noexcept { return bias_; }
+
+    int in_channels() const noexcept { return in_channels_; }
+    int out_channels() const noexcept { return out_channels_; }
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+    int pad() const noexcept { return pad_; }
+
+private:
+    int in_channels_;
+    int out_channels_;
+    int kH_;
+    int kW_;
+    int stride_;
+    int pad_;
+
+    Variable weight_;
+    Variable bias_;
+};
+
+// MaxPool2d(kH, kW, stride) is the NCHW rank-4 max-pooling module.
+// stride defaults to kH (i.e. kW when equal) when the constructor's
+// stride argument is negative, matching the legacy default. stride
+// must be positive otherwise. The module is parameter-free and routes
+// forward through the public ag::max_pool2d free function.
+class MaxPool2d : public Module {
+public:
+    MaxPool2d(int kH, int kW, int stride = -1);
+
+    Variable forward(const Variable& input) override;
+
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+
+private:
+    int kH_;
+    int kW_;
+    int stride_;
+};
+
+// DepthwiseConv2d(channels, kH, kW, stride, pad) is the NCHW rank-4
+// depthwise convolution module. It owns privately-registered
+// "weight" of shape (channels, kH, kW) and "bias" of shape (channels,).
+// Initialization is a deterministic Kaiming-like uniform distribution
+// with bound sqrt(1 / fan_in) where fan_in = kH * kW. forward(...)
+// routes through the public ag::depthwise_conv2d free function.
+class DepthwiseConv2d : public Module {
+public:
+    DepthwiseConv2d(int channels,
+                    int kH, int kW,
+                    int stride = 1,
+                    int pad = 0);
+
+    Variable forward(const Variable& input) override;
+
+    const Variable& weight() const noexcept { return weight_; }
+    const Variable& bias() const noexcept { return bias_; }
+
+    int channels() const noexcept { return channels_; }
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+    int pad() const noexcept { return pad_; }
+
+private:
+    int channels_;
+    int kH_;
+    int kW_;
+    int stride_;
+    int pad_;
+
+    Variable weight_;
+    Variable bias_;
+};
+
+// AvgPool2d(kH, kW, stride) is the NCHW rank-4 average-pooling module.
+// stride defaults to kH when the constructor's stride argument is
+// negative, matching the legacy default. stride must be positive
+// otherwise. The module is parameter-free and routes forward through
+// the public ag::avg_pool2d free function.
+class AvgPool2d : public Module {
+public:
+    AvgPool2d(int kH, int kW, int stride = -1);
+
+    Variable forward(const Variable& input) override;
+
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+
+private:
+    int kH_;
+    int kW_;
+    int stride_;
+};
+
+// NearestUpsample2d(scale) is the NCHW rank-4 nearest-neighbor
+// upsample module. scale must be >= 1. The module is parameter-free
+// and routes forward through the public ag::nearest_upsample2d free
+// function.
+class NearestUpsample2d : public Module {
+public:
+    explicit NearestUpsample2d(int scale);
+
+    Variable forward(const Variable& input) override;
+
+    int scale() const noexcept { return scale_; }
+
+private:
+    int scale_;
+};
+
+// GroupNorm(num_groups, channels, eps) is the NCHW rank-4 group
+// normalization module. It owns privately-registered "weight" of
+// shape (channels,) initialized to 1 and "bias" of shape (channels,)
+// initialized to 0. The forward route uses the public ag::group_norm
+// free function and the module is responsible for raising on a
+// non-rank-4 input or a channel-count mismatch on forward.
+class GroupNorm : public Module {
+public:
+    GroupNorm(int num_groups, int channels, float eps = 1e-5f);
+
+    Variable forward(const Variable& input) override;
+
+    const Variable& weight() const noexcept { return weight_; }
+    const Variable& bias() const noexcept { return bias_; }
+
+    int num_groups() const noexcept { return num_groups_; }
+    int channels() const noexcept { return channels_; }
+    float eps() const noexcept { return eps_; }
+
+private:
+    int num_groups_;
+    int channels_;
+    float eps_;
+
+    Variable weight_;
+    Variable bias_;
+};
+
 }  // namespace nn
 }  // namespace ag

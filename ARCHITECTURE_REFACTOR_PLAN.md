@@ -16,15 +16,9 @@ Current delivery state:
 - CPU N-D operations and losses are merged through PR #36;
 - Phase 4 is closed: Gate 4.5 runs the registered CPU contract inventory in
   hosted CI;
-- Phase 5a (`nn::Module`, `nn::Linear`, `optim::SGD`) is implemented in the
-  current Bundle 5 branch;
-- Phase 5b (`nn::Sequential`, `nn::ReLU`, `nn::Module::register_module`,
-  recursive parameter traversal, `optim::Adam` with `AdamState` snapshot and
-  `load_state` restore) is the current delivery. Legacy flat
-  `ag::Module`/`ag::Linear`/`ag::Sequential`/`ag::SGD`/`ag::Adam` remains
-  untouched; its retirement remains gated on the Phase 6 spatial modules,
-  Phase 8–9 CUDA bundles, and the Phase 10 CppResist spike, with the final
-  facade deletion in Phase 11.
+- the OOP training stack is merged through PR #37;
+- the CPU spatial, normalization, and diffusion replacement APIs are
+  implemented in the current branch, pending review.
 
 ## 2. Purpose
 
@@ -270,10 +264,9 @@ Initial guarantees:
 - float32 only;
 - dense, contiguous storage only;
 - N-dimensional logical shape;
-- first-axis-contiguous element order:
-  `stride[0] = 1` and
-  `stride[i] = stride[i - 1] * shape[i - 1]`;
-- rank-2 storage therefore has Eigen-compatible column-major byte order;
+- last-axis-contiguous element order (canonical row-major):
+  `stride[n-1] = 1` and `stride[i] = stride[i + 1] * shape[i + 1]`;
+- rank-2 storage uses flat index `row * columns + col`;
 - ordinary copies share storage;
 - `clone()` makes an independent deep copy;
 - `reshape()` changes logical metadata without reordering elements and shares
@@ -370,8 +363,8 @@ N-D operation rules:
   dimensions, and initially requires identical leading batch dimensions;
 - cross-entropy treats the final axis as classes and averages over all leading
   sample axes;
-- dense storage remains first-axis-contiguous, which preserves the existing
-  Eigen column-major byte order for rank-2 tensors.
+- dense storage remains last-axis-contiguous (canonical row-major), with the
+  final axis varying fastest;
 
 Convenience names such as `row_slice`, `col_slice`, and `hcat` may remain as
 thin compatibility wrappers over axis-aware N-D operations. They must not own
@@ -625,7 +618,7 @@ Add the new value layer without deleting the old API:
 - implement `Shape` and `Device`;
 - implement CPU `Tensor` with hidden storage;
 - define shallow-copy and `clone()` semantics;
-- define first-axis-contiguous order and reshape semantics;
+- define last-axis-contiguous order and reshape semantics;
 - define shared-mutable aliasing and the controlled internal mutation boundary;
 - add checked host import/export;
 - add reshape and basic factory functions;
@@ -1104,20 +1097,7 @@ both migrations or extracting a shared core prematurely.
 
 ## 14. Recommended Execution Order
 
-Phases 0–4 establish the CPU Tensor, Variable, and N-D operation foundation.
-The next implementation milestone is the Phase 5a training slice:
-
-```text
-Eigen-free consumer
-    -> Tensor / Variable
-    -> Linear
-    -> activation
-    -> Linear
-    -> loss
-    -> backward
-    -> SGD step
-    -> loss decreases
-```
-
-Only after this gate passes should `Sequential`, Adam state, and the remaining
-module bundles expand the surface.
+Phases 0–6 establish the CPU Tensor, Variable, operation, training, spatial,
+normalization, and diffusion foundation. The next implementation milestone is
+Phase 7: migrate complex values and CPU FFT support before beginning the CUDA
+Tensor foundation.

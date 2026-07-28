@@ -379,6 +379,70 @@ void test_standalone_header_hygiene_smoke() {
     report("Tensor: header independence is a preprocessor check; ABI smoke");
 }
 
+void test_rank2_row_major_byte_order() {
+    // Rank-2 (R, C) layout contract: flat index = row * C + col
+    // (last-axis contiguous). We probe specific positions so the
+    // caller can read the offset directly from the host buffer.
+    //   x[0,0]=10 → idx 0; x[0,1]=11 → idx 1; x[0,2]=12 → idx 2
+    //   x[1,0]=20 → idx 3; x[1,1]=21 → idx 4; x[1,2]=22 → idx 5
+    const std::vector<float> in{10.f, 11.f, 12.f,
+                                20.f, 21.f, 22.f};
+    Tensor t = Tensor::from_host(in.data(), Shape{2, 3});
+    std::vector<float> buf(t.elements());
+    t.copy_to_host(buf.data(), buf.size());
+    CHECK(buf == in);  // identity copy under row-major contract
+    report("Tensor: rank-2 host byte order is row-major (flat = row*C + col)");
+}
+
+void test_rank3_row_major_byte_order() {
+    // Shape{2, 3, 4} last-axis contiguous:
+    //   stride = (12, 4, 1), flat((a, b, c)) = a*12 + b*4 + c
+    std::vector<float> in(2 * 3 * 4);
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        in[i] = static_cast<float>(i);
+    }
+    Tensor t = Tensor::from_host(in.data(), Shape{2, 3, 4});
+    std::vector<float> buf(t.elements());
+    t.copy_to_host(buf.data(), buf.size());
+    CHECK(buf == in);
+    // Probe a non-trivial offset: (1, 2, 3) → 1*12 + 2*4 + 3 = 23.
+    const float probe = buf[23];
+    CHECK(probe == 23.f);
+    report("Tensor: rank-3 byte order is row-major (flat = a*12 + b*4 + c)");
+}
+
+void test_nchw_location_exact_formula() {
+    // NCHW explicit byte-order test: for shape (N, C, H, W) the
+    // library MUST use offset = ((n*C + c)*H + h)*W + w
+    // (last-axis contiguous, row-major). Distinct last-axis chunks
+    // are contiguous in memory; distinct batch chunks are far
+    // apart.
+    const int N = 2, C = 3, H = 4, W = 5;
+    std::vector<float> in(static_cast<std::size_t>(N) * C * H * W);
+    for (int n = 0; n < N; ++n)
+        for (int c = 0; c < C; ++c)
+            for (int h = 0; h < H; ++h)
+                for (int w = 0; w < W; ++w) {
+                    const int idx = ((n * C + c) * H + h) * W + w;
+                    const float v = static_cast<float>(idx);
+                    in[static_cast<std::size_t>(idx)] = v;
+                }
+    Tensor t = Tensor::from_host(in.data(), Shape{N, C, H, W});
+    std::vector<float> buf(t.elements());
+    t.copy_to_host(buf.data(), buf.size());
+    CHECK(buf == in);
+    // Spot-check a few positions.
+    const float v_origin = buf[0];
+    CHECK(v_origin == 0.f);
+    const float v_n0_c0 = buf[0];  // (0,0,*, 0)
+    CHECK(v_n0_c0 == 0.f);
+    const float v_last_w = buf[W - 1];  // (0,0,0, W-1)
+    CHECK(v_last_w == static_cast<float>(W - 1));
+    const float v_last_h = buf[(H - 1) * W];  // (0,0, H-1, 0)
+    CHECK(v_last_h == static_cast<float>((H - 1) * W));
+    report("Tensor: NCHW offset = ((n*C + c)*H + h)*W + w (row-major)");
+}
+
 }  // namespace
 
 int main() {
@@ -398,6 +462,9 @@ int main() {
     test_extension_eigen_legacy_aliases();
     test_umbrella_exposes_tensor();
     test_standalone_header_hygiene_smoke();
+    test_rank2_row_major_byte_order();
+    test_rank3_row_major_byte_order();
+    test_nchw_location_exact_formula();
 
     std::printf("\nALL TENSOR TESTS PASSED (%d)\n", passed);
     return 0;

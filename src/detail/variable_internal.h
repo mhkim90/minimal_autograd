@@ -41,6 +41,12 @@ enum class OpKind {
     Cos,
     Clamp,
     Slice,
+    Conv2d,
+    MaxPool2d,
+    DepthwiseConv2d,
+    AvgPool2d,
+    NearestUpsample2d,
+    GroupNorm,
     Custom,
 };
 
@@ -57,20 +63,30 @@ struct VariableNode {
 
     // Per-op extras. Field meanings by kind:
     //   scalar          : Scale factor
-    //   extra_f0        : Clamp lo
+    //   extra_f0        : Clamp lo / Conv2d / DepthwiseConv2d pad
     //   extra_f1        : Clamp hi
     //   axis            : Single-axis axis (Cumsum / Flip / Softmax /
     //                     LogSoftmax / Transpose first axis / Slice /
-    //                     Concat / Split).
-    //   extra_i0        : Slice start / Transpose second axis
-    //   extra_i1        : Slice len
+    //                     Concat / Split / Conv2d stride /
+    //                     MaxPool2d stride / DepthwiseConv2d stride
+    //                     / AvgPool2d stride).
+    //   extra_i0        : Slice start / Transpose second axis /
+    //                     Conv2d kH / MaxPool2d kH / DepthwiseConv2d kH
+    //                     / AvgPool2d kH
+    //   extra_i1        : Slice len / Conv2d kW / MaxPool2d kW /
+    //                     DepthwiseConv2d kW / AvgPool2d kW
+    //   extra_i2        : NearestUpsample2d scale / GroupNorm num_groups
     //   axes            : Multi-axis axes (sum / mean with axes)
     //   keep_dims       : sum / mean with axes keep_dims flag
+    // Notes on GroupNorm: eps is no longer stored as a node extra;
+    // backward reads only num_groups (extra_i2) plus the saved xhat,
+    // inv_std, and the gamma snapshot.
     float extra_f0 = 0.f;
     float extra_f1 = 0.f;
     int   axis    = 1;
     int64_t extra_i0 = 0;
     int64_t extra_i1 = 0;
+    int64_t extra_i2 = 0;
     std::vector<int> axes;
     bool keep_dims = false;
 

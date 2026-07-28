@@ -41,7 +41,7 @@ struct Var {
         : data(std::move(d)),
           grad(Mat::Zero(data.rows(), data.cols())),
           shape_(make_shape(data.rows(), data.cols())),
-          stride_(contiguous_stride(shape_)) {}
+          stride_(legacy_stride(shape_)) {}
 
     ~Var();
 
@@ -72,7 +72,10 @@ struct Var {
     void set_shape(const Shape& s) {
         assert_same_numel(s, static_cast<int64_t>(data.rows()) * data.cols());
         shape_ = s;
-        stride_ = contiguous_stride(shape_);
+        // Legacy Var/Mat facade: preserve Eigen column-major layout via
+        // the legacy Eigen-contiguous helper. Do not silently switch to
+        // the row-major replacement contract.
+        stride_ = legacy_stride(shape_);
     }
 
     void view(std::initializer_list<int64_t> dims) {
@@ -98,6 +101,18 @@ struct Var {
     void zero_grad();
 
 private:
+    static Stride legacy_stride(const Shape& s) {
+        detail::validate_dims_non_negative(s.sizes, "Var::legacy_stride");
+        Dims strides(s.ndim(), 0);
+        if (s.ndim() == 0) return Stride(std::move(strides));
+        strides[0] = 1;
+        for (int i = 1; i < s.ndim(); ++i) {
+            strides[i] = detail::mul_check_overflow(
+                strides[i - 1], s.sizes[i - 1], "Var::legacy_stride");
+        }
+        return Stride(std::move(strides));
+    }
+
     void _build_topo(std::vector<Var*>& order,
                      std::unordered_set<Var*>& visited);
 };
