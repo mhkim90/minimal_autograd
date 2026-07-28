@@ -1,5 +1,4 @@
-// src/core/optim.cpp — Phase 5a + 5b optim implementation on the
-// Tensor/Variable API.
+// src/core/optim.cpp — optimizer implementation on the Tensor/Variable API.
 //
 // SGD applies p <- p - lr * grad in place through the narrow
 // detail::VariableAccess::apply_to_storage helper. The Tensor storage
@@ -84,8 +83,8 @@ void SGD::step() {
         }
         if (p.device().is_cuda()) {
             std::ostringstream os;
-            os << "optim::SGD::step: CUDA tensors are not supported in "
-                  "Phase 5b (got device " << p.device().to_string() << ")";
+            os << "optim::SGD::step: CUDA tensors are not supported "
+                  "(got device " << p.device().to_string() << ")";
             throw std::runtime_error(os.str());
         }
         if (p.grad().shape() != p.value().shape() ||
@@ -137,8 +136,8 @@ Adam::Adam(std::vector<Variable> params,
     for (const auto& p : params_) {
         if (p.device().is_cuda()) {
             std::ostringstream os;
-            os << "optim::Adam: CUDA tensors are not supported in "
-                  "Phase 5b (got device " << p.device().to_string() << ")";
+            os << "optim::Adam: CUDA tensors are not supported "
+                  "(got device " << p.device().to_string() << ")";
             throw std::runtime_error(os.str());
         }
         first_moments_.push_back(
@@ -155,8 +154,8 @@ void Adam::step() {
         if (!p.requires_grad() || !p.has_grad()) continue;
         if (p.device().is_cuda()) {
             std::ostringstream os;
-            os << "optim::Adam::step: CUDA tensors are not supported in "
-                  "Phase 5b (got device " << p.device().to_string() << ")";
+            os << "optim::Adam::step: CUDA tensors are not supported "
+                  "(got device " << p.device().to_string() << ")";
             throw std::runtime_error(os.str());
         }
         const Tensor& g = p.grad();

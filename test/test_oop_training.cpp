@@ -1,11 +1,11 @@
-// test/test_oop_training.cpp — Phase 5a + 5b training gate.
+// test/test_oop_training.cpp — OOP training-stack tests.
 //
 // Public-consumer TU. The new module/optim/loss/ops headers
 // (Eigen-free, CUDA-header free) are included at the top; any leakage
 // of EIGEN_* / CUDA_* macros into this translation unit fires the
 // preprocessor #error below.
 //
-// Phase 5a contract coverage:
+// Linear and SGD contract coverage:
 //   * nn::Linear forward shape and operator() dispatch.
 //   * Deterministic {weight, bias} parameter/name order.
 //   * register_parameter rejects empty / duplicate / non-trainable.
@@ -20,7 +20,7 @@
 //   * Invalid Linear constructor inputs and invalid SGD learning rates
 //     raise std::invalid_argument.
 //
-// Phase 5b contract coverage:
+// Composition and Adam contract coverage:
 //   * nn::Sequential forward, numeric naming, nested depth-first
 //     named_parameters, recursive zero_grad.
 //   * nn::ReLU has no parameters and routes through public ag::relu.
@@ -39,11 +39,11 @@
 
 #if defined(EIGEN_WORLD_VERSION) || defined(EIGEN_MAJOR_VERSION) || \
     defined(EIGEN_MINOR_VERSION)
-#error "Phase 5a new module/optim/loss/ops headers must not include Eigen"
+#error "Public module/optim/loss/ops headers must not include Eigen"
 #endif
 #if defined(CUDART_VERSION) || defined(__CUDART_API_VERSION) || \
     defined(CUDA_VERSION) || defined(__CUDA_RUNTIME_H__)
-#error "Phase 5a new module/optim/loss/ops headers must not include CUDA runtime"
+#error "Public module/optim/loss/ops headers must not include CUDA runtime"
 #endif
 
 #include <cmath>
@@ -368,7 +368,7 @@ void test_training_gate_loss_decrease() {
     report("two-layer Linear + relu + mse_loss + SGD loss decreases");
 }
 
-// ── Phase 5b tests ────────────────────────────────────────────────────
+// ── Composition and Adam tests ───────────────────────────────────────
 
 void test_relu_module() {
     ag::nn::ReLU r;

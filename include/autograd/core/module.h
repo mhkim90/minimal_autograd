@@ -1,5 +1,5 @@
 #pragma once
-// Phase 5a + 5b module stack on the Tensor/Variable API.
+// Module stack on the Tensor/Variable API.
 //
 // Declarations live in the ag::nn namespace to avoid colliding with the
 // legacy ag::Module / ag::Linear declarations in autograd/module.h.

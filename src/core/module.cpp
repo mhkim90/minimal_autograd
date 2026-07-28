@@ -1,5 +1,4 @@
-// src/core/module.cpp — Phase 5a + 5b module implementation on the
-// Tensor/Variable API.
+// src/core/module.cpp — module implementation on the Tensor/Variable API.
 //
 // Linear owns private weight/bias Variables, registers them in the
 // documented order, and computes y = matmul(x, W) + b. ReLU wraps the

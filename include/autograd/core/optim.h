@@ -1,5 +1,5 @@
 #pragma once
-// Phase 5a + 5b optim stack on the Tensor/Variable API.
+// Optimizer stack on the Tensor/Variable API.
 //
 // Declarations live in the ag::optim namespace to avoid colliding with
 // the legacy ag::SGD / ag::Adam declarations in autograd/optim.h. The
@@ -23,7 +23,7 @@ namespace optim {
 // Vanilla stochastic gradient descent: p -= lr * grad for every
 // eligible parameter.
 //
-// Constraints (Phase 5a/5b):
+// Constraints:
 //   * CPU-only. Non-CPU parameters cause std::runtime_error to be
 //     thrown from step().
 //   * Parameters without requires_grad, or with no current gradient
@@ -78,7 +78,7 @@ struct AdamState {
 //   m_hat = m / (1 - beta1^t), v_hat = v / (1 - beta2^t)
 //   p -= lr * m_hat / (sqrt(v_hat) + eps).
 //
-// Constraints (Phase 5b):
+// Constraints:
 //   * CPU-only. The constructor rejects every CUDA parameter up front.
 //   * Constructor validates: lr is finite and non-negative; beta1 and
 //     beta2 are finite and lie in [0, 1); eps is finite and positive.
