@@ -114,4 +114,39 @@ Variable flip(const Variable& a, int axis = -1);
 
 Variable clamp(const Variable& a, float lo, float hi);
 
+// --- N-D spatial ops (NCHW rank-4) ---
+//
+// Inputs to conv2d / max_pool2d must be rank-4 NCHW tensors. Weights
+// for conv2d are rank-4 (out_C, in_C, kH, kW). Bias must be a rank-1
+// tensor of length out_C. Stride must be a positive integer; pad must
+// be a non-negative integer such that the resulting output extent is
+// well-defined (i.e. (H + 2*pad - kH) is a non-negative multiple of
+// stride). All operations are CPU-only: a non-CPU operand raises
+// std::runtime_error; shape, geometry, and channel-mismatch errors
+// raise std::invalid_argument.
+
+// 2D convolution. Computes the standard cross-correlation:
+//
+//   out[n, oc, oh, ow] = bias[oc]
+//                       + sum_{c, kh, kw} weight[oc, c, kh, kw]
+//                         * input[n, c, oh*stride + kh - pad,
+//                                 ow*stride + kw - pad]
+//
+// with implicit zero padding outside the input plane. The forward
+// graph records the im2col matrix and the weight tensor for backward.
+Variable conv2d(const Variable& input,
+               const Variable& weight,
+               const Variable& bias,
+               int stride,
+               int pad);
+
+// 2D max pooling. stride defaults to kernel size (non-overlapping).
+// The forward graph records the per-output argmax position as a
+// rank-4 (N, C, oH, oW) float tensor of kernel-flat indices; backward
+// routes the upstream gradient to the recorded argmax (with
+// accumulation across overlapping windows) and zeros elsewhere.
+Variable max_pool2d(const Variable& input,
+                    int kH, int kW,
+                    int stride);
+
 }  // namespace ag

@@ -41,6 +41,8 @@ enum class OpKind {
     Cos,
     Clamp,
     Slice,
+    Conv2d,
+    MaxPool2d,
     Custom,
 };
 
@@ -57,13 +59,15 @@ struct VariableNode {
 
     // Per-op extras. Field meanings by kind:
     //   scalar          : Scale factor
-    //   extra_f0        : Clamp lo
+    //   extra_f0        : Clamp lo / Conv2d pad
     //   extra_f1        : Clamp hi
     //   axis            : Single-axis axis (Cumsum / Flip / Softmax /
     //                     LogSoftmax / Transpose first axis / Slice /
-    //                     Concat / Split).
-    //   extra_i0        : Slice start / Transpose second axis
-    //   extra_i1        : Slice len
+    //                     Concat / Split / Conv2d stride /
+    //                     MaxPool2d stride).
+    //   extra_i0        : Slice start / Transpose second axis /
+    //                     Conv2d kH / MaxPool2d kH
+    //   extra_i1        : Slice len / Conv2d kW / MaxPool2d kW
     //   axes            : Multi-axis axes (sum / mean with axes)
     //   keep_dims       : sum / mean with axes keep_dims flag
     float extra_f0 = 0.f;

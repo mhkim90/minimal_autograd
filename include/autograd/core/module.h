@@ -141,5 +141,64 @@ public:
     Variable forward(const Variable& input) override;
 };
 
+// Conv2d(in_C, out_C, kH, kW, stride, pad) is the NCHW rank-4
+// convolution module on the replacement Tensor/Variable API. It owns
+// privately-registered "weight" of shape (out_C, in_C, kH, kW) and
+// "bias" of shape (out_C,). Initialization is a deterministic
+// Kaiming-like uniform distribution with bound sqrt(1 / fan_in).
+// forward(...) routes through the public ag::conv2d free function.
+class Conv2d : public Module {
+public:
+    Conv2d(int in_channels,
+           int out_channels,
+           int kH, int kW,
+           int stride = 1,
+           int pad = 0);
+
+    Variable forward(const Variable& input) override;
+
+    const Variable& weight() const noexcept { return weight_; }
+    const Variable& bias() const noexcept { return bias_; }
+
+    int in_channels() const noexcept { return in_channels_; }
+    int out_channels() const noexcept { return out_channels_; }
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+    int pad() const noexcept { return pad_; }
+
+private:
+    int in_channels_;
+    int out_channels_;
+    int kH_;
+    int kW_;
+    int stride_;
+    int pad_;
+
+    Variable weight_;
+    Variable bias_;
+};
+
+// MaxPool2d(kH, kW, stride) is the NCHW rank-4 max-pooling module.
+// stride defaults to kH (i.e. kW when equal) when the constructor's
+// stride argument is negative, matching the legacy default. stride
+// must be positive otherwise. The module is parameter-free and routes
+// forward through the public ag::max_pool2d free function.
+class MaxPool2d : public Module {
+public:
+    MaxPool2d(int kH, int kW, int stride = -1);
+
+    Variable forward(const Variable& input) override;
+
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+
+private:
+    int kH_;
+    int kW_;
+    int stride_;
+};
+
 }  // namespace nn
 }  // namespace ag

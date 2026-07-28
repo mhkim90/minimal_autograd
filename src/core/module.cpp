@@ -54,6 +54,27 @@ std::vector<float> xavier_uniform(int in_features, int out_features) {
     return values;
 }
 
+// Deterministic Kaiming-like uniform initialization for Conv2d. The
+// fan_in is in_channels * kH * kW. The bound is sqrt(1/fan_in),
+// matching the legacy Conv2d initializer. Same fixed seed as Linear so
+// two Conv2d modules with identical shapes produce identical
+// parameters.
+std::vector<float> kaiming_uniform_conv(int in_channels, int out_channels,
+                                         int kH, int kW) {
+    const float fan_in = static_cast<float>(in_channels) *
+                         static_cast<float>(kH) *
+                         static_cast<float>(kW);
+    const float bound = std::sqrt(1.f / fan_in);
+    std::mt19937 rng(0x9e37'79b9u);
+    std::uniform_real_distribution<float> dist(-1.f, 1.f);
+    std::vector<float> values(static_cast<std::size_t>(out_channels) *
+                              static_cast<std::size_t>(in_channels) *
+                              static_cast<std::size_t>(kH) *
+                              static_cast<std::size_t>(kW));
+    for (float& v : values) v = dist(rng) * bound;
+    return values;
+}
+
 }  // namespace
 
 // ── Module base class ─────────────────────────────────────────────────
@@ -211,6 +232,111 @@ Variable Sequential::forward(const Variable& input) {
         x = c.module->forward(x);
     }
     return x;
+}
+
+// ── Conv2d ────────────────────────────────────────────────────────────
+
+Conv2d::Conv2d(int in_channels,
+               int out_channels,
+               int kH, int kW,
+               int stride,
+               int pad)
+    : in_channels_(in_channels),
+      out_channels_(out_channels),
+      kH_(kH),
+      kW_(kW),
+      stride_(stride),
+      pad_(pad) {
+    if (in_channels_ <= 0) {
+        std::ostringstream os;
+        os << "nn::Conv2d: in_channels must be positive (got "
+           << in_channels_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (out_channels_ <= 0) {
+        std::ostringstream os;
+        os << "nn::Conv2d: out_channels must be positive (got "
+           << out_channels_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (kH_ <= 0 || kW_ <= 0) {
+        std::ostringstream os;
+        os << "nn::Conv2d: kernel must be positive (got "
+           << kH_ << " x " << kW_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (stride_ <= 0) {
+        std::ostringstream os;
+        os << "nn::Conv2d: stride must be positive (got " << stride_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (pad_ < 0) {
+        std::ostringstream os;
+        os << "nn::Conv2d: pad must be non-negative (got " << pad_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+
+    const auto weight_values = kaiming_uniform_conv(
+        in_channels_, out_channels_, kH_, kW_);
+
+    Tensor weight_tensor = Tensor::empty(
+        Shape{static_cast<int64_t>(out_channels_),
+              static_cast<int64_t>(in_channels_),
+              static_cast<int64_t>(kH_),
+              static_cast<int64_t>(kW_)});
+    weight_tensor.copy_from_host(weight_values.data(),
+                                 weight_values.size());
+
+    Tensor bias_tensor = Tensor::zeros(Shape{static_cast<int64_t>(
+                                                    out_channels_)});
+
+    Variable weight_var(std::move(weight_tensor), true);
+    Variable bias_var(std::move(bias_tensor), true);
+
+    register_parameter("weight", weight_var);
+    register_parameter("bias", bias_var);
+    weight_ = weight_var;
+    bias_ = bias_var;
+}
+
+Variable Conv2d::forward(const Variable& input) {
+    const Shape& s = input.value().shape();
+    if (s.rank() != 4) {
+        std::ostringstream os;
+        os << "nn::Conv2d::forward: input must be rank-4 (N, C, H, W); got "
+           << s;
+        throw std::invalid_argument(os.str());
+    }
+    if (static_cast<int>(s[1]) != in_channels_) {
+        std::ostringstream os;
+        os << "nn::Conv2d::forward: input channel mismatch (input C="
+           << s[1] << ", module in_channels=" << in_channels_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    return conv2d(input, weight_, bias_, stride_, pad_);
+}
+
+// ── MaxPool2d ─────────────────────────────────────────────────────────
+
+MaxPool2d::MaxPool2d(int kH, int kW, int stride)
+    : kH_(kH), kW_(kW),
+      stride_(stride < 0 ? kH : stride) {
+    if (kH_ <= 0 || kW_ <= 0) {
+        std::ostringstream os;
+        os << "nn::MaxPool2d: kernel must be positive (got "
+           << kH_ << " x " << kW_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (stride_ <= 0) {
+        std::ostringstream os;
+        os << "nn::MaxPool2d: stride must be positive (got "
+           << stride_ << ")";
+        throw std::invalid_argument(os.str());
+    }
+}
+
+Variable MaxPool2d::forward(const Variable& input) {
+    return max_pool2d(input, kH_, kW_, stride_);
 }
 
 }  // namespace nn

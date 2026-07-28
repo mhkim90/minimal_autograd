@@ -85,6 +85,7 @@ set(_AUTOGRAD_LIB_SOURCES
     src/core/loss.cpp
     src/core/module.cpp
     src/core/optim.cpp
+    src/core/conv.cpp
 )
 
 add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
@@ -200,6 +201,11 @@ if(AUTOGRAD_BUILD_TESTS)
     target_link_libraries(test_oop_training PRIVATE autograd::autograd)
     target_include_directories(test_oop_training PRIVATE test)
     add_test(NAME test_oop_training COMMAND test_oop_training)
+
+    add_executable(test_oop_conv test/test_oop_conv.cpp)
+    target_link_libraries(test_oop_conv PRIVATE autograd::autograd)
+    target_include_directories(test_oop_conv PRIVATE test)
+    add_test(NAME test_oop_conv COMMAND test_oop_conv)
 
     add_executable(test_conv test/test_conv.cpp)
     target_link_libraries(test_conv PRIVATE autograd::autograd)
