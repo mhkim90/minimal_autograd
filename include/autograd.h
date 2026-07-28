@@ -10,6 +10,7 @@
 #include "autograd/core/loss.h"
 #include "autograd/core/module.h"
 #include "autograd/core/optim.h"
+#include "autograd/core/diffusion.h"
 #include "autograd/extension/custom_op.h"
 // The legacy `Mat` / `Mats` / `shape(Mat)` / `numel(Mat)` aliases
 // used by the existing Var / Function / ops / modules surface live in

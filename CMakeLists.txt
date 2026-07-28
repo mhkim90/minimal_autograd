@@ -87,6 +87,7 @@ set(_AUTOGRAD_LIB_SOURCES
     src/core/optim.cpp
     src/core/conv.cpp
     src/core/norm.cpp
+    src/core/diffusion.cpp
 )
 
 add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
@@ -212,6 +213,11 @@ if(AUTOGRAD_BUILD_TESTS)
     target_link_libraries(test_oop_norm PRIVATE autograd::autograd)
     target_include_directories(test_oop_norm PRIVATE test)
     add_test(NAME test_oop_norm COMMAND test_oop_norm)
+
+    add_executable(test_oop_diffusion test/test_oop_diffusion.cpp)
+    target_link_libraries(test_oop_diffusion PRIVATE autograd::autograd)
+    target_include_directories(test_oop_diffusion PRIVATE test)
+    add_test(NAME test_oop_diffusion COMMAND test_oop_diffusion)
 
     add_executable(test_conv test/test_conv.cpp)
     target_link_libraries(test_conv PRIVATE autograd::autograd)
