@@ -1,13 +1,13 @@
 #pragma once
-// fft.h — differentiable 2-D complex FFT API.
+// fft.h — legacy differentiable 2-D complex FFT API on Var/Mat.
+//
+// FftNorm is shared with the replacement surface through the
+// canonical Eigen-free header autograd/core/fft_norm.h.
 
 #include "autograd/complex.h"
+#include "autograd/core/fft_norm.h"
 
 namespace ag {
-
-enum class FftNorm {
-    Backward
-};
 
 ComplexVar fft2(const ComplexVar& z, FftNorm norm = FftNorm::Backward);
 ComplexVar ifft2(const ComplexVar& z, FftNorm norm = FftNorm::Backward);

@@ -1101,3 +1101,41 @@ Phases 0–6 establish the CPU Tensor, Variable, operation, training, spatial,
 normalization, and diffusion foundation. The next implementation milestone is
 Phase 7: migrate complex values and CPU FFT support before beginning the CUDA
 Tensor foundation.
+
+### Phase 7 delivery facts (CPU complex + FFT replacement)
+
+The replacement public surface ships in `include/autograd/core/complex.h`,
+`include/autograd/core/fft.h`, and the canonical Eigen-free
+`include/autograd/core/fft_norm.h`, with implementations in
+`src/core/fft.cpp` and a new `detail::tensor_dft2_last2` helper in
+`src/detail/tensor_kernels.h`. The legacy `include/autograd/complex.h`,
+`include/autograd/fft.h`, and `src/fft.cpp` remain as the compatibility
+implementation; the canonical `FftNorm` enum now lives in
+`autograd/core/fft_norm.h` so the legacy and replacement free functions
+share one definition. Both surfaces coexist in the umbrella
+`autograd.h` as overloads by parameter type — `ag::ComplexVar` and
+`ag::ComplexVariable`, `ag::fft2(const ComplexVar&)` and
+`ag::fft2(const ComplexVariable&)` — so legacy and replacement
+consumers compile unchanged. The replacement header set is Eigen-free
+and CUDA-free; the FFT free functions are CPU-only and reject non-CPU
+devices in code with `std::runtime_error`. The replacement FFT forward
+and adjoint both call the same `detail::tensor_dft2_last2` kernel with
+swapped `inverse` / `scale_output` flags; each output component is a
+custom-op node built through the public `ag::make_custom_variable`
+boundary, so no new `OpKind` or speculative graph fields were
+introduced. The dedicated replacement test target is `test_oop_fft`,
+which validates rank-2 fixtures and round trips, rank-3 / rank-4
+batched final-two-axis FFT with explicit independent references,
+complex ops on rank > 2, the full 2x2 real/imag Jacobian blocks of
+`fft2` against central finite differences for both `sum(real(...))`
+and `sum(imag(...))` (off-diagonal blocks catch sign errors in the
+real↔imag cross terms), a small rank-3 batched FD gradient test on a
+mixed real/imag objective, a spectral-filter end-to-end gradient,
+repeated / shared-branch gradient accumulation with an independent
+oracle (each branch measured in an isolated fresh graph and the
+combined graph's gradient checked against the elementwise sum of the
+two isolated branch gradients), invalid shape rejections,
+normalization, and row-major batch isolation. Non-CPU device
+rejection is enforced in code but is not covered by an executable
+test on this branch; it remains a code-inspection item until the CUDA
+Tensor foundation makes a non-CPU replacement `Tensor` constructible.
