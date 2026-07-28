@@ -200,5 +200,77 @@ private:
     int stride_;
 };
 
+// DepthwiseConv2d(channels, kH, kW, stride, pad) is the NCHW rank-4
+// depthwise convolution module. It owns privately-registered
+// "weight" of shape (channels, kH, kW) and "bias" of shape (channels,).
+// Initialization is a deterministic Kaiming-like uniform distribution
+// with bound sqrt(1 / fan_in) where fan_in = kH * kW. forward(...)
+// routes through the public ag::depthwise_conv2d free function.
+class DepthwiseConv2d : public Module {
+public:
+    DepthwiseConv2d(int channels,
+                    int kH, int kW,
+                    int stride = 1,
+                    int pad = 0);
+
+    Variable forward(const Variable& input) override;
+
+    const Variable& weight() const noexcept { return weight_; }
+    const Variable& bias() const noexcept { return bias_; }
+
+    int channels() const noexcept { return channels_; }
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+    int pad() const noexcept { return pad_; }
+
+private:
+    int channels_;
+    int kH_;
+    int kW_;
+    int stride_;
+    int pad_;
+
+    Variable weight_;
+    Variable bias_;
+};
+
+// AvgPool2d(kH, kW, stride) is the NCHW rank-4 average-pooling module.
+// stride defaults to kH when the constructor's stride argument is
+// negative, matching the legacy default. stride must be positive
+// otherwise. The module is parameter-free and routes forward through
+// the public ag::avg_pool2d free function.
+class AvgPool2d : public Module {
+public:
+    AvgPool2d(int kH, int kW, int stride = -1);
+
+    Variable forward(const Variable& input) override;
+
+    int kernel_h() const noexcept { return kH_; }
+    int kernel_w() const noexcept { return kW_; }
+    int stride() const noexcept { return stride_; }
+
+private:
+    int kH_;
+    int kW_;
+    int stride_;
+};
+
+// NearestUpsample2d(scale) is the NCHW rank-4 nearest-neighbor
+// upsample module. scale must be >= 1. The module is parameter-free
+// and routes forward through the public ag::nearest_upsample2d free
+// function.
+class NearestUpsample2d : public Module {
+public:
+    explicit NearestUpsample2d(int scale);
+
+    Variable forward(const Variable& input) override;
+
+    int scale() const noexcept { return scale_; }
+
+private:
+    int scale_;
+};
+
 }  // namespace nn
 }  // namespace ag

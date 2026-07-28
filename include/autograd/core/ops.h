@@ -116,14 +116,16 @@ Variable clamp(const Variable& a, float lo, float hi);
 
 // --- N-D spatial ops (NCHW rank-4) ---
 //
-// Inputs to conv2d / max_pool2d must be rank-4 NCHW tensors. Weights
-// for conv2d are rank-4 (out_C, in_C, kH, kW). Bias must be a rank-1
-// tensor of length out_C. Stride must be a positive integer; pad must
-// be a non-negative integer such that the resulting output extent is
-// well-defined (i.e. (H + 2*pad - kH) is a non-negative multiple of
-// stride). All operations are CPU-only: a non-CPU operand raises
-// std::runtime_error; shape, geometry, and channel-mismatch errors
-// raise std::invalid_argument.
+// Inputs to conv2d / max_pool2d / depthwise_conv2d / avg_pool2d /
+// nearest_upsample2d must be rank-4 NCHW tensors. Weights for
+// conv2d are rank-4 (out_C, in_C, kH, kW); weights for
+// depthwise_conv2d are rank-3 (C, kH, kW). Bias (where accepted)
+// must be a rank-1 tensor of length equal to the channel axis. Stride
+// must be a positive integer; pad must be a non-negative integer such
+// that the resulting output extent is well-defined (i.e. (H + 2*pad -
+// kH) is a non-negative multiple of stride). All operations are
+// CPU-only: a non-CPU operand raises std::runtime_error; shape,
+// geometry, and channel-mismatch errors raise std::invalid_argument.
 
 // 2D convolution. Computes the standard cross-correlation:
 //
@@ -148,5 +150,30 @@ Variable conv2d(const Variable& input,
 Variable max_pool2d(const Variable& input,
                     int kH, int kW,
                     int stride);
+
+// 2D depthwise convolution. Each input channel c is convolved with
+// its own (kH, kW) filter weight[c, :, :] and shifted by bias[c].
+// The forward graph records the im2col matrix and the weight tensor
+// for backward, mirroring ag::conv2d.
+Variable depthwise_conv2d(const Variable& input,
+                          const Variable& weight,
+                          const Variable& bias,
+                          int stride,
+                          int pad);
+
+// 2D average pooling. Output is the mean over each kH x kW window.
+// Backward distributes (1 / (kH*kW)) of the upstream gradient across
+// every window that contains each input pixel, with overlap
+// accumulation across windows.
+Variable avg_pool2d(const Variable& input,
+                    int kH, int kW,
+                    int stride);
+
+// 2D nearest-neighbor upsampling. Each input pixel is replicated to
+// a scale x scale block of output positions. scale must be >= 1.
+// Backward sums the upstream gradient over the scale x scale block
+// per input pixel.
+Variable nearest_upsample2d(const Variable& input,
+                            int scale);
 
 }  // namespace ag

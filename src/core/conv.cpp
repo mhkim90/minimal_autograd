@@ -223,4 +223,149 @@ Variable max_pool2d(const Variable& input,
     return detail::VariableAccess::make(std::move(leaf));
 }
 
+Variable depthwise_conv2d(const Variable& input,
+                           const Variable& weight,
+                           const Variable& bias,
+                           int stride,
+                           int pad) {
+    if (input.device().is_cuda() || weight.device().is_cuda() ||
+        bias.device().is_cuda()) {
+        throw std::runtime_error(
+            "ag::depthwise_conv2d: CUDA tensors are not supported "
+            "in this build");
+    }
+    const Shape& in_s = input.value().shape();
+    if (in_s.rank() != 4) {
+        std::ostringstream os;
+        os << "ag::depthwise_conv2d: input must be rank-4 (N, C, H, W); got "
+           << in_s;
+        throw std::invalid_argument(os.str());
+    }
+    const Shape& w_s = weight.value().shape();
+    if (w_s.rank() != 3) {
+        std::ostringstream os;
+        os << "ag::depthwise_conv2d: weight must be rank-3 (C, kH, kW); got "
+           << w_s;
+        throw std::invalid_argument(os.str());
+    }
+    const int N = static_cast<int>(in_s[0]);
+    const int C = static_cast<int>(in_s[1]);
+    const int H = static_cast<int>(in_s[2]);
+    const int W = static_cast<int>(in_s[3]);
+    const int w_C = static_cast<int>(w_s[0]);
+    const int kH = static_cast<int>(w_s[1]);
+    const int kW = static_cast<int>(w_s[2]);
+    if (C != w_C) {
+        std::ostringstream os;
+        os << "ag::depthwise_conv2d: channel mismatch (input C=" << C
+           << ", weight C=" << w_C << ")";
+        throw std::invalid_argument(os.str());
+    }
+    validate_conv2d_geometry(
+        "ag::depthwise_conv2d", H, W, kH, kW, stride, pad);
+    validate_bias(bias.value(), C, "ag::depthwise_conv2d");
+
+    Tensor saved_col;
+    Tensor out = detail::tensor_depthwise_conv2d_nchw_forward(
+        input.value(), weight.value(), bias.value(), stride, pad,
+        saved_col);
+
+    const bool any_requires_grad =
+        input.requires_grad() || weight.requires_grad() ||
+        bias.requires_grad();
+    auto node = std::make_shared<detail::VariableNode>(
+        std::move(out), any_requires_grad);
+    if (any_requires_grad) {
+        node->kind = detail::OpKind::DepthwiseConv2d;
+        node->parents = {
+            detail::VariableAccess::node(input),
+            detail::VariableAccess::node(weight),
+            detail::VariableAccess::node(bias),
+        };
+        node->saved = {std::move(saved_col), weight.value().clone()};
+        node->extra_i0 = kH;
+        node->extra_i1 = kW;
+        node->axis = stride;
+        node->extra_f0 = static_cast<float>(pad);
+        (void)N;
+    }
+    return detail::VariableAccess::make(std::move(node));
+}
+
+Variable avg_pool2d(const Variable& input,
+                    int kH, int kW,
+                    int stride) {
+    if (input.device().is_cuda()) {
+        throw std::runtime_error(
+            "ag::avg_pool2d: CUDA tensors are not supported in this build");
+    }
+    const Shape& in_s = input.value().shape();
+    if (in_s.rank() != 4) {
+        std::ostringstream os;
+        os << "ag::avg_pool2d: input must be rank-4 (N, C, H, W); got "
+           << in_s;
+        throw std::invalid_argument(os.str());
+    }
+    const int N = static_cast<int>(in_s[0]);
+    const int C = static_cast<int>(in_s[1]);
+    const int H = static_cast<int>(in_s[2]);
+    const int W = static_cast<int>(in_s[3]);
+    validate_pool_geometry("ag::avg_pool2d", H, W, kH, kW, stride);
+
+    Tensor out = detail::tensor_avgpool2d_nchw_forward(
+        input.value(), kH, kW, stride);
+
+    if (input.requires_grad()) {
+        auto node = std::make_shared<detail::VariableNode>(
+            std::move(out), true);
+        node->kind = detail::OpKind::AvgPool2d;
+        node->parents = {detail::VariableAccess::node(input)};
+        node->extra_i0 = kH;
+        node->extra_i1 = kW;
+        node->axis = stride;
+        (void)N;
+        return detail::VariableAccess::make(std::move(node));
+    }
+    auto leaf = std::make_shared<detail::VariableNode>(
+        std::move(out), false);
+    return detail::VariableAccess::make(std::move(leaf));
+}
+
+Variable nearest_upsample2d(const Variable& input,
+                            int scale) {
+    if (input.device().is_cuda()) {
+        throw std::runtime_error(
+            "ag::nearest_upsample2d: CUDA tensors are not supported "
+            "in this build");
+    }
+    if (scale < 1) {
+        std::ostringstream os;
+        os << "ag::nearest_upsample2d: scale must be >= 1 (got "
+           << scale << ")";
+        throw std::invalid_argument(os.str());
+    }
+    const Shape& in_s = input.value().shape();
+    if (in_s.rank() != 4) {
+        std::ostringstream os;
+        os << "ag::nearest_upsample2d: input must be rank-4 "
+              "(N, C, H, W); got " << in_s;
+        throw std::invalid_argument(os.str());
+    }
+
+    Tensor out = detail::tensor_nearest_upsample2d_nchw_forward(
+        input.value(), scale);
+
+    if (input.requires_grad()) {
+        auto node = std::make_shared<detail::VariableNode>(
+            std::move(out), true);
+        node->kind = detail::OpKind::NearestUpsample2d;
+        node->parents = {detail::VariableAccess::node(input)};
+        node->extra_i2 = scale;
+        return detail::VariableAccess::make(std::move(node));
+    }
+    auto leaf = std::make_shared<detail::VariableNode>(
+        std::move(out), false);
+    return detail::VariableAccess::make(std::move(leaf));
+}
+
 }  // namespace ag

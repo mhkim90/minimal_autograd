@@ -237,6 +237,62 @@ std::vector<Tensor> backward_step(Node& node, const Tensor& output_grad) {
                     output_grad, mask, N, C, H, W, kH, kW, stride),
             };
         }
+        case detail::OpKind::DepthwiseConv2d: {
+            // saved[0] = col matrix (rank-3, N, C*kH*kW, oH*oW)
+            // saved[1] = weight tensor (rank-3, C, kH, kW)
+            // parents  = {input, weight, bias}
+            // extras   : extra_i0=kH, extra_i1=kW, axis=stride,
+            //            extra_f0=pad
+            const Tensor& col = node.saved[0];
+            const Tensor& weight_value = node.saved[1];
+            const int kH = static_cast<int>(node.extra_i0);
+            const int kW = static_cast<int>(node.extra_i1);
+            const int stride = node.axis;
+            const int pad = static_cast<int>(node.extra_f0);
+            const Shape& in_shape = node.parents[0]->value.shape();
+            const int N = static_cast<int>(in_shape[0]);
+            const int C = static_cast<int>(in_shape[1]);
+            const int H = static_cast<int>(in_shape[2]);
+            const int W = static_cast<int>(in_shape[3]);
+            return {
+                detail::tensor_depthwise_conv2d_nchw_backward_input(
+                    output_grad, weight_value,
+                    N, C, H, W, kH, kW, stride, pad),
+                detail::tensor_depthwise_conv2d_nchw_backward_weight(
+                    output_grad, col, kH, kW),
+                detail::tensor_depthwise_conv2d_nchw_backward_bias(output_grad),
+            };
+        }
+        case detail::OpKind::AvgPool2d: {
+            // parents  = {input}
+            // extras   : extra_i0=kH, extra_i1=kW, axis=stride
+            const int kH = static_cast<int>(node.extra_i0);
+            const int kW = static_cast<int>(node.extra_i1);
+            const int stride = node.axis;
+            const Shape& in_shape = node.parents[0]->value.shape();
+            const int N = static_cast<int>(in_shape[0]);
+            const int C = static_cast<int>(in_shape[1]);
+            const int H = static_cast<int>(in_shape[2]);
+            const int W = static_cast<int>(in_shape[3]);
+            return {
+                detail::tensor_avgpool2d_nchw_backward(
+                    output_grad, N, C, H, W, kH, kW, stride),
+            };
+        }
+        case detail::OpKind::NearestUpsample2d: {
+            // parents  = {input}
+            // extras   : extra_i2=scale
+            const int scale = static_cast<int>(node.extra_i2);
+            const Shape& in_shape = node.parents[0]->value.shape();
+            const int N = static_cast<int>(in_shape[0]);
+            const int C = static_cast<int>(in_shape[1]);
+            const int H = static_cast<int>(in_shape[2]);
+            const int W = static_cast<int>(in_shape[3]);
+            return {
+                detail::tensor_nearest_upsample2d_nchw_backward(
+                    output_grad, N, C, H, W, scale),
+            };
+        }
         case detail::OpKind::Custom:
             return node.custom_backward(output_grad);
     }

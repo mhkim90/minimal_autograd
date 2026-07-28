@@ -616,6 +616,524 @@ void test_maxpool2d_invalid_arguments() {
     report("ag::max_pool2d / ag::nn::MaxPool2d reject invalid arguments");
 }
 
+// ── DepthwiseConv2d, AvgPool2d, NearestUpsample2d ───────────────────
+
+// Naive NCHW DepthwiseConv2d reference. Input (N, C, H, W),
+// weight (C, kH, kW), bias (C,). One per-channel filter shared across
+// batches. Returns flat (N * C * oH * oW) in first-axis-contiguous
+// layout matching the replacement Tensor API.
+std::vector<float> depthwise_conv2d_reference(
+        const std::vector<float>& in, int N, int C, int H, int W,
+        const std::vector<float>& w, int kH, int kW,
+        const std::vector<float>& b,
+        int stride, int pad) {
+    const int oH = (H + 2 * pad - kH) / stride + 1;
+    const int oW = (W + 2 * pad - kW) / stride + 1;
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+    const int w_stride_c = 1;
+    const int w_stride_kh = C;
+    const int w_stride_kw = C * kH;
+    const int out_stride_n = 1;
+    const int out_stride_c = N;
+    const int out_stride_oh = N * C;
+    const int out_stride_ow = N * C * oH;
+    std::vector<float> out(static_cast<std::size_t>(N) * C * oH * oW, 0.f);
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int oh = 0; oh < oH; ++oh) {
+                for (int ow = 0; ow < oW; ++ow) {
+                    float s = b[c];
+                    for (int kh = 0; kh < kH; ++kh) {
+                        for (int kw = 0; kw < kW; ++kw) {
+                            const int ih = oh * stride + kh - pad;
+                            const int iw = ow * stride + kw - pad;
+                            if (ih < 0 || ih >= H || iw < 0 || iw >= W)
+                                continue;
+                            const int in_off = n * in_stride_n
+                                              + c * in_stride_c
+                                              + ih * in_stride_h
+                                              + iw * in_stride_w;
+                            const int w_off = c * w_stride_c
+                                             + kh * w_stride_kh
+                                             + kw * w_stride_kw;
+                            s += w[w_off] * in[in_off];
+                        }
+                    }
+                    const int out_off = n * out_stride_n
+                                      + c * out_stride_c
+                                      + oh * out_stride_oh
+                                      + ow * out_stride_ow;
+                    out[out_off] = s;
+                }
+            }
+        }
+    }
+    return out;
+}
+
+void test_depthwise_conv2d_forward_matches_naive() {
+    const int N = 2, C = 3, H = 5, W = 5;
+    const int kH = 3, kW = 3, stride = 1, pad = 1;
+    const int oH = (H + 2 * pad - kH) / stride + 1;
+    const int oW = (W + 2 * pad - kW) / stride + 1;
+
+    std::mt19937 rng(0x4d2a'6f1bu);
+    std::uniform_real_distribution<float> dist(-1.f, 1.f);
+    std::vector<float> in(N * C * H * W);
+    std::vector<float> w(C * kH * kW);
+    std::vector<float> b(C);
+    for (auto& v : in) v = dist(rng);
+    for (auto& v : w)  v = dist(rng);
+    for (auto& v : b)  v = dist(rng);
+
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable wv(make_tensor(w, ag::Shape{C, kH, kW}), true);
+    ag::Variable bv(make_tensor(b, ag::Shape{C}), true);
+    ag::Variable y = ag::depthwise_conv2d(xv, wv, bv, stride, pad);
+    CHECK((y.value().shape() == ag::Shape{N, C, oH, oW}));
+
+    std::vector<float> got = read_values(y.value());
+    std::vector<float> ref = depthwise_conv2d_reference(
+        in, N, C, H, W, w, kH, kW, b, stride, pad);
+    check_close(got, ref, 1e-4f);
+    report("ag::depthwise_conv2d forward matches naive NCHW reference");
+}
+
+void test_depthwise_conv2d_gradients() {
+    const int N = 1, C = 2, H = 4, W = 4, kH = 3, kW = 3;
+    const int stride = 1, pad = 0;
+    std::mt19937 rng(0x77d3'4b91u);
+    std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
+
+    auto fresh = [&](ag::Variable& in_var, ag::Variable& w_var,
+                     ag::Variable& b_var) {
+        std::vector<float> in(N * C * H * W);
+        std::vector<float> w(C * kH * kW);
+        std::vector<float> b(C);
+        for (auto& v : in) v = dist(rng);
+        for (auto& v : w)  v = dist(rng);
+        for (auto& v : b)  v = dist(rng);
+        in_var = ag::Variable(make_tensor(in, ag::Shape{N, C, H, W}), true);
+        w_var  = ag::Variable(make_tensor(w, ag::Shape{C, kH, kW}), true);
+        b_var  = ag::Variable(make_tensor(b, ag::Shape{C}), true);
+    };
+
+    // d_input
+    {
+        ag::Variable xv, wv, bv;
+        fresh(xv, wv, bv);
+        auto f = [&] { return ag::depthwise_conv2d(xv, wv, bv, stride, pad); };
+        auto fd = finite_difference(
+            read_values(xv.value()), xv.value(), f);
+        ag::sum(f()).backward();
+        check_close(read_values(xv.grad()), fd, 5e-2f);
+        report("ag::depthwise_conv2d gradient: d_input matches FD");
+    }
+    // d_weight
+    {
+        ag::Variable xv, wv, bv;
+        fresh(xv, wv, bv);
+        auto f = [&] { return ag::depthwise_conv2d(xv, wv, bv, stride, pad); };
+        auto fd = finite_difference(
+            read_values(wv.value()), wv.value(), f);
+        ag::sum(f()).backward();
+        check_close(read_values(wv.grad()), fd, 5e-2f);
+        report("ag::depthwise_conv2d gradient: d_weight matches FD");
+    }
+    // d_bias
+    {
+        ag::Variable xv, wv, bv;
+        fresh(xv, wv, bv);
+        auto f = [&] { return ag::depthwise_conv2d(xv, wv, bv, stride, pad); };
+        auto fd = finite_difference(
+            read_values(bv.value()), bv.value(), f);
+        ag::sum(f()).backward();
+        check_close(read_values(bv.grad()), fd, 5e-2f);
+        report("ag::depthwise_conv2d gradient: d_bias matches FD");
+    }
+}
+
+void test_depthwise_conv2d_module_named_parameters() {
+    ag::nn::DepthwiseConv2d dw(3, 3, 3, 1, 1);
+    auto named = dw.named_parameters();
+    CHECK(named.size() == 2);
+    CHECK(named[0].name == "weight");
+    CHECK(named[1].name == "bias");
+    CHECK((named[0].parameter.value().shape() == ag::Shape{3, 3, 3}));
+    CHECK((named[1].parameter.value().shape() == ag::Shape{3}));
+    CHECK(named[0].parameter.requires_grad());
+    CHECK(named[1].parameter.requires_grad());
+
+    // Repeated calls produce the same order.
+    auto named2 = dw.named_parameters();
+    CHECK(named2.size() == 2);
+    CHECK(named2[0].name == "weight");
+    CHECK(named2[1].name == "bias");
+
+    auto params = dw.parameters();
+    CHECK(params.size() == 2);
+    report("ag::nn::DepthwiseConv2d parameter names and shapes");
+}
+
+void test_depthwise_conv2d_module_forward_backward() {
+    const int N = 1, C = 2, H = 5, W = 5, kH = 3, kW = 3;
+    const int stride = 1, pad = 1;
+    const int oH = (H + 2 * pad - kH) / stride + 1;
+    const int oW = (W + 2 * pad - kW) / stride + 1;
+    ag::nn::DepthwiseConv2d dw(C, kH, kW, stride, pad);
+    std::vector<float> in(N * C * H * W);
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        in[i] = 0.05f * static_cast<float>((i * 17) % 11) - 0.3f;
+    }
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable y = dw.forward(xv);
+    CHECK((y.value().shape() == ag::Shape{N, C, oH, oW}));
+
+    ag::sum(y).backward();
+    CHECK(dw.weight().has_grad());
+    CHECK(dw.bias().has_grad());
+    CHECK((dw.weight().grad().shape() == ag::Shape{C, kH, kW}));
+    CHECK((dw.bias().grad().shape() == ag::Shape{C}));
+    report("ag::nn::DepthwiseConv2d forward, backward, parameter gradients");
+}
+
+void test_avgpool2d_forward_matches_naive() {
+    const int N = 2, C = 2, H = 4, W = 4, kH = 2, kW = 2;
+    const int stride = 2;
+    const int oH = (H - kH) / stride + 1;
+    const int oW = (W - kW) / stride + 1;
+
+    std::vector<float> in(N * C * H * W);
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        in[i] = 0.1f * static_cast<float>(i) - 0.5f;
+    }
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable y = ag::avg_pool2d(xv, kH, kW, stride);
+    CHECK((y.value().shape() == ag::Shape{N, C, oH, oW}));
+
+    std::vector<float> got = read_values(y.value());
+    const int ksz = kH * kW;
+    const float inv_k = 1.f / static_cast<float>(ksz);
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+    const int out_stride_n = 1;
+    const int out_stride_c = N;
+    const int out_stride_oh = N * C;
+    const int out_stride_ow = N * C * oH;
+    std::vector<float> ref(static_cast<std::size_t>(N) * C * oH * oW, 0.f);
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int oh = 0; oh < oH; ++oh) {
+                for (int ow = 0; ow < oW; ++ow) {
+                    float s = 0.f;
+                    for (int kh = 0; kh < kH; ++kh) {
+                        for (int kw = 0; kw < kW; ++kw) {
+                            const int ih = oh * stride + kh;
+                            const int iw = ow * stride + kw;
+                            s += in[n * in_stride_n
+                                   + c * in_stride_c
+                                   + ih * in_stride_h
+                                   + iw * in_stride_w];
+                        }
+                    }
+                    ref[n * out_stride_n
+                       + c * out_stride_c
+                       + oh * out_stride_oh
+                       + ow * out_stride_ow] = s * inv_k;
+                }
+            }
+        }
+    }
+    check_near(got, ref, 1e-6f);
+    report("ag::avg_pool2d forward matches naive reference");
+}
+
+void test_avgpool2d_gradient_overlap() {
+    // Overlapping avg pool (stride=1, kernel=2): each input pixel
+    // participates in multiple windows; the gradient must be the sum
+    // of (1/kH*kW) over each window containing it.
+    const int N = 1, C = 1, H = 3, W = 3, kH = 2, kW = 2;
+    const int stride = 1;
+    const int ksz = kH * kW;
+    const float inv_k = 1.f / static_cast<float>(ksz);
+
+    std::vector<float> in(9, 1.f);
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable y = ag::avg_pool2d(xv, kH, kW, stride);
+    CHECK((y.value().shape() == ag::Shape{N, C, 2, 2}));
+    ag::sum(y).backward();
+    std::vector<float> g = read_values(xv.grad());
+    // The 4 corners (0,0), (0,2), (2,0), (2,2) belong to exactly one
+    // window each -> gradient = 1/4.
+    // The 4 edges (0,1), (1,0), (1,2), (2,1) belong to two windows
+    // each -> gradient = 2/4 = 0.5.
+    // The center (1,1) belongs to four windows -> gradient = 4/4 = 1.
+    // First-axis-contig flat index for (n, c, h, w) is n + c*N + h*N*C
+    // + w*N*C*H. With N=1, C=1, H=3, W=3: idx = h + 3*w.
+    std::vector<float> expected = {
+        inv_k,
+        2.f * inv_k,
+        inv_k,
+        2.f * inv_k,
+        4.f * inv_k,
+        2.f * inv_k,
+        inv_k,
+        2.f * inv_k,
+        inv_k,
+    };
+    check_near(g, expected, 1e-6f);
+    report("ag::avg_pool2d overlap accumulates window-mean gradients");
+}
+
+void test_avgpool2d_gradient_finite_difference() {
+    const int N = 1, C = 1, H = 4, W = 4, kH = 2, kW = 2, stride = 2;
+    std::mt19937 rng(0x6c1f'a8d2u);
+    std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
+    std::vector<float> in(N * C * H * W);
+    for (auto& v : in) v = dist(rng);
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    auto f = [&] { return ag::avg_pool2d(xv, kH, kW, stride); };
+    auto fd = finite_difference(read_values(xv.value()), xv.value(), f);
+    ag::sum(f()).backward();
+    check_close(read_values(xv.grad()), fd, 5e-2f);
+    report("ag::avg_pool2d gradient matches FD");
+}
+
+void test_avgpool2d_module_zero_parameters() {
+    ag::nn::AvgPool2d pool(2, 2, 2);
+    CHECK(pool.parameters().empty());
+    CHECK(pool.named_parameters().empty());
+
+    const int N = 1, C = 2, H = 4, W = 4;
+    std::vector<float> in(N * C * H * W);
+    for (std::size_t i = 0; i < in.size(); ++i) in[i] = static_cast<float>(i);
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable y = pool.forward(xv);
+    CHECK((y.value().shape() == ag::Shape{N, C, 2, 2}));
+    ag::sum(y).backward();
+    CHECK(xv.has_grad());
+    report("ag::nn::AvgPool2d forward, backward, zero parameters");
+}
+
+void test_nearest_upsample2d_forward_matches_naive() {
+    const int N = 2, C = 2, H = 3, W = 3, scale = 2;
+    const int oH = H * scale, oW = W * scale;
+
+    std::vector<float> in(N * C * H * W);
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        in[i] = 0.5f * static_cast<float>(i) - 1.f;
+    }
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable y = ag::nearest_upsample2d(xv, scale);
+    CHECK((y.value().shape() == ag::Shape{N, C, oH, oW}));
+
+    std::vector<float> got = read_values(y.value());
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+    const int out_stride_n = 1;
+    const int out_stride_c = N;
+    const int out_stride_oh = N * C;
+    const int out_stride_ow = N * C * oH;
+    std::vector<float> ref(static_cast<std::size_t>(N) * C * oH * oW, 0.f);
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int h = 0; h < H; ++h) {
+                for (int w = 0; w < W; ++w) {
+                    const float v = in[n * in_stride_n
+                                     + c * in_stride_c
+                                     + h * in_stride_h
+                                     + w * in_stride_w];
+                    for (int sh = 0; sh < scale; ++sh) {
+                        for (int sw = 0; sw < scale; ++sw) {
+                            const int oh = h * scale + sh;
+                            const int ow = w * scale + sw;
+                            ref[n * out_stride_n
+                              + c * out_stride_c
+                              + oh * out_stride_oh
+                              + ow * out_stride_ow] = v;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    check_near(got, ref, 1e-6f);
+    report("ag::nearest_upsample2d forward matches naive reference");
+}
+
+void test_nearest_upsample2d_gradient_multiplicity() {
+    // Each input pixel must receive gradient equal to the sum of
+    // upstream gradients over the scale*scale output cells that
+    // sampled it. With a uniform upstream gradient of 1.0 and
+    // scale=3, each input pixel must accumulate scale*scale = 9.
+    const int N = 1, C = 1, H = 2, W = 2, scale = 3;
+    std::vector<float> in(H * W, 1.f);
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable y = ag::nearest_upsample2d(xv, scale);
+    CHECK((y.value().shape() == ag::Shape{N, C, 6, 6}));
+    ag::sum(y).backward();
+    std::vector<float> g = read_values(xv.grad());
+    CHECK(g.size() == 4);
+    const float expected = static_cast<float>(scale * scale);
+    for (float gi : g) {
+        CHECK(std::fabs(gi - expected) <= 1e-5f);
+    }
+    report("ag::nearest_upsample2d gradient accumulates scale*scale per pixel");
+}
+
+void test_nearest_upsample2d_gradient_finite_difference() {
+    const int N = 1, C = 1, H = 3, W = 3, scale = 2;
+    std::mt19937 rng(0x4e7f'3c81u);
+    std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
+    std::vector<float> in(N * C * H * W);
+    for (auto& v : in) v = dist(rng);
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    auto f = [&] { return ag::nearest_upsample2d(xv, scale); };
+    auto fd = finite_difference(read_values(xv.value()), xv.value(), f);
+    ag::sum(f()).backward();
+    check_close(read_values(xv.grad()), fd, 5e-2f);
+    report("ag::nearest_upsample2d gradient matches FD");
+}
+
+void test_nearest_upsample2d_module_zero_parameters() {
+    ag::nn::NearestUpsample2d up(2);
+    CHECK(up.parameters().empty());
+    CHECK(up.named_parameters().empty());
+
+    const int N = 1, C = 2, H = 3, W = 3;
+    std::vector<float> in(N * C * H * W);
+    for (std::size_t i = 0; i < in.size(); ++i) in[i] = 0.1f * static_cast<float>(i);
+    ag::Variable xv(make_tensor(in, ag::Shape{N, C, H, W}), true);
+    ag::Variable y = up.forward(xv);
+    CHECK((y.value().shape() == ag::Shape{N, C, 6, 6}));
+    ag::sum(y).backward();
+    CHECK(xv.has_grad());
+    report("ag::nn::NearestUpsample2d forward, backward, zero parameters");
+}
+
+void test_spatial_extra_invalid_arguments() {
+    // ag::depthwise_conv2d: non-rank-4 input
+    {
+        ag::Variable xv(make_tensor({1.f, 2.f, 3.f, 4.f}, ag::Shape{2, 2}),
+                         true);
+        ag::Variable wv(make_tensor(std::vector<float>(2 * 2 * 2, 1.f),
+                                    ag::Shape{2, 2, 2}), true);
+        ag::Variable bv(make_tensor({0.f, 0.f}, ag::Shape{2}), true);
+        CHECK_THROWS_AS(ag::depthwise_conv2d(xv, wv, bv, 1, 0),
+                        std::invalid_argument);
+    }
+    // ag::depthwise_conv2d: rank-2 weight rejected (must be rank-3)
+    {
+        ag::Variable xv(make_tensor(std::vector<float>(1 * 2 * 3 * 3, 0.f),
+                                    ag::Shape{1, 2, 3, 3}), true);
+        ag::Variable wv(make_tensor(std::vector<float>(2 * 2, 0.f),
+                                    ag::Shape{2, 2}), true);
+        ag::Variable bv(make_tensor({0.f, 0.f}, ag::Shape{2}), true);
+        CHECK_THROWS_AS(ag::depthwise_conv2d(xv, wv, bv, 1, 0),
+                        std::invalid_argument);
+    }
+    // ag::depthwise_conv2d: channel mismatch (input C != weight C)
+    {
+        ag::Variable xv(make_tensor(std::vector<float>(1 * 2 * 3 * 3, 0.f),
+                                    ag::Shape{1, 2, 3, 3}), true);
+        ag::Variable wv(make_tensor(std::vector<float>(3 * 2 * 2, 1.f),
+                                    ag::Shape{3, 2, 2}), true);
+        ag::Variable bv(make_tensor({0.f, 0.f, 0.f}, ag::Shape{3}), true);
+        CHECK_THROWS_AS(ag::depthwise_conv2d(xv, wv, bv, 1, 0),
+                        std::invalid_argument);
+    }
+    // ag::depthwise_conv2d: bias length mismatch
+    {
+        ag::Variable xv(make_tensor(std::vector<float>(1 * 2 * 3 * 3, 0.f),
+                                    ag::Shape{1, 2, 3, 3}), true);
+        ag::Variable wv(make_tensor(std::vector<float>(2 * 2 * 2, 1.f),
+                                    ag::Shape{2, 2, 2}), true);
+        ag::Variable bv(make_tensor({0.f, 0.f, 0.f}, ag::Shape{3}), true);
+        CHECK_THROWS_AS(ag::depthwise_conv2d(xv, wv, bv, 1, 0),
+                        std::invalid_argument);
+    }
+    // ag::depthwise_conv2d: non-positive stride / negative pad
+    {
+        ag::Variable xv(make_tensor(std::vector<float>(1 * 1 * 3 * 3, 0.f),
+                                    ag::Shape{1, 1, 3, 3}), true);
+        ag::Variable wv(make_tensor(std::vector<float>(1 * 2 * 2, 1.f),
+                                    ag::Shape{1, 2, 2}), true);
+        ag::Variable bv(make_tensor({0.f}, ag::Shape{1}), true);
+        CHECK_THROWS_AS(ag::depthwise_conv2d(xv, wv, bv, 0, 0),
+                        std::invalid_argument);
+        CHECK_THROWS_AS(ag::depthwise_conv2d(xv, wv, bv, -1, 0),
+                        std::invalid_argument);
+        CHECK_THROWS_AS(ag::depthwise_conv2d(xv, wv, bv, 1, -1),
+                        std::invalid_argument);
+    }
+    // nn::DepthwiseConv2d constructor validation
+    CHECK_THROWS_AS(ag::nn::DepthwiseConv2d(0, 2, 2, 1, 0),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(ag::nn::DepthwiseConv2d(2, 0, 2, 1, 0),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(ag::nn::DepthwiseConv2d(2, 2, 0, 1, 0),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(ag::nn::DepthwiseConv2d(2, 2, 2, 0, 0),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(ag::nn::DepthwiseConv2d(2, 2, 2, 1, -1),
+                    std::invalid_argument);
+
+    // ag::avg_pool2d: non-rank-4 input
+    {
+        ag::Variable xv(make_tensor({1.f, 2.f, 3.f, 4.f}, ag::Shape{2, 2}),
+                         true);
+        CHECK_THROWS_AS(ag::avg_pool2d(xv, 2, 2, 2),
+                        std::invalid_argument);
+    }
+    // ag::avg_pool2d: non-positive kernel / stride
+    {
+        ag::Variable xv(make_tensor(std::vector<float>(16, 0.f),
+                                    ag::Shape{1, 1, 4, 4}), true);
+        CHECK_THROWS_AS(ag::avg_pool2d(xv, 0, 2, 2), std::invalid_argument);
+        CHECK_THROWS_AS(ag::avg_pool2d(xv, 2, 0, 2), std::invalid_argument);
+        CHECK_THROWS_AS(ag::avg_pool2d(xv, 2, 2, 0), std::invalid_argument);
+    }
+    // ag::avg_pool2d: kernel larger than input
+    {
+        ag::Variable xv(make_tensor(std::vector<float>(9, 0.f),
+                                    ag::Shape{1, 1, 3, 3}), true);
+        CHECK_THROWS_AS(ag::avg_pool2d(xv, 4, 4, 1), std::invalid_argument);
+    }
+    // nn::AvgPool2d constructor validation
+    CHECK_THROWS_AS(ag::nn::AvgPool2d(0, 2, 2), std::invalid_argument);
+    CHECK_THROWS_AS(ag::nn::AvgPool2d(2, 0, 2), std::invalid_argument);
+    CHECK_THROWS_AS(ag::nn::AvgPool2d(2, 2, 0), std::invalid_argument);
+
+    // ag::nearest_upsample2d: non-rank-4 input
+    {
+        ag::Variable xv(make_tensor({1.f, 2.f, 3.f, 4.f}, ag::Shape{2, 2}),
+                         true);
+        CHECK_THROWS_AS(ag::nearest_upsample2d(xv, 2),
+                        std::invalid_argument);
+    }
+    // ag::nearest_upsample2d: scale < 1
+    {
+        ag::Variable xv(make_tensor(std::vector<float>(16, 0.f),
+                                    ag::Shape{1, 1, 4, 4}), true);
+        CHECK_THROWS_AS(ag::nearest_upsample2d(xv, 0),
+                        std::invalid_argument);
+        CHECK_THROWS_AS(ag::nearest_upsample2d(xv, -2),
+                        std::invalid_argument);
+    }
+    // nn::NearestUpsample2d constructor validation
+    CHECK_THROWS_AS(ag::nn::NearestUpsample2d(0), std::invalid_argument);
+    CHECK_THROWS_AS(ag::nn::NearestUpsample2d(-1), std::invalid_argument);
+
+    report("spatial extras reject invalid arguments");
+}
+
 }  // namespace
 
 int main() {
@@ -631,6 +1149,20 @@ int main() {
     test_conv2d_invalid_arguments();
     test_conv2d_rank1_bias_backward_shape();
     test_maxpool2d_invalid_arguments();
+
+    test_depthwise_conv2d_forward_matches_naive();
+    test_depthwise_conv2d_gradients();
+    test_depthwise_conv2d_module_named_parameters();
+    test_depthwise_conv2d_module_forward_backward();
+    test_avgpool2d_forward_matches_naive();
+    test_avgpool2d_gradient_overlap();
+    test_avgpool2d_gradient_finite_difference();
+    test_avgpool2d_module_zero_parameters();
+    test_nearest_upsample2d_forward_matches_naive();
+    test_nearest_upsample2d_gradient_multiplicity();
+    test_nearest_upsample2d_gradient_finite_difference();
+    test_nearest_upsample2d_module_zero_parameters();
+    test_spatial_extra_invalid_arguments();
 
     std::printf("\nALL OOP CONV TESTS PASSED (%d)\n", passed);
     return 0;

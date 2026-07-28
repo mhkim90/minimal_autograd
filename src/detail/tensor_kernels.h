@@ -2201,5 +2201,485 @@ inline Tensor tensor_maxpool2d_nchw_backward(const Tensor& g,
     return tensor_col2im_nchw(d_col, N, C, H, W, kH, kW, stride, 0);
 }
 
+// ── DepthwiseConv2d (NCHW) ────────────────────────────────────────────
+//
+// Per-channel convolution: each input channel c is convolved with its
+// own (kH, kW) filter weight[c, :, :]. weight is rank-3 (C, kH, kW),
+// bias is rank-1 (C,). The forward is decomposed through the existing
+// im2col + col2im helpers by reusing the rank-3 col matrix view.
+//
+// Storage layout (first-axis-contiguous):
+//   col shape: (N, C*kH*kW, oH*oW), strides (1, N, N*C*kH*kW)
+//   For each (n, c, k, p): col[n, c*kH*kW + k, p] = input[n, c, ...]
+//   weight[c, kh, kw] index: c + kh*C + kw*C*kH
+//   For each (n, c, oh, ow):
+//     out[n, c, oh, ow] = bias[c] + sum_{kh, kw} weight[c, kh, kw]
+//                                                * col[n, c*kH*kW + kh*kW + kw, oh*oW + ow]
+inline Tensor tensor_depthwise_conv2d_nchw_forward(
+        const Tensor& input, const Tensor& weight, const Tensor& bias,
+        int stride, int pad, Tensor& saved_col) {
+    const Shape& in_s = input.shape();
+    const int N = static_cast<int>(in_s[0]);
+    const int C = static_cast<int>(in_s[1]);
+    const int H = static_cast<int>(in_s[2]);
+    const int W = static_cast<int>(in_s[3]);
+    const Shape& w_s = weight.shape();
+    const int kH = static_cast<int>(w_s[1]);
+    const int kW = static_cast<int>(w_s[2]);
+    const int oH = static_cast<int>(nchw_output_extent(
+        H, kH, stride, pad, "depthwise_conv2d"));
+    const int oW = static_cast<int>(nchw_output_extent(
+        W, kW, stride, pad, "depthwise_conv2d"));
+    const int ksz = kH * kW;
+    const int K_flat = C * ksz;
+    const int P_flat = oH * oW;
+
+    saved_col = tensor_im2col_nchw(input, kH, kW, stride, pad);
+    Tensor out = Tensor::empty(Shape({N, C, oH, oW}), input.device());
+    if (out.elements() == 0) return out;
+
+    std::vector<float> w_data(weight.elements());
+    std::vector<float> b_data(bias.elements());
+    std::vector<float> col_data(saved_col.elements());
+    std::vector<float> out_data(out.elements());
+    weight.copy_to_host(w_data.data(), w_data.size());
+    bias.copy_to_host(b_data.data(), b_data.size());
+    saved_col.copy_to_host(col_data.data(), col_data.size());
+
+    const int w_stride_c = 1;
+    const int w_stride_kh = C;
+    const int w_stride_kw = C * kH;
+    const int col_stride_n = 1;
+    const int col_stride_k = N;
+    const int col_stride_p = N * K_flat;
+    const int out_stride_n = 1;
+    const int out_stride_c = N;
+    const int out_stride_oh = N * C;
+    const int out_stride_ow = N * C * oH;
+
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int oh = 0; oh < oH; ++oh) {
+                for (int ow = 0; ow < oW; ++ow) {
+                    const int p = oh * oW + ow;
+                    float s = b_data[c];
+                    for (int kh = 0; kh < kH; ++kh) {
+                        for (int kw = 0; kw < kW; ++kw) {
+                            const int k = c * ksz + kh * kW + kw;
+                            const int w_off = c * w_stride_c
+                                             + kh * w_stride_kh
+                                             + kw * w_stride_kw;
+                            const int col_off = n * col_stride_n
+                                              + k * col_stride_k
+                                              + p * col_stride_p;
+                            s += w_data[w_off] * col_data[col_off];
+                        }
+                    }
+                    out_data[n * out_stride_n
+                           + c * out_stride_c
+                           + oh * out_stride_oh
+                           + ow * out_stride_ow] = s;
+                }
+            }
+        }
+    }
+    out.copy_from_host(out_data.data(), out_data.size());
+    return out;
+}
+
+// d_input = col2im(W^T_col * d_out, ...). Because depthwise conv has
+// per-channel filters, W^T_col multiplied by d_out is per-channel:
+//   d_col[n, c*ksz + k, p] = weight[c, kh, kw] * d_out[n, c, oh, ow]
+// where (kh, kw) corresponds to k. Then col2im accumulates back to
+// the input plane.
+inline Tensor tensor_depthwise_conv2d_nchw_backward_input(
+        const Tensor& g, const Tensor& weight,
+        int N, int C, int H, int W,
+        int kH, int kW, int stride, int pad) {
+    const int oH = static_cast<int>(nchw_output_extent(
+        H, kH, stride, pad, "depthwise_conv2d_backward_input"));
+    const int oW = static_cast<int>(nchw_output_extent(
+        W, kW, stride, pad, "depthwise_conv2d_backward_input"));
+    const int ksz = kH * kW;
+    const int K_flat = C * ksz;
+    const int P_flat = oH * oW;
+
+    Tensor d_col = Tensor::zeros(Shape({N, K_flat, P_flat}), g.device());
+    if (d_col.elements() == 0) {
+        return Tensor::zeros(Shape({N, C, H, W}), g.device());
+    }
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> w_data(weight.elements());
+    std::vector<float> dc_data(d_col.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+    weight.copy_to_host(w_data.data(), w_data.size());
+
+    const int g_stride_n = 1;
+    const int g_stride_c = N;
+    const int g_stride_oh = N * C;
+    const int g_stride_ow = N * C * oH;
+    const int w_stride_c = 1;
+    const int w_stride_kh = C;
+    const int w_stride_kw = C * kH;
+    const int dc_stride_n = 1;
+    const int dc_stride_k = N;
+    const int dc_stride_p = N * K_flat;
+
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int oh = 0; oh < oH; ++oh) {
+                for (int ow = 0; ow < oW; ++ow) {
+                    const int p = oh * oW + ow;
+                    const float g_val = g_data[n * g_stride_n
+                                            + c * g_stride_c
+                                            + oh * g_stride_oh
+                                            + ow * g_stride_ow];
+                    for (int kh = 0; kh < kH; ++kh) {
+                        for (int kw = 0; kw < kW; ++kw) {
+                            const int k = c * ksz + kh * kW + kw;
+                            const int w_off = c * w_stride_c
+                                             + kh * w_stride_kh
+                                             + kw * w_stride_kw;
+                            const int dc_off = n * dc_stride_n
+                                              + k * dc_stride_k
+                                              + p * dc_stride_p;
+                            dc_data[dc_off] += g_val * w_data[w_off];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    d_col.copy_from_host(dc_data.data(), dc_data.size());
+    return tensor_col2im_nchw(d_col, N, C, H, W, kH, kW, stride, pad);
+}
+
+inline Tensor tensor_depthwise_conv2d_nchw_backward_weight(
+        const Tensor& g, const Tensor& col, int kH, int kW) {
+    const Shape& cs = col.shape();
+    const Shape& gs = g.shape();
+    const int N = static_cast<int>(cs[0]);
+    const int C = static_cast<int>(gs[1]);
+    const int oH = static_cast<int>(gs[2]);
+    const int oW = static_cast<int>(gs[3]);
+    const int ksz = kH * kW;
+
+    Tensor d_w = Tensor::zeros(Shape({C, kH, kW}), g.device());
+    if (d_w.elements() == 0) return d_w;
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> col_data(col.elements());
+    std::vector<float> dw_data(d_w.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+    col.copy_to_host(col_data.data(), col_data.size());
+
+    const int g_stride_n = 1;
+    const int g_stride_c = N;
+    const int g_stride_oh = N * C;
+    const int g_stride_ow = N * C * oH;
+    const int col_stride_n = 1;
+    const int col_stride_k = N;
+    const int col_stride_p = N * (C * ksz);
+    const int dw_stride_c = 1;
+    const int dw_stride_kh = C;
+    const int dw_stride_kw = C * kH;
+
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int kh = 0; kh < kH; ++kh) {
+                for (int kw = 0; kw < kW; ++kw) {
+                    double acc = 0.0;
+                    const int k = c * ksz + kh * kW + kw;
+                    for (int oh = 0; oh < oH; ++oh) {
+                        for (int ow = 0; ow < oW; ++ow) {
+                            const int p = oh * oW + ow;
+                            const float g_val = g_data[n * g_stride_n
+                                                    + c * g_stride_c
+                                                    + oh * g_stride_oh
+                                                    + ow * g_stride_ow];
+                            const int col_off = n * col_stride_n
+                                              + k * col_stride_k
+                                              + p * col_stride_p;
+                            acc += static_cast<double>(g_val) *
+                                   static_cast<double>(col_data[col_off]);
+                        }
+                    }
+                    const int dw_off = c * dw_stride_c
+                                     + kh * dw_stride_kh
+                                     + kw * dw_stride_kw;
+                    dw_data[dw_off] = static_cast<float>(acc);
+                }
+            }
+        }
+    }
+    d_w.copy_from_host(dw_data.data(), dw_data.size());
+    return d_w;
+}
+
+inline Tensor tensor_depthwise_conv2d_nchw_backward_bias(const Tensor& g) {
+    const Shape& gs = g.shape();
+    const int N = static_cast<int>(gs[0]);
+    const int C = static_cast<int>(gs[1]);
+    const int oH = static_cast<int>(gs[2]);
+    const int oW = static_cast<int>(gs[3]);
+
+    Tensor d_b = Tensor::zeros(Shape({C}), g.device());
+    if (d_b.elements() == 0) return d_b;
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> db_data(d_b.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+
+    const int g_stride_n = 1;
+    const int g_stride_c = N;
+    const int g_stride_oh = N * C;
+    const int g_stride_ow = N * C * oH;
+
+    for (int c = 0; c < C; ++c) {
+        double s = 0.0;
+        for (int n = 0; n < N; ++n) {
+            for (int oh = 0; oh < oH; ++oh) {
+                for (int ow = 0; ow < oW; ++ow) {
+                    s += static_cast<double>(
+                        g_data[n * g_stride_n
+                             + c * g_stride_c
+                             + oh * g_stride_oh
+                             + ow * g_stride_ow]);
+                }
+            }
+        }
+        db_data[c] = static_cast<float>(s);
+    }
+    d_b.copy_from_host(db_data.data(), db_data.size());
+    return d_b;
+}
+
+// ── AvgPool2d (NCHW) ──────────────────────────────────────────────────
+//
+// Average pooling: out[n, c, oh, ow] = (1/(kH*kW)) * sum_{kh, kw}
+// input[n, c, oh*stride+kh, ow*stride+kw]. Backward distributes the
+// upstream gradient across the kernel positions of each window, so
+// each input pixel receives (1/(kH*kW)) times the sum of upstream
+// gradients over every window containing it.
+inline Tensor tensor_avgpool2d_nchw_forward(const Tensor& input,
+                                            int kH, int kW,
+                                            int stride) {
+    const Shape& s = input.shape();
+    const int N = static_cast<int>(s[0]);
+    const int C = static_cast<int>(s[1]);
+    const int H = static_cast<int>(s[2]);
+    const int W = static_cast<int>(s[3]);
+    const int oH = static_cast<int>(nchw_output_extent(
+        H, kH, stride, 0, "avg_pool2d"));
+    const int oW = static_cast<int>(nchw_output_extent(
+        W, kW, stride, 0, "avg_pool2d"));
+    const int ksz = kH * kW;
+    const float inv_k = 1.f / static_cast<float>(ksz);
+
+    Tensor out = Tensor::empty(Shape({N, C, oH, oW}), input.device());
+    if (out.elements() == 0) return out;
+
+    std::vector<float> in_data(input.elements());
+    std::vector<float> out_data(out.elements());
+    input.copy_to_host(in_data.data(), in_data.size());
+
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+    const int out_stride_n = 1;
+    const int out_stride_c = N;
+    const int out_stride_oh = N * C;
+    const int out_stride_ow = N * C * oH;
+
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int oh = 0; oh < oH; ++oh) {
+                for (int ow = 0; ow < oW; ++ow) {
+                    float s = 0.f;
+                    for (int kh = 0; kh < kH; ++kh) {
+                        const int ih = oh * stride + kh;
+                        for (int kw = 0; kw < kW; ++kw) {
+                            const int iw = ow * stride + kw;
+                            s += in_data[n * in_stride_n
+                                       + c * in_stride_c
+                                       + ih * in_stride_h
+                                       + iw * in_stride_w];
+                        }
+                    }
+                    out_data[n * out_stride_n
+                           + c * out_stride_c
+                           + oh * out_stride_oh
+                           + ow * out_stride_ow] = s * inv_k;
+                }
+            }
+        }
+    }
+    out.copy_from_host(out_data.data(), out_data.size());
+    return out;
+}
+
+inline Tensor tensor_avgpool2d_nchw_backward(const Tensor& g,
+                                             int N, int C, int H, int W,
+                                             int kH, int kW, int stride) {
+    const int oH = static_cast<int>(nchw_output_extent(
+        H, kH, stride, 0, "avg_pool2d_backward"));
+    const int oW = static_cast<int>(nchw_output_extent(
+        W, kW, stride, 0, "avg_pool2d_backward"));
+    const int ksz = kH * kW;
+    const float inv_k = 1.f / static_cast<float>(ksz);
+
+    Tensor d_in = Tensor::zeros(Shape({N, C, H, W}), g.device());
+    if (d_in.elements() == 0) return d_in;
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> d_in_data(d_in.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+
+    const int g_stride_n = 1;
+    const int g_stride_c = N;
+    const int g_stride_oh = N * C;
+    const int g_stride_ow = N * C * oH;
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int oh = 0; oh < oH; ++oh) {
+                for (int ow = 0; ow < oW; ++ow) {
+                    const float g_val = g_data[n * g_stride_n
+                                            + c * g_stride_c
+                                            + oh * g_stride_oh
+                                            + ow * g_stride_ow] * inv_k;
+                    for (int kh = 0; kh < kH; ++kh) {
+                        const int ih = oh * stride + kh;
+                        for (int kw = 0; kw < kW; ++kw) {
+                            const int iw = ow * stride + kw;
+                            d_in_data[n * in_stride_n
+                                    + c * in_stride_c
+                                    + ih * in_stride_h
+                                    + iw * in_stride_w] += g_val;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    d_in.copy_from_host(d_in_data.data(), d_in_data.size());
+    return d_in;
+}
+
+// ── NearestUpsample2d (NCHW) ──────────────────────────────────────────
+//
+// Each input pixel (n, c, h, w) is replicated to a scale x scale block
+// of output positions (h*scale + sh, w*scale + sw) for sh, sw in
+// [0, scale). Backward sums the upstream gradients over the scale x
+// scale block for each input pixel.
+inline Tensor tensor_nearest_upsample2d_nchw_forward(const Tensor& input,
+                                                      int scale) {
+    const Shape& s = input.shape();
+    const int N = static_cast<int>(s[0]);
+    const int C = static_cast<int>(s[1]);
+    const int H = static_cast<int>(s[2]);
+    const int W = static_cast<int>(s[3]);
+    const int oH = H * scale;
+    const int oW = W * scale;
+
+    Tensor out = Tensor::empty(Shape({N, C, oH, oW}), input.device());
+    if (out.elements() == 0) return out;
+
+    std::vector<float> in_data(input.elements());
+    std::vector<float> out_data(out.elements());
+    input.copy_to_host(in_data.data(), in_data.size());
+
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+    const int out_stride_n = 1;
+    const int out_stride_c = N;
+    const int out_stride_oh = N * C;
+    const int out_stride_ow = N * C * oH;
+
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int h = 0; h < H; ++h) {
+                for (int w = 0; w < W; ++w) {
+                    const float v = in_data[n * in_stride_n
+                                          + c * in_stride_c
+                                          + h * in_stride_h
+                                          + w * in_stride_w];
+                    for (int sh = 0; sh < scale; ++sh) {
+                        const int oh = h * scale + sh;
+                        for (int sw = 0; sw < scale; ++sw) {
+                            const int ow = w * scale + sw;
+                            out_data[n * out_stride_n
+                                   + c * out_stride_c
+                                   + oh * out_stride_oh
+                                   + ow * out_stride_ow] = v;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out.copy_from_host(out_data.data(), out_data.size());
+    return out;
+}
+
+inline Tensor tensor_nearest_upsample2d_nchw_backward(const Tensor& g,
+                                                      int N, int C,
+                                                      int H, int W,
+                                                      int scale) {
+    const int oH = H * scale;
+    const int oW = W * scale;
+
+    Tensor d_in = Tensor::zeros(Shape({N, C, H, W}), g.device());
+    if (d_in.elements() == 0) return d_in;
+
+    std::vector<float> g_data(g.elements());
+    std::vector<float> d_in_data(d_in.elements());
+    g.copy_to_host(g_data.data(), g_data.size());
+
+    const int g_stride_n = 1;
+    const int g_stride_c = N;
+    const int g_stride_oh = N * C;
+    const int g_stride_ow = N * C * oH;
+    const int in_stride_n = 1;
+    const int in_stride_c = N;
+    const int in_stride_h = N * C;
+    const int in_stride_w = N * C * H;
+
+    for (int n = 0; n < N; ++n) {
+        for (int c = 0; c < C; ++c) {
+            for (int h = 0; h < H; ++h) {
+                for (int w = 0; w < W; ++w) {
+                    double s = 0.0;
+                    for (int sh = 0; sh < scale; ++sh) {
+                        const int oh = h * scale + sh;
+                        for (int sw = 0; sw < scale; ++sw) {
+                            const int ow = w * scale + sw;
+                            s += static_cast<double>(
+                                g_data[n * g_stride_n
+                                     + c * g_stride_c
+                                     + oh * g_stride_oh
+                                     + ow * g_stride_ow]);
+                        }
+                    }
+                    d_in_data[n * in_stride_n
+                             + c * in_stride_c
+                             + h * in_stride_h
+                             + w * in_stride_w] = static_cast<float>(s);
+                }
+            }
+        }
+    }
+    d_in.copy_from_host(d_in_data.data(), d_in_data.size());
+    return d_in;
+}
+
 }  // namespace detail
 }  // namespace ag
