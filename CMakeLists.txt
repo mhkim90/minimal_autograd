@@ -88,6 +88,7 @@ set(_AUTOGRAD_LIB_SOURCES
     src/core/conv.cpp
     src/core/norm.cpp
     src/core/diffusion.cpp
+    src/core/fft.cpp
 )
 
 add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
@@ -218,6 +219,11 @@ if(AUTOGRAD_BUILD_TESTS)
     target_link_libraries(test_oop_diffusion PRIVATE autograd::autograd)
     target_include_directories(test_oop_diffusion PRIVATE test)
     add_test(NAME test_oop_diffusion COMMAND test_oop_diffusion)
+
+    add_executable(test_oop_fft test/test_oop_fft.cpp)
+    target_link_libraries(test_oop_fft PRIVATE autograd::autograd)
+    target_include_directories(test_oop_fft PRIVATE test)
+    add_test(NAME test_oop_fft COMMAND test_oop_fft)
 
     add_executable(test_conv test/test_conv.cpp)
     target_link_libraries(test_conv PRIVATE autograd::autograd)

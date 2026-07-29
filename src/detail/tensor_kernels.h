@@ -2963,5 +2963,112 @@ inline Tensor tensor_group_norm_nchw_backward_bias(const Tensor& g) {
     return d_beta;
 }
 
+// ── 2-D DFT over the final two axes (CPU reference) ──────────────────
+//
+// Direct O((HW)^2) DFT applied independently to the final two axes of
+// the input for every leading batch coordinate. Storage is row-major,
+// last-axis contiguous. The DFT is linear, so batched outputs equal
+// the element-wise DFT of each (H, W) plane.
+//
+// `inverse=false` is the unscaled forward DFT
+// (exp(-i * 2 * pi * ...)); `inverse=true` is the inverse DFT
+// (exp(+i * 2 * pi * ...)) which the caller may further scale by
+// 1/(H*W). The same kernel is used for the forward pass and for the
+// backward adjoint (with inverse and scale_output swapped); see
+// src/core/fft.cpp.
+namespace {
+constexpr float kFftPi = 3.14159265358979323846f;
+}  // namespace
+
+struct TensorDFT2Result {
+    Tensor real;
+    Tensor imag;
+};
+
+inline TensorDFT2Result tensor_dft2_last2(
+        const Tensor& real_in,
+        const Tensor& imag_in,
+        bool inverse,
+        bool scale_output) {
+    const Shape& s = real_in.shape();
+    if (s != imag_in.shape()) {
+        std::ostringstream os;
+        os << "tensor_dft2_last2: real/imag shape mismatch ("
+           << s << " vs " << imag_in.shape() << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (real_in.device() != imag_in.device()) {
+        std::ostringstream os;
+        os << "tensor_dft2_last2: real/imag device mismatch";
+        throw std::invalid_argument(os.str());
+    }
+    const int rank = static_cast<int>(s.rank());
+    if (rank < 2) {
+        std::ostringstream os;
+        os << "tensor_dft2_last2: input must have rank >= 2 (got "
+           << s << ")";
+        throw std::invalid_argument(os.str());
+    }
+    const int H = static_cast<int>(s[rank - 2]);
+    const int W = static_cast<int>(s[rank - 1]);
+    if (H <= 0 || W <= 0) {
+        std::ostringstream os;
+        os << "tensor_dft2_last2: last two dimensions must be "
+              "positive (got " << H << " x " << W << ")";
+        throw std::invalid_argument(os.str());
+    }
+    const int64_t plane = static_cast<int64_t>(H) * W;
+    const int64_t batch_count = s.numel() / plane;
+
+    TensorDFT2Result out;
+    out.real = Tensor::empty(s, real_in.device());
+    out.imag = Tensor::empty(imag_in.shape(), imag_in.device());
+    if (real_in.elements() == 0) return out;
+
+    std::vector<float> r_in(real_in.elements());
+    std::vector<float> i_in(imag_in.elements());
+    std::vector<float> r_out(real_in.elements(), 0.f);
+    std::vector<float> i_out(imag_in.elements(), 0.f);
+    real_in.copy_to_host(r_in.data(), r_in.size());
+    imag_in.copy_to_host(i_in.data(), i_in.size());
+
+    const float norm = scale_output
+        ? 1.f / static_cast<float>(H * W) : 1.f;
+
+    for (int64_t b = 0; b < batch_count; ++b) {
+        const float* rp = r_in.data() + b * plane;
+        const float* ip = i_in.data() + b * plane;
+        float* ro = r_out.data() + b * plane;
+        float* io = i_out.data() + b * plane;
+        for (int kr = 0; kr < H; ++kr) {
+            for (int kc = 0; kc < W; ++kc) {
+                float sum_r = 0.f;
+                float sum_i = 0.f;
+                for (int r = 0; r < H; ++r) {
+                    for (int c = 0; c < W; ++c) {
+                        const float angle = 2.f * kFftPi *
+                            (static_cast<float>(kr * r) /
+                                 static_cast<float>(H) +
+                             static_cast<float>(kc * c) /
+                                 static_cast<float>(W));
+                        const float wr = std::cos(angle);
+                        const float wi = inverse
+                            ? std::sin(angle) : -std::sin(angle);
+                        const float xr = rp[r * W + c];
+                        const float xi = ip[r * W + c];
+                        sum_r += xr * wr - xi * wi;
+                        sum_i += xr * wi + xi * wr;
+                    }
+                }
+                ro[kr * W + kc] = norm * sum_r;
+                io[kr * W + kc] = norm * sum_i;
+            }
+        }
+    }
+    out.real.copy_from_host(r_out.data(), r_out.size());
+    out.imag.copy_from_host(i_out.data(), i_out.size());
+    return out;
+}
+
 }  // namespace detail
 }  // namespace ag

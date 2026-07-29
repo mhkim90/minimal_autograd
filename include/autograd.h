@@ -29,6 +29,11 @@
 #include "autograd/diffusion.h"
 #include "autograd/complex.h"
 #include "autograd/fft.h"
+// Core complex and FFT surface. The canonical ag::FftNorm enum is
+// also reachable through the legacy autograd/fft.h include above.
+#include "autograd/core/fft_norm.h"
+#include "autograd/core/complex.h"
+#include "autograd/core/fft.h"
 
 #ifdef AUTOGRAD_USE_CUDA
 #include "autograd/cuda_core.h"
