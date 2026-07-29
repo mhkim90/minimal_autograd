@@ -56,6 +56,33 @@ void accumulate(GradMap& grads, Node* node, const Tensor& gradient) {
     }
 }
 
+bool cuda_backward_supported(detail::OpKind kind) {
+    switch (kind) {
+        case detail::OpKind::Leaf:
+        case detail::OpKind::Add:
+        case detail::OpKind::Mul:
+        case detail::OpKind::Scale:
+        case detail::OpKind::Sum:
+        case detail::OpKind::SumAxes:
+        case detail::OpKind::ReLU:
+        case detail::OpKind::BroadcastAdd:
+        case detail::OpKind::Softmax:
+        case detail::OpKind::LogSoftmax:
+        case detail::OpKind::Sigmoid:
+        case detail::OpKind::Tanh:
+        case detail::OpKind::Exp:
+        case detail::OpKind::Log:
+        case detail::OpKind::Sqrt:
+        case detail::OpKind::SiLU:
+        case detail::OpKind::Softplus:
+        case detail::OpKind::Sub:
+        case detail::OpKind::Div:
+            return true;
+        default:
+            return false;
+    }
+}
+
 std::vector<Tensor> backward_step(Node& node, const Tensor& output_grad) {
     switch (node.kind) {
         case detail::OpKind::Leaf:
@@ -358,25 +385,17 @@ void Variable::zero_grad() {
 }
 
 void Variable::backward() {
-    if (node_->value.device().is_cuda()) {
-        throw std::runtime_error(
-            "Variable::backward: CUDA autograd compute is not supported");
-    }
     if (node_->value.elements() != 1) {
         throw std::invalid_argument(
             "Variable::backward: implicit gradient requires one element");
     }
-    backward(Tensor::ones(node_->value.shape(), node_->value.device()));
+    backward(detail::tensor_ones(node_->value.shape(), node_->value.device()));
 }
 
 void Variable::backward(const Tensor& upstream_gradient) {
     if (!node_->requires_grad) {
         throw std::runtime_error(
             "Variable::backward: variable does not require gradients");
-    }
-    if (node_->value.device().is_cuda()) {
-        throw std::runtime_error(
-            "Variable::backward: CUDA autograd compute is not supported");
     }
     if (upstream_gradient.shape() != node_->value.shape()) {
         throw std::invalid_argument(
@@ -390,6 +409,15 @@ void Variable::backward(const Tensor& upstream_gradient) {
     std::vector<Node*> topo;
     std::unordered_set<Node*> visited;
     topo_visit(node_.get(), visited, topo);
+
+    if (node_->value.device().is_cuda()) {
+        for (const Node* current : topo) {
+            if (!cuda_backward_supported(current->kind)) {
+                throw std::runtime_error(
+                    "Variable::backward: CUDA autograd operation is not supported");
+            }
+        }
+    }
 
     GradMap pending;
     pending.emplace(node_.get(), upstream_gradient.clone());

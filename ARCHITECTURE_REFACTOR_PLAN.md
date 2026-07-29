@@ -20,8 +20,9 @@ Current delivery state:
 - the CPU spatial, normalization, and diffusion replacement APIs are merged
   through PR #38;
 - the OOP CPU complex and FFT APIs are merged through PR #39;
-- the CUDA Tensor foundation is implemented in the current branch, pending
-  review.
+- the CUDA Tensor foundation is merged through PR #40;
+- the OOP CUDA elementwise and reduction bundle is implemented in the current
+  branch, pending review.
 
 ## 2. Purpose
 

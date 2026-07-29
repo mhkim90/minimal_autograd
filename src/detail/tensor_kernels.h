@@ -11,6 +11,10 @@
 
 #include "autograd/tensor.h"
 
+#ifdef AUTOGRAD_USE_CUDA
+#include "detail/tensor_cuda_ops.h"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -127,6 +131,9 @@ inline bool increment_index(std::vector<int64_t>& idx, const Shape& s) {
 inline Tensor tensor_add(const Tensor& a, const Tensor& b) {
     require_same_shape("add", a, b);
     require_same_device("add", a, b);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_add(a, b);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -141,6 +148,9 @@ inline Tensor tensor_add(const Tensor& a, const Tensor& b) {
 inline Tensor tensor_mul(const Tensor& a, const Tensor& b) {
     require_same_shape("mul", a, b);
     require_same_device("mul", a, b);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_mul(a, b);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -153,6 +163,9 @@ inline Tensor tensor_mul(const Tensor& a, const Tensor& b) {
 }
 
 inline Tensor tensor_scale(const Tensor& a, float s) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_scale(a, s);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -163,7 +176,17 @@ inline Tensor tensor_scale(const Tensor& a, float s) {
     return out;
 }
 
+inline Tensor tensor_ones(const Shape& shape, Device device) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (device.is_cuda()) return cuda_tensor_ones(shape, device);
+#endif
+    return Tensor::ones(shape, device);
+}
+
 inline Tensor tensor_sum(const Tensor& a) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_sum(a);
+#endif
     Tensor out = Tensor::empty(Shape{}, a.device());
     if (a.elements() == 0) {
         float z = 0.f;
@@ -180,6 +203,11 @@ inline Tensor tensor_sum(const Tensor& a) {
 
 inline Tensor tensor_broadcast_scalar(const Tensor& scalar,
                                       const Shape& target) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (scalar.device().is_cuda()) {
+        return cuda_tensor_broadcast_scalar(scalar, target);
+    }
+#endif
     Tensor out = Tensor::empty(target, scalar.device());
     if (out.elements() == 0) return out;
     std::vector<float> seed(1);
@@ -207,6 +235,9 @@ inline Tensor tensor_reshape_view(const Tensor& a, const Shape& target_shape) {
 
 inline Tensor tensor_relu(const Tensor& a) {
     require_same_device("relu", a, a);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_relu(a);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -222,6 +253,9 @@ inline Tensor tensor_relu(const Tensor& a) {
 inline Tensor tensor_relu_backward(const Tensor& g, const Tensor& saved) {
     require_same_shape("relu_backward", g, saved);
     require_same_device("relu_backward", g, saved);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_relu_backward(g, saved);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -236,6 +270,9 @@ inline Tensor tensor_relu_backward(const Tensor& g, const Tensor& saved) {
 }
 
 inline Tensor tensor_sigmoid(const Tensor& a) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_sigmoid(a);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -250,6 +287,10 @@ inline Tensor tensor_sigmoid(const Tensor& a) {
 
 inline Tensor tensor_sigmoid_backward(const Tensor& g, const Tensor& saved) {
     require_same_shape("sigmoid_backward", g, saved);
+    require_same_device("sigmoid_backward", g, saved);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_sigmoid_backward(g, saved);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -264,6 +305,9 @@ inline Tensor tensor_sigmoid_backward(const Tensor& g, const Tensor& saved) {
 }
 
 inline Tensor tensor_tanh(const Tensor& a) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_tanh(a);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -278,6 +322,10 @@ inline Tensor tensor_tanh(const Tensor& a) {
 
 inline Tensor tensor_tanh_backward(const Tensor& g, const Tensor& saved) {
     require_same_shape("tanh_backward", g, saved);
+    require_same_device("tanh_backward", g, saved);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_tanh_backward(g, saved);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -292,6 +340,9 @@ inline Tensor tensor_tanh_backward(const Tensor& g, const Tensor& saved) {
 }
 
 inline Tensor tensor_exp(const Tensor& a) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_exp(a);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -306,6 +357,10 @@ inline Tensor tensor_exp(const Tensor& a) {
 
 inline Tensor tensor_exp_backward(const Tensor& g, const Tensor& saved) {
     require_same_shape("exp_backward", g, saved);
+    require_same_device("exp_backward", g, saved);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_exp_backward(g, saved);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -320,6 +375,9 @@ inline Tensor tensor_exp_backward(const Tensor& g, const Tensor& saved) {
 }
 
 inline Tensor tensor_log(const Tensor& a) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_log(a);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -334,6 +392,10 @@ inline Tensor tensor_log(const Tensor& a) {
 
 inline Tensor tensor_log_backward(const Tensor& g, const Tensor& saved) {
     require_same_shape("log_backward", g, saved);
+    require_same_device("log_backward", g, saved);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_log_backward(g, saved);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -348,6 +410,9 @@ inline Tensor tensor_log_backward(const Tensor& g, const Tensor& saved) {
 }
 
 inline Tensor tensor_sqrt(const Tensor& a) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_sqrt(a);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -362,6 +427,10 @@ inline Tensor tensor_sqrt(const Tensor& a) {
 
 inline Tensor tensor_sqrt_backward(const Tensor& g, const Tensor& saved) {
     require_same_shape("sqrt_backward", g, saved);
+    require_same_device("sqrt_backward", g, saved);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_sqrt_backward(g, saved);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -376,6 +445,11 @@ inline Tensor tensor_sqrt_backward(const Tensor& g, const Tensor& saved) {
 }
 
 inline Tensor tensor_silu_forward(const Tensor& a, Tensor& sigmoid_out) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) {
+        return cuda_tensor_silu_forward(a, sigmoid_out);
+    }
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     sigmoid_out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
@@ -396,6 +470,13 @@ inline Tensor tensor_silu_backward(const Tensor& g,
                                     const Tensor& sig) {
     require_same_shape("silu_backward", g, x);
     require_same_shape("silu_backward", g, sig);
+    require_same_device("silu_backward", g, x);
+    require_same_device("silu_backward", g, sig);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_silu_backward(g, x, sig);
+    }
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -411,6 +492,9 @@ inline Tensor tensor_silu_backward(const Tensor& g,
 }
 
 inline Tensor tensor_softplus(const Tensor& a) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_softplus(a);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -428,6 +512,10 @@ inline Tensor tensor_softplus(const Tensor& a) {
 inline Tensor tensor_softplus_backward(const Tensor& g,
                                        const Tensor& x) {
     require_same_shape("softplus_backward", g, x);
+    require_same_device("softplus_backward", g, x);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_softplus_backward(g, x);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -534,6 +622,9 @@ inline Tensor tensor_clamp_backward(const Tensor& g,
 inline Tensor tensor_sub(const Tensor& a, const Tensor& b) {
     require_same_shape("sub", a, b);
     require_same_device("sub", a, b);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_sub(a, b);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -550,6 +641,9 @@ inline Tensor tensor_sub_backward_a(const Tensor& g) {
 }
 
 inline Tensor tensor_sub_backward_b(const Tensor& g) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_sub_backward_b(g);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -563,6 +657,9 @@ inline Tensor tensor_sub_backward_b(const Tensor& g) {
 inline Tensor tensor_div(const Tensor& a, const Tensor& b) {
     require_same_shape("div", a, b);
     require_same_device("div", a, b);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_div(a, b);
+#endif
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();
     if (n == 0) return out;
@@ -576,6 +673,10 @@ inline Tensor tensor_div(const Tensor& a, const Tensor& b) {
 
 inline Tensor tensor_div_backward_a(const Tensor& g, const Tensor& b) {
     require_same_shape("div_backward_a", g, b);
+    require_same_device("div_backward_a", g, b);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_div_backward_a(g, b);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -592,6 +693,11 @@ inline Tensor tensor_div_backward_b(const Tensor& g,
                                     const Tensor& b) {
     require_same_shape("div_backward_b", g, a);
     require_same_shape("div_backward_b", g, b);
+    require_same_device("div_backward_b", g, a);
+    require_same_device("div_backward_b", g, b);
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_div_backward_b(g, a, b);
+#endif
     Tensor out = Tensor::empty(g.shape(), g.device());
     const std::size_t n = g.elements();
     if (n == 0) return out;
@@ -620,6 +726,11 @@ inline Tensor tensor_softmax_nd(const Tensor& a, int axis,
     const Shape& s = a.shape();
     const int rank = static_cast<int>(s.rank());
     const int ax = normalize_axis(axis, rank, "softmax");
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) {
+        return cuda_tensor_softmax(a, ax, saved_softmax);
+    }
+#endif
     Tensor out = Tensor::empty(s, a.device());
     saved_softmax = Tensor::empty(s, a.device());
     if (a.elements() == 0) return out;
@@ -680,9 +791,16 @@ inline Tensor tensor_softmax_nd(const Tensor& a, int axis,
 inline Tensor tensor_softmax_backward_nd(const Tensor& g,
                                          const Tensor& saved_softmax,
                                          int axis) {
+    require_same_shape("softmax_backward", g, saved_softmax);
+    require_same_device("softmax_backward", g, saved_softmax);
     const Shape& s = g.shape();
     const int rank = static_cast<int>(s.rank());
     const int ax = normalize_axis(axis, rank, "softmax_backward");
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_softmax_backward(g, saved_softmax, ax);
+    }
+#endif
     Tensor out = Tensor::empty(s, g.device());
     if (g.elements() == 0) return out;
 
@@ -736,6 +854,11 @@ inline Tensor tensor_log_softmax_nd(const Tensor& a, int axis,
     const Shape& s = a.shape();
     const int rank = static_cast<int>(s.rank());
     const int ax = normalize_axis(axis, rank, "log_softmax");
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) {
+        return cuda_tensor_log_softmax(a, ax, saved_lsm);
+    }
+#endif
     Tensor out = Tensor::empty(s, a.device());
     saved_lsm = Tensor::empty(s, a.device());
     if (a.elements() == 0) return out;
@@ -795,9 +918,16 @@ inline Tensor tensor_log_softmax_nd(const Tensor& a, int axis,
 inline Tensor tensor_log_softmax_backward_nd(const Tensor& g,
                                              const Tensor& saved_lsm,
                                              int axis) {
+    require_same_shape("log_softmax_backward", g, saved_lsm);
+    require_same_device("log_softmax_backward", g, saved_lsm);
     const Shape& s = g.shape();
     const int rank = static_cast<int>(s.rank());
     const int ax = normalize_axis(axis, rank, "log_softmax_backward");
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_log_softmax_backward(g, saved_lsm, ax);
+    }
+#endif
     Tensor out = Tensor::empty(s, g.device());
     if (g.elements() == 0) return out;
 
@@ -1290,6 +1420,11 @@ inline Tensor tensor_sum_axes_nd(const Tensor& a,
     const Shape& s = a.shape();
     const int rank = static_cast<int>(s.rank());
     const std::vector<int> axes = normalize_axes(axes_in, rank, "sum");
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) {
+        return cuda_tensor_sum_axes(a, axes, keep_dims);
+    }
+#endif
     std::vector<bool> is_reduced(rank, false);
     for (int axis : axes) is_reduced[axis] = true;
 
@@ -1339,6 +1474,11 @@ inline Tensor tensor_sum_axes_backward_nd(const Tensor& g,
                                           bool keep_dims) {
     const int rank = static_cast<int>(input_shape.rank());
     const std::vector<int> axes = normalize_axes(axes_in, rank, "sum_backward");
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_sum_axes_backward(g, input_shape, axes, keep_dims);
+    }
+#endif
     std::vector<bool> is_reduced(rank, false);
     for (int axis : axes) is_reduced[axis] = true;
     Tensor out = Tensor::empty(input_shape, g.device());
@@ -1393,6 +1533,9 @@ inline Tensor tensor_broadcast_add_nd(const Tensor& a, const Tensor& b) {
         out_sizes[d] = ad == 1 ? bd : ad;
     }
     const Shape out_shape(out_sizes);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_broadcast_add(a, b);
+#endif
     Tensor out = Tensor::empty(out_shape, a.device());
     if (out.elements() == 0) return out;
 
@@ -1432,6 +1575,11 @@ inline Tensor tensor_broadcast_add_backward_nd(const Tensor& g,
     if (in_rank > out_rank) {
         throw std::invalid_argument("broadcast_add_backward: rank mismatch");
     }
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_broadcast_add_backward(g, input_shape);
+    }
+#endif
     Tensor out = Tensor::zeros(input_shape, g.device());
     if (out.elements() == 0 || g.elements() == 0) return out;
     const std::vector<int64_t> g_strides =
