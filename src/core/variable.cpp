@@ -358,6 +358,10 @@ void Variable::zero_grad() {
 }
 
 void Variable::backward() {
+    if (node_->value.device().is_cuda()) {
+        throw std::runtime_error(
+            "Variable::backward: CUDA autograd compute is not supported");
+    }
     if (node_->value.elements() != 1) {
         throw std::invalid_argument(
             "Variable::backward: implicit gradient requires one element");
@@ -369,6 +373,10 @@ void Variable::backward(const Tensor& upstream_gradient) {
     if (!node_->requires_grad) {
         throw std::runtime_error(
             "Variable::backward: variable does not require gradients");
+    }
+    if (node_->value.device().is_cuda()) {
+        throw std::runtime_error(
+            "Variable::backward: CUDA autograd compute is not supported");
     }
     if (upstream_gradient.shape() != node_->value.shape()) {
         throw std::invalid_argument(

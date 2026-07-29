@@ -17,8 +17,11 @@ Current delivery state:
 - Phase 4 is closed: Gate 4.5 runs the registered CPU contract inventory in
   hosted CI;
 - the OOP training stack is merged through PR #37;
-- the CPU spatial, normalization, and diffusion replacement APIs are
-  implemented in the current branch, pending review.
+- the CPU spatial, normalization, and diffusion replacement APIs are merged
+  through PR #38;
+- the OOP CPU complex and FFT APIs are merged through PR #39;
+- the CUDA Tensor foundation is implemented in the current branch, pending
+  review.
 
 ## 2. Purpose
 

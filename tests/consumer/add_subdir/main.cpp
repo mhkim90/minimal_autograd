@@ -64,7 +64,7 @@ bool run_shape_device_smoke() {
     if (s[0] != 2 || s[2] != 4) return false;
 
     Stride st = contiguous_stride(s);
-    if (st[0] != 1 || st[1] != 2 || st[2] != 6) return false;
+    if (st[0] != 12 || st[1] != 4 || st[2] != 1) return false;
 
     Shape scalar;
     if (scalar.rank() != 0) return false;

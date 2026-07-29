@@ -14,11 +14,29 @@
 #include "autograd/core/ops.h"
 
 #include <cstddef>
+#include <sstream>
 #include <stdexcept>
 
 namespace ag {
 
+namespace {
+
+void validate_target_device(const char* op,
+                            const Variable& pred,
+                            const Tensor& target) {
+    if (pred.device().is_cuda() || target.device().is_cuda()) {
+        std::ostringstream os;
+        os << op << ": CUDA tensors are not supported in this build "
+              "(pred on " << pred.device().to_string()
+           << ", target on " << target.device().to_string() << ")";
+        throw std::runtime_error(os.str());
+    }
+}
+
+}  // namespace
+
 Variable mse_loss(const Variable& pred, const Tensor& target) {
+    validate_target_device("mse_loss", pred, target);
     Variable target_v = Variable(target.clone(), /*requires_grad=*/false);
     Variable diff = sub(pred, target_v);
     Variable sq = mul(diff, diff);
@@ -28,6 +46,7 @@ Variable mse_loss(const Variable& pred, const Tensor& target) {
 }
 
 Variable cross_entropy(const Variable& pred, const Tensor& target) {
+    validate_target_device("cross_entropy", pred, target);
     const std::size_t rank = pred.value().shape().rank();
     if (rank == 0 || pred.value().shape()[static_cast<int>(rank) - 1] == 0) {
         throw std::invalid_argument(

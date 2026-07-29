@@ -43,6 +43,44 @@ void validate_unary(const char* op, const Variable& a) {
     (void)a;
 }
 
+// Explicit CUDA rejection at the public boundary of every math op.
+// The new OOP math path is CPU-only: a CUDA Variable falls through
+// the public validate_binary path's device-mismatch check only when
+// the operands disagree, which means a CUDA Tensor on both sides
+// would slip into the CPU kernels via detail::tensor_* below.
+// Rejecting here keeps the error message site-specific and stops a
+// CUDA Variable from silently copying through copy_to_host in the
+// dispatch path.
+void validate_cpu(const char* op, const Variable& a, const Variable& b) {
+    if (a.device().is_cuda() || b.device().is_cuda()) {
+        std::ostringstream os;
+        os << op << ": CUDA tensors are not supported in this build "
+              "(got " << a.device().to_string() << " and "
+           << b.device().to_string() << ")";
+        throw std::runtime_error(os.str());
+    }
+}
+
+void validate_cpu(const char* op, const Variable& a) {
+    if (a.device().is_cuda()) {
+        std::ostringstream os;
+        os << op << ": CUDA tensors are not supported in this build "
+              "(got " << a.device().to_string() << ")";
+        throw std::runtime_error(os.str());
+    }
+}
+
+void validate_cpu(const char* op, const std::vector<Variable>& inputs) {
+    for (const auto& v : inputs) {
+        if (v.device().is_cuda()) {
+            std::ostringstream os;
+            os << op << ": CUDA tensors are not supported in this build "
+                  "(got " << v.device().to_string() << ")";
+            throw std::runtime_error(os.str());
+        }
+    }
+}
+
 using detail::OpKind;
 
 struct Extras {
@@ -90,6 +128,7 @@ Variable make_result(Tensor value,
 
 Variable add(const Variable& a, const Variable& b) {
     validate_binary("add", a, b);
+    validate_cpu("add", a, b);
     return make_result(
         detail::tensor_add(a.value(), b.value()),
         OpKind::Add,
@@ -98,6 +137,7 @@ Variable add(const Variable& a, const Variable& b) {
 
 Variable mul(const Variable& a, const Variable& b) {
     validate_binary("mul", a, b);
+    validate_cpu("mul", a, b);
     return make_result(
         detail::tensor_mul(a.value(), b.value()),
         OpKind::Mul,
@@ -106,6 +146,7 @@ Variable mul(const Variable& a, const Variable& b) {
 }
 
 Variable scale(const Variable& a, float scalar) {
+    validate_cpu("scale", a);
     return make_result(
         detail::tensor_scale(a.value(), scalar),
         OpKind::Scale,
@@ -115,6 +156,7 @@ Variable scale(const Variable& a, float scalar) {
 }
 
 Variable sum(const Variable& a) {
+    validate_cpu("sum", a);
     return make_result(
         detail::tensor_sum(a.value()),
         OpKind::Sum,
@@ -123,6 +165,7 @@ Variable sum(const Variable& a) {
 
 Variable sum(const Variable& a, const std::vector<int>& axes, bool keep_dims) {
     validate_unary("sum", a);
+    validate_cpu("sum", a);
     Tensor out = detail::tensor_sum_axes_nd(a.value(), axes, keep_dims);
     return make_result(
         std::move(out),
@@ -140,6 +183,7 @@ Variable sum(const Variable& a, const std::vector<int>& axes, bool keep_dims) {
 
 Variable matmul(const Variable& a, const Variable& b) {
     validate_binary("matmul", a, b, /*exact_shape=*/false);
+    validate_cpu("matmul", a, b);
     return make_result(
         detail::tensor_matmul_nd(a.value(), b.value()),
         OpKind::MatMul,
@@ -148,6 +192,7 @@ Variable matmul(const Variable& a, const Variable& b) {
 }
 
 Variable mean(const Variable& a) {
+    validate_cpu("mean", a);
     const std::size_t n = a.value().elements();
     if (n == 0) {
         return sum(a);
@@ -157,6 +202,7 @@ Variable mean(const Variable& a) {
 
 Variable mean(const Variable& a, const std::vector<int>& axes, bool keep_dims) {
     validate_unary("mean", a);
+    validate_cpu("mean", a);
     const int64_t n = [&] {
         const auto& s = a.value().shape();
         const auto norm =
@@ -175,6 +221,7 @@ Variable mean(const Variable& a, const std::vector<int>& axes, bool keep_dims) {
 
 Variable broadcast_add(const Variable& a, const Variable& b) {
     validate_binary("broadcast_add", a, b, /*exact_shape=*/false);
+    validate_cpu("broadcast_add", a, b);
     return make_result(
         detail::tensor_broadcast_add_nd(a.value(), b.value()),
         OpKind::BroadcastAdd,
@@ -183,6 +230,7 @@ Variable broadcast_add(const Variable& a, const Variable& b) {
 
 Variable sub(const Variable& a, const Variable& b) {
     validate_binary("sub", a, b);
+    validate_cpu("sub", a, b);
     return make_result(
         detail::tensor_sub(a.value(), b.value()),
         OpKind::Sub,
@@ -191,6 +239,7 @@ Variable sub(const Variable& a, const Variable& b) {
 
 Variable div_op(const Variable& a, const Variable& b) {
     validate_binary("div_op", a, b);
+    validate_cpu("div_op", a, b);
     return make_result(
         detail::tensor_div(a.value(), b.value()),
         OpKind::Div,
@@ -200,6 +249,7 @@ Variable div_op(const Variable& a, const Variable& b) {
 
 Variable relu(const Variable& a) {
     validate_unary("relu", a);
+    validate_cpu("relu", a);
     return make_result(
         detail::tensor_relu(a.value()),
         OpKind::ReLU,
@@ -209,6 +259,7 @@ Variable relu(const Variable& a) {
 
 Variable sigmoid(const Variable& a) {
     validate_unary("sigmoid", a);
+    validate_cpu("sigmoid", a);
     Tensor out = detail::tensor_sigmoid(a.value());
     Tensor saved = out.clone();
     return make_result(
@@ -220,6 +271,7 @@ Variable sigmoid(const Variable& a) {
 
 Variable tanh_op(const Variable& a) {
     validate_unary("tanh_op", a);
+    validate_cpu("tanh_op", a);
     Tensor out = detail::tensor_tanh(a.value());
     Tensor saved = out.clone();
     return make_result(
@@ -231,6 +283,7 @@ Variable tanh_op(const Variable& a) {
 
 Variable exp_op(const Variable& a) {
     validate_unary("exp_op", a);
+    validate_cpu("exp_op", a);
     Tensor out = detail::tensor_exp(a.value());
     Tensor saved = out.clone();
     return make_result(
@@ -242,6 +295,7 @@ Variable exp_op(const Variable& a) {
 
 Variable log_op(const Variable& a) {
     validate_unary("log_op", a);
+    validate_cpu("log_op", a);
     return make_result(
         detail::tensor_log(a.value()),
         OpKind::Log,
@@ -251,6 +305,7 @@ Variable log_op(const Variable& a) {
 
 Variable sqrt_op(const Variable& a) {
     validate_unary("sqrt_op", a);
+    validate_cpu("sqrt_op", a);
     Tensor out = detail::tensor_sqrt(a.value());
     Tensor saved = out.clone();
     return make_result(
@@ -262,6 +317,7 @@ Variable sqrt_op(const Variable& a) {
 
 Variable silu(const Variable& a) {
     validate_unary("silu", a);
+    validate_cpu("silu", a);
     Tensor sig;
     Tensor out = detail::tensor_silu_forward(a.value(), sig);
     return make_result(
@@ -273,6 +329,7 @@ Variable silu(const Variable& a) {
 
 Variable softplus(const Variable& a) {
     validate_unary("softplus", a);
+    validate_cpu("softplus", a);
     return make_result(
         detail::tensor_softplus(a.value()),
         OpKind::Softplus,
@@ -282,6 +339,7 @@ Variable softplus(const Variable& a) {
 
 Variable sin_op(const Variable& a) {
     validate_unary("sin_op", a);
+    validate_cpu("sin_op", a);
     return make_result(
         detail::tensor_sin(a.value()),
         OpKind::Sin,
@@ -291,6 +349,7 @@ Variable sin_op(const Variable& a) {
 
 Variable cos_op(const Variable& a) {
     validate_unary("cos_op", a);
+    validate_cpu("cos_op", a);
     return make_result(
         detail::tensor_cos(a.value()),
         OpKind::Cos,
@@ -300,6 +359,7 @@ Variable cos_op(const Variable& a) {
 
 Variable clamp(const Variable& a, float lo, float hi) {
     validate_unary("clamp", a);
+    validate_cpu("clamp", a);
     if (lo > hi) {
         throw std::invalid_argument("clamp: lo must not exceed hi");
     }
@@ -313,6 +373,7 @@ Variable clamp(const Variable& a, float lo, float hi) {
 
 Variable softmax(const Variable& a, int axis) {
     validate_unary("softmax", a);
+    validate_cpu("softmax", a);
     Tensor saved;
     Tensor out = detail::tensor_softmax_nd(a.value(), axis, saved);
     return make_result(
@@ -325,6 +386,7 @@ Variable softmax(const Variable& a, int axis) {
 
 Variable log_softmax(const Variable& a, int axis) {
     validate_unary("log_softmax", a);
+    validate_cpu("log_softmax", a);
     Tensor saved;
     Tensor out = detail::tensor_log_softmax_nd(a.value(), axis, saved);
     return make_result(
@@ -337,6 +399,7 @@ Variable log_softmax(const Variable& a, int axis) {
 
 Variable transpose(const Variable& a) {
     validate_unary("transpose", a);
+    validate_cpu("transpose", a);
     const int rank = static_cast<int>(a.value().shape().rank());
     if (rank < 2) {
         throw std::invalid_argument("transpose: requires rank >= 2");
@@ -353,6 +416,7 @@ Variable transpose(const Variable& a) {
 
 Variable transpose(const Variable& a, int axis0, int axis1) {
     validate_unary("transpose", a);
+    validate_cpu("transpose", a);
     return make_result(
         detail::tensor_transpose_nd(a.value(), axis0, axis1),
         OpKind::Transpose,
@@ -363,6 +427,7 @@ Variable transpose(const Variable& a, int axis0, int axis1) {
 
 Variable reshape(const Variable& a, const Shape& shape) {
     validate_unary("reshape", a);
+    validate_cpu("reshape", a);
     return make_result(
         detail::tensor_reshape_view(a.value(), shape),
         OpKind::Reshape,
@@ -378,6 +443,7 @@ Variable concat(std::vector<Variable> inputs, int axis) {
     if (inputs.empty()) {
         throw std::invalid_argument("concat: requires at least one input");
     }
+    validate_cpu("concat", inputs);
     std::vector<std::shared_ptr<detail::VariableNode>> parents;
     parents.reserve(inputs.size());
     std::vector<Tensor> values;
@@ -411,6 +477,7 @@ Variable hcat(std::vector<Variable> inputs) {
 
 Variable slice(const Variable& a, int axis, int64_t start, int64_t len) {
     validate_unary("slice", a);
+    validate_cpu("slice", a);
     return make_result(
         detail::tensor_slice_nd(a.value(), axis, start, len),
         OpKind::Slice,
@@ -429,6 +496,7 @@ Variable row_slice(const Variable& a, int64_t start, int64_t len) {
 
 std::pair<Variable, Variable> split(const Variable& a, int axis) {
     validate_unary("split", a);
+    validate_cpu("split", a);
     const int rank = static_cast<int>(a.value().shape().rank());
     const int ax = detail::normalize_axis(axis, rank, "split");
     const int64_t total = a.value().shape()[ax];
@@ -444,6 +512,7 @@ std::pair<Variable, Variable> split(const Variable& a, int axis) {
 
 Variable cumsum(const Variable& a, int axis) {
     validate_unary("cumsum", a);
+    validate_cpu("cumsum", a);
     return make_result(
         detail::tensor_cumsum_nd(a.value(), axis),
         OpKind::Cumsum,
@@ -454,6 +523,7 @@ Variable cumsum(const Variable& a, int axis) {
 
 Variable flip(const Variable& a, int axis) {
     validate_unary("flip", a);
+    validate_cpu("flip", a);
     return make_result(
         detail::tensor_flip_nd(a.value(), axis),
         OpKind::Flip,

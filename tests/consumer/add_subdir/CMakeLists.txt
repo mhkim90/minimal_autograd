@@ -51,6 +51,7 @@ if(NOT AUTOGRAD_CONSUMER_ALLOW_TARGET_LEAK)
         test_smoke
         test_cuda_core
         test_cuda_fft
+        test_cuda_tensor
         linear_regression
         mnist_classify_cpu
         mnist_classify_gpu

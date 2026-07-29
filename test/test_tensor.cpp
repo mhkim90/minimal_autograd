@@ -20,6 +20,12 @@
 #error "autograd/tensor.h must not pull in any CUDA runtime header"
 #endif
 
+#include "autograd/extension/cuda.h"
+#if defined(CUDART_VERSION) || defined(__CUDART_API_VERSION) ||      \
+    defined(CUDA_VERSION) || defined(__CUDA_RUNTIME_H__)
+#error "autograd/extension/cuda.h must not pull in any CUDA runtime header"
+#endif
+
 #include "autograd/extension/eigen.h"
 #include "autograd/device.h"
 #include "autograd/shape.h"
@@ -326,22 +332,80 @@ void test_device_cpu_default_and_to_cpu() {
     report("Tensor: device default is CPU; to(cpu) returns a shallow share");
 }
 
-void test_device_cuda_rejected() {
-    // Device::cuda() descriptor is still valid.
+void test_device_cuda_descriptor_intact() {
+    // Device descriptor is independent of build flags. The CUDA
+    // Tensor itself is built in src/core/tensor.cpp and supports
+    // CUDA targets when AUTOGRAD_USE_CUDA is enabled; in a CPU-only
+    // build the same factory call fails at runtime with a clear
+    // message (see test_device_cuda_rejected_cpu_only below).
     CHECK(Device::cuda(0).is_cuda());
     CHECK(Device::cuda(0).index() == 0);
+    CHECK(Device::cuda(1).is_cuda());
+    CHECK(Device::cuda(1).index() == 1);
+    CHECK(Device::cuda().is_cuda());
+    CHECK(Device::cuda().index() == 0);
+    CHECK(Device::cpu().is_cpu());
+    report("Tensor: Device descriptor is build-flag-independent");
+}
 
-    // Tensor creation targeting CUDA fails at runtime.
+void test_device_cuda_rejected_cpu_only() {
+    // On a CPU-only build, any Tensor factory targeting a CUDA
+    // device throws std::runtime_error with a clear message. On a
+    // CUDA-enabled build, these calls succeed; the GPU-side behavior
+    // is verified in test_cuda_tensor.cpp. We gate the assertions
+    // on the absence of AUTOGRAD_USE_CUDA so the same binary works
+    // for both build configurations.
+#ifndef AUTOGRAD_USE_CUDA
     CHECK_THROWS_ANY(Tensor::empty(Shape{2, 3}, Device::cuda(0)));
     CHECK_THROWS_ANY(Tensor::zeros(Shape{2, 3}, Device::cuda(1)));
     CHECK_THROWS_ANY(Tensor::ones(Shape{2, 3}, Device::cuda()));
     CHECK_THROWS_ANY(Tensor::from_host(nullptr, Shape{2, 3}, Device::cuda(0)));
 
-    // to(cuda) also fails.
+    // Same-device transfer (Tensor::to with the current Device::cpu)
+    // is a shallow share: NOT throwing.
     Tensor a = Tensor::ones(Shape{2, 3});
+    Tensor same = a.to(Device::cpu());
+    CHECK(same.device().is_cpu());
+
+    // Cross-device transfer to(cuda) does throw.
     CHECK_THROWS_ANY(a.to(Device::cuda(0)));
     CHECK_THROWS_ANY(a.to(Device::cuda()));
-    report("Tensor: CUDA Tensor creation and to(cuda) fail at runtime");
+#endif
+    report("Tensor: CUDA factories and to(cuda) throw on CPU-only builds");
+}
+
+void test_extension_cuda_header_rejected_on_cpu() {
+    // The borrowed CUDA view extension is opt-in and header-clean: the
+    // preprocessor check at the top of this file covers both
+    // autograd/tensor.h and autograd/extension/cuda.h. The CUDA view
+    // surface (CudaTensorView, cuda_view, cuda_view_mut) is the only
+    // public path to a raw device pointer; on a CPU-only build it
+    // always throws because every source Tensor reports CPU device.
+    // This test verifies that contract at runtime.
+    CHECK(ag::CudaTensorView{}.data == nullptr);
+    CHECK(ag::CudaTensorView{}.numel == 0);
+
+    // CUDA view on a CPU Tensor always throws with a clear message.
+    Tensor cpu = Tensor::ones(Shape{4});
+    bool threw = false;
+    try {
+        (void)ag::cuda_view(cpu);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    CHECK(threw);
+
+    // The mutable variant has the same contract on CPU-only builds.
+    Tensor cpu_mut = Tensor::zeros(Shape{3});
+    threw = false;
+    try {
+        (void)ag::cuda_view_mut(cpu_mut);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    CHECK(threw);
+
+    report("Tensor: extension/cuda.h is CUDA-header-free; view throws on CPU tensors");
 }
 
 void test_extension_eigen_legacy_aliases() {
@@ -458,7 +522,9 @@ int main() {
     test_reshape_shares_storage_keeps_independent_shape();
     test_reshape_numel_mismatch();
     test_device_cpu_default_and_to_cpu();
-    test_device_cuda_rejected();
+    test_device_cuda_descriptor_intact();
+    test_device_cuda_rejected_cpu_only();
+    test_extension_cuda_header_rejected_on_cpu();
     test_extension_eigen_legacy_aliases();
     test_umbrella_exposes_tensor();
     test_standalone_header_hygiene_smoke();
