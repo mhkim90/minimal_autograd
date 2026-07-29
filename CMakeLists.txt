@@ -80,6 +80,8 @@ set(_AUTOGRAD_LIB_SOURCES
     src/norm.cpp
     src/fft.cpp
     src/core/tensor.cpp
+    src/core/cuda_runtime_stubs.cpp
+    src/core/cuda_view.cpp
     src/core/variable.cpp
     src/core/ops.cpp
     src/core/loss.cpp
@@ -115,7 +117,10 @@ endif()
 
 if(AUTOGRAD_USE_CUDA)
     target_compile_definitions(autograd PUBLIC AUTOGRAD_USE_CUDA)
-    target_sources(autograd PRIVATE src/cuda_core.cu src/cuda_fft.cu)
+    target_sources(autograd PRIVATE
+        src/cuda_core.cu
+        src/cuda_fft.cu
+        src/cuda/tensor_storage_runtime.cu)
     target_link_libraries(autograd PUBLIC CUDA::cudart)
     set_target_properties(autograd PROPERTIES
         CUDA_STANDARD ${_AUTOGRAD_CXX_STD}
@@ -250,6 +255,11 @@ if(AUTOGRAD_BUILD_TESTS)
         target_link_libraries(test_cuda_fft PRIVATE autograd::autograd)
         target_include_directories(test_cuda_fft PRIVATE test)
         add_test(NAME test_cuda_fft COMMAND test_cuda_fft)
+
+        add_executable(test_cuda_tensor test/test_cuda_tensor.cpp)
+        target_link_libraries(test_cuda_tensor PRIVATE autograd::autograd)
+        target_include_directories(test_cuda_tensor PRIVATE test)
+        add_test(NAME test_cuda_tensor COMMAND test_cuda_tensor)
     endif()
 
     if(AUTOGRAD_BUILD_ADVANCED_OPS)

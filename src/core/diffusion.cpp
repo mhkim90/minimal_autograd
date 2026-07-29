@@ -57,6 +57,10 @@ Tensor randn(const Shape& shape, uint32_t seed) {
 }
 
 Tensor randn_like(const Tensor& x, uint32_t seed) {
+    if (x.device().is_cuda()) {
+        throw std::runtime_error(
+            "ag::diffusion::randn_like: CUDA tensors are not supported");
+    }
     return randn(x.shape(), seed);
 }
 
@@ -101,6 +105,13 @@ Variable q_sample(const Variable& x0,
     validate_scalar_coefficient(
         "ag::diffusion::q_sample: sqrt_one_minus_alpha_bar",
         sqrt_one_minus_alpha_bar);
+    if (x0.device().is_cuda() ||
+        (noise != nullptr && noise->device().is_cuda())) {
+        std::ostringstream os;
+        os << "ag::diffusion::q_sample: CUDA tensors are not supported "
+              "in this build";
+        throw std::runtime_error(os.str());
+    }
     if (noise == nullptr) {
         Variable drawn(randn_like(x0.value(), seed), false);
         return add(scale(x0, sqrt_alpha_bar),

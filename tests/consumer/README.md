@@ -40,8 +40,9 @@ contract at configure time: after `add_subdirectory(...)` it checks for
 any of the known autograd in-tree test/example targets
 (`test_core`, `test_nn`, `test_conv`, `test_fft`,
 `test_characterization`, `test_extensions`, `test_diffusion`,
-`test_smoke`, `test_cuda_core`, `test_cuda_fft`, `linear_regression`,
-`mnist_classify_cpu`, `mnist_classify_gpu`, and the legacy `example`)
+`test_smoke`, `test_cuda_core`, `test_cuda_fft`, `test_cuda_tensor`,
+`linear_regression`, `mnist_classify_cpu`, `mnist_classify_gpu`, and the
+legacy `example`)
 and fails the configure step if any of them are visible. The check
 exists so the package boundary is verified by the build itself rather
 than only by manual inspection. It can be silenced with
