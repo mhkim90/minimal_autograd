@@ -120,6 +120,7 @@ if(AUTOGRAD_USE_CUDA)
     target_sources(autograd PRIVATE
         src/cuda_core.cu
         src/cuda_fft.cu
+        src/cuda/tensor_ops.cu
         src/cuda/tensor_storage_runtime.cu)
     target_link_libraries(autograd PUBLIC CUDA::cudart)
     set_target_properties(autograd PROPERTIES
