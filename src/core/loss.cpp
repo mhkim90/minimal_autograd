@@ -9,6 +9,11 @@
 // leading sample axes. For shape (N, C) this is equivalent to the old
 // 2-D contract; for rank-N inputs the loss is the mean over all
 // leading dims.
+//
+// Both losses accept all-CUDA pred and target through the regular
+// composed-op path: sub / mul / sum / scale / log_softmax all have
+// CUDA implementations. Mixed-device pred/target pairs still throw
+// so silent transfers cannot leak through.
 
 #include "autograd/core/loss.h"
 #include "autograd/core/ops.h"
@@ -24,10 +29,10 @@ namespace {
 void validate_target_device(const char* op,
                             const Variable& pred,
                             const Tensor& target) {
-    if (pred.device().is_cuda() || target.device().is_cuda()) {
+    if (pred.device() != target.device()) {
         std::ostringstream os;
-        os << op << ": CUDA tensors are not supported in this build "
-              "(pred on " << pred.device().to_string()
+        os << op << ": mixed-device pred/target (pred on "
+           << pred.device().to_string()
            << ", target on " << target.device().to_string() << ")";
         throw std::runtime_error(os.str());
     }

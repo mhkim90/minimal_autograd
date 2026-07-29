@@ -39,7 +39,9 @@ Variable sum(const Variable& a, const std::vector<int>& axes,
 
 // matmul(a, b) requires rank >= 2 for both inputs. The last two axes
 // are the matrix dimensions; the leading dimensions must match
-// (batched matmul). Returns (..., M, N).
+// (batched matmul). Returns (..., M, N). Both inputs must share a
+// device; CPU and CUDA are both supported and the result stays on
+// that device, including the operand gradients.
 Variable matmul(const Variable& a, const Variable& b);
 
 // --- Reductions ---

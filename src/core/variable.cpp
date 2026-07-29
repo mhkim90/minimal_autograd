@@ -64,6 +64,7 @@ bool cuda_backward_supported(detail::OpKind kind) {
         case detail::OpKind::Scale:
         case detail::OpKind::Sum:
         case detail::OpKind::SumAxes:
+        case detail::OpKind::MatMul:
         case detail::OpKind::ReLU:
         case detail::OpKind::BroadcastAdd:
         case detail::OpKind::Softmax:

@@ -173,7 +173,6 @@ Variable sum(const Variable& a, const std::vector<int>& axes, bool keep_dims) {
 
 Variable matmul(const Variable& a, const Variable& b) {
     validate_binary("matmul", a, b, /*exact_shape=*/false);
-    validate_cpu("matmul", a, b);
     return make_result(
         detail::tensor_matmul_nd(a.value(), b.value()),
         OpKind::MatMul,
