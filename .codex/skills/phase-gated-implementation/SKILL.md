@@ -105,9 +105,14 @@ second opinion, use that exact model instead. Example: `opencode-go/glm-5.2`.
      - level used and Codex review scope
      - second-opinion result
      - explicit next phase / waiting-for-approval state
+   - If the user explicitly prohibits committing, pushing, or updating the
+     PR/issue, stop before the first prohibited action, report the local diff
+     and validation state, and wait for direction.
 
 7. **Wait**
    - Stop after report if user requested per-phase approval.
+   - Stop when a publishing restriction prevents completing the normal
+     commit/push/PR-report sequence.
    - Do not start next phase until approval is given.
 
 ## Risk Escalation
@@ -190,7 +195,8 @@ Question: is there a blocking issue? Return only findings or "no blocker".
 ## Phase Report Template
 
 ```text
-Phase <N> complete and pushed: <commit>
+Phase <N> <complete and pushed | complete locally, awaiting publication>:
+<commit or uncommitted>
 
 Scope:
 - ...

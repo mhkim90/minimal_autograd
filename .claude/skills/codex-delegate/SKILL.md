@@ -1,6 +1,6 @@
 ---
 name: codex-delegate
-description: Codex (GPT-5.5) is the engine for PHYSICS / deep thinking / adversarial design review / hard implementation. DISCUSS (read-only) for reasoning & second opinions; EXECUTE (workspace-write) for difficult multi-file changes. Trigger on "ask codex", "second opinion", "discuss with codex", "delegate to codex", or any hard/physics reasoning or implementation.
+description: Codex is the engine for PHYSICS / deep thinking / adversarial design review / hard implementation. DISCUSS (read-only) for reasoning & second opinions; EXECUTE (workspace-write) for difficult multi-file changes. Trigger on "ask codex", "second opinion", "discuss with codex", "delegate to codex", or any hard/physics reasoning or implementation.
 ---
 
 # Codex Delegate
@@ -14,8 +14,8 @@ reasoning, kernel review, and code edits, but do not ask it to run GPU-dependent
 builds, tests, benchmarks, profilers, or device probes. Run GPU validation from
 Claude/OpenCode/local shell where a GPU is actually available.
 
-Codex runs on **GPT-5.5** by default (`model_reasoning_effort = "high"` in `~/.codex/config.toml`).
-Override with the `model` param if needed (e.g. `gpt-5.2`, `gpt-5.2-codex`).
+Codex uses the model and reasoning effort configured by the active Codex
+environment. Pass `model` only when the task requires an explicit override.
 
 In the delegation model Codex is the **hard-work engine**: numerics/algorithm design
 (autograd correctness, gradient formulas, optimizer behavior), deep thinking,

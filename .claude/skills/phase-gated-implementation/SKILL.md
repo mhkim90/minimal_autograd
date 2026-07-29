@@ -140,7 +140,7 @@ and note that this session cannot follow the normal budget ordering.
 6. **Commit + Report**
    - Stage only intended files. Never `git add -A` when unrelated files exist.
    - Commit one phase at a time.
-   - Push current branch only if the user has authorized it.
+   - Push current branch.
    - Leave PR/issue comment with:
      - commit hash
      - scope
@@ -149,9 +149,14 @@ and note that this session cannot follow the normal budget ordering.
      - level used and Claude review scope
      - second-opinion result
      - explicit next phase / waiting-for-approval state
+   - If the user explicitly prohibits committing, pushing, or updating the
+     PR/issue, stop before the first prohibited action, report the local diff
+     and validation state, and wait for direction.
 
 7. **Wait**
    - Stop after report if user requested per-phase approval.
+   - Stop when a publishing restriction prevents completing the normal
+     commit/push/PR-report sequence.
    - Do not start next phase until approval is given.
 
 ## Risk Escalation
@@ -239,7 +244,8 @@ Be concrete; cite file:line where relevant.
 ## Phase Report Template
 
 ```text
-Phase <N> complete and pushed: <commit>
+Phase <N> <complete and pushed | complete locally, awaiting publication>:
+<commit or uncommitted>
 
 Scope:
 - ...
