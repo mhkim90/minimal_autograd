@@ -52,7 +52,8 @@ second opinion, use that exact model instead. Example: `opencode-go/glm-5.2`.
 1. **Orient Lightly**
    - Read plan/PR/issue/design doc.
    - Confirm branch and dirty state.
-   - Identify phase boundary, expected files, acceptance gates, and stop rules.
+   - Check `.codex/state/PAUSE` at phase start; if present, stop.
+   - Identify phase boundary, scope globs, acceptance gates, and stop rules.
    - Avoid broad source loading until a risk signal justifies it.
    - Tell user a concise proceed plan if asked or if next step is risky.
 
@@ -94,9 +95,13 @@ second opinion, use that exact model instead. Example: `opencode-go/glm-5.2`.
    - Treat advice as input, not authority.
 
 6. **Commit + Report**
+   - After steps 2-5 have produced all gate evidence, evaluate the step-7
+     criteria immediately before committing so the correct trailer is known.
    - Stage only intended files. Never `git add -A` when unrelated files exist.
-   - Commit one phase at a time.
-   - Push current branch.
+   - Commit one phase at a time with the trailer `Phase-gate: auto (L1)` or `Phase-gate: manual`.
+   - Push current branch by default.
+   - Open or update the PR by default.
+   - If the user explicitly prohibits commit, push, or open/update PR actions, stop before the first prohibited action, report local state, and wait.
    - Leave PR/issue comment with:
      - commit hash
      - scope
@@ -105,15 +110,37 @@ second opinion, use that exact model instead. Example: `opencode-go/glm-5.2`.
      - level used and Codex review scope
      - second-opinion result
      - explicit next phase / waiting-for-approval state
-   - If the user explicitly prohibits committing, pushing, or updating the
-     PR/issue, stop before the first prohibited action, report the local diff
-     and validation state, and wait for direction.
 
-7. **Wait**
-   - Stop after report if user requested per-phase approval.
-   - Stop when a publishing restriction prevents completing the normal
-     commit/push/PR-report sequence.
-   - Do not start next phase until approval is given.
+7. **Gate**
+
+   Publication and continuation are distinct: a successful phase may already be
+   published by step 6. This gate decides whether the next phase starts.
+
+   Degrade rule (evaluated first): if the approved plan lacks per-phase scope
+   globs, automatic continuation is disabled and the loop waits for explicit
+   user approval. An agent may draft scope globs, but they do not count as
+   approved until the owner/user approves them.
+
+   Auto continuation — proceed to the next phase without waiting only when all hold:
+   - final level == 1 (any escalation raises the level, so an escalated phase
+     cannot auto-continue)
+   - every changed file falls inside the phase's approved scope globs
+   - the red gate failed for the right reason, then passed, within the red-gate
+     attempt cap (max 3 by default; an approved phase override may raise it)
+   - plan deviations: none
+   - second opinion: no blocker
+
+   Any violation: manual gate — stop and wait for explicit approval.
+
+   Consecutive auto-approve rule: before classifying the current phase auto,
+   inspect the contiguous commit suffix immediately preceding `HEAD`. Count
+   commits carrying `Phase-gate: auto` trailers until the first commit without
+   one. If the count reaches 2, classify the current phase manual and wait. An
+   unexpected interleaved commit is scope drift and independently forces a
+   manual gate. Do not create a state counter for this.
+
+   Kill switch: if `.codex/state/PAUSE` exists at phase start, stop. This file
+   is never removed automatically.
 
 ## Risk Escalation
 
@@ -148,6 +175,9 @@ Stop and report instead of weakening gates when:
 - diff scope expands beyond phase boundary
 - OpenCode implementation exceeds requested scope
 - existing unrelated user changes block safe work
+- red-gate attempt cap reached; report red-gate attempt history instead of
+  weakening the gate. Codex decides whether to raise the level or stop; the
+  gate is never weakened.
 
 If a test gate is wrong, fix only when evidence is strong. Document the
 correction in the plan/report so future readers do not revert it.
@@ -166,8 +196,10 @@ Constraints:
 - Working dir: <path>
 - Do not commit
 - Do not edit outside <paths/scope>
+- Max red-gate attempts: 3
 - Stop and report if <stop rules>
-Final response: changed files, key decisions, commands run, metrics, blockers
+Final response (concise): changed files, key decisions, commands run, metrics,
+blockers, red-gate attempts used
 ```
 
 Second-opinion prompt should include:
@@ -195,19 +227,24 @@ Question: is there a blocking issue? Return only findings or "no blocker".
 ## Phase Report Template
 
 ```text
-Phase <N> <complete and pushed | complete locally, awaiting publication>:
-<commit or uncommitted>
+Phase <N> complete: <commit or uncommitted local state>
+
+Publication:
+- <committed/pushed/PR URL or stopped before an explicitly prohibited action>
 
 Scope:
-- ...
+- approved scope globs: <list or "no per-phase scope declared - manual gate">
+- changed files: <list>
 
 Implementation:
-- level: <1 low / 2 medium / 3 high>
+- final level: <1 low / 2 medium / 3 high>
 - model: <OpenCode default or other>
 - Codex review scope: <diff stat/key hunks/source files inspected>
+- red-gate attempts used / cap: <used> / <cap, default 3>
 
 Red gate:
-- `<command>`: <failing result before implementation>
+- `<command>`: <failing result before implementation, then passing result after>
+- evidence: failed for the right reason, then passed within the red-gate attempt cap
 
 Validation:
 - `<command>`: <result>
@@ -217,7 +254,7 @@ Plan deviations:
 - <none or rationale>
 
 Second opinion:
-- <OpenCode routine review and optional Claude/Sonnet or named OpenCode model escalation>: <verdict>
+- <OpenCode routine review and optional Claude/Sonnet or named OpenCode model escalation>: <verdict; no blocker?>
 
-Waiting for approval before Phase <N+1>.
+Gate: <auto - proceeding to Phase N+1 / waiting-for-approval>
 ```
