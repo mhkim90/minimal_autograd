@@ -39,7 +39,8 @@ Always load these skills at the start of relevant tasks:
 - **caveman**: When token efficiency is needed — ultra-compressed output (~75% fewer tokens) while keeping full technical accuracy; trigger with `/caveman` or "talk like caveman"
 - Language-aware caveman default: use `full` for English responses and `korean-full` for Korean responses unless the user explicitly requests another level.
 - **opencode-delegate**: Delegate **tedious / mechanical / long-running** work — applying precise edits, sweeps, run→inspect→tweak loops, test runs. Via `mcp__opencode__opencode_run_async` / `mcp__opencode__opencode_session_fork_async` plus job/session tools.
-- **codex-delegate**: Delegate **hard reasoning, adversarial design review, and difficult implementation** (numerical correctness, gradient derivation, autograd engine design, optimizer behavior) to Codex (GPT-5.5). DISCUSS (read-only) for reasoning & second opinions; EXECUTE (workspace-write) for hard multi-file changes. Via `mcp__codex__codex` / `mcp__codex__codex-reply`.
+- **codex-delegate**: Delegate **hard reasoning, adversarial design review, and difficult implementation** (numerical correctness, gradient derivation, autograd engine design, optimizer behavior) to Codex using its configured default model. DISCUSS (read-only) for reasoning & second opinions; EXECUTE (workspace-write) for hard multi-file changes. Via `mcp__codex__codex` / `mcp__codex__codex-reply`.
+- **phase-gated-implementation**: Use for phased work from a plan, PR/issue/design doc, or approved checklist. OpenCode-heavy by default; Codex (via codex-delegate) absorbs escalation as risk rises; Claude stays minimal-footprint — orchestration, verification, and the final scope/test/diff/commit decision.
 
 ### Delegation model
 
@@ -66,7 +67,7 @@ Before doing hard reasoning or a large edit inline, ask "Codex (hard) or OpenCod
 > probes to `codex-delegate`; use Codex only for GPU/CUDA reasoning or code edits,
 > then run GPU validation from Claude/OpenCode/local shell where a GPU is available.
 
-See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKILL.md), [skills/grilled-me/SKILL.md](skills/grilled-me/SKILL.md), [skills/handoff/SKILL.md](skills/handoff/SKILL.md), [skills/caveman/SKILL.md](skills/caveman/SKILL.md), [skills/opencode-delegate/SKILL.md](skills/opencode-delegate/SKILL.md), and [skills/codex-delegate/SKILL.md](skills/codex-delegate/SKILL.md).
+See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKILL.md), [skills/grilled-me/SKILL.md](skills/grilled-me/SKILL.md), [skills/handoff/SKILL.md](skills/handoff/SKILL.md), [skills/caveman/SKILL.md](skills/caveman/SKILL.md), [skills/opencode-delegate/SKILL.md](skills/opencode-delegate/SKILL.md), [skills/codex-delegate/SKILL.md](skills/codex-delegate/SKILL.md), and [skills/phase-gated-implementation/SKILL.md](skills/phase-gated-implementation/SKILL.md).
 
 ### Quick Reminders
 

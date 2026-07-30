@@ -7,6 +7,10 @@ description: Delegate tedious, mechanical, or long-running work to OpenCode via 
 
 Use `mcp__opencode.opencode_run_async` by default. Use blocking `mcp__opencode.opencode_run` only for trivial, known-short prompts where losing the result would be acceptable. Reviews, implementation, iteration, and test-running should use async even when they look quick.
 
+Delegated runs can access only the caller's working directory. External paths,
+including `/tmp`, are denied; `/tmp/opencode_mcp` is server-managed registry
+storage.
+
 OpenCode is a tedious-work delegate. Use it when the work can be specified precisely and checked with clear success criteria.
 
 ## Tool Availability
@@ -74,6 +78,10 @@ Pass `model="provider/model"` to `opencode_run`, `opencode_run_async`, or
 `opencode_session_fork_async` to override OpenCode's default model for that call.
 Omit `model` to use the configured default.
 
+Pass `variant="high"` / `"max"` / `"minimal"` (provider-specific reasoning
+effort) to those tools, plus `opencode_session_fork`, to override the model's
+default effort for that call. Omit `variant` to use the default.
+
 ## Async workflow
 
 For delegated work:
@@ -84,7 +92,7 @@ For delegated work:
 4. Use `mcp__opencode.opencode_job_list` to recover or discover jobs; `scope="all"` includes jobs recorded by other repository MCP instances.
 5. Use `mcp__opencode.opencode_job_cancel` only when the job should stop.
 
-Async job metadata is recorded under `/tmp/opencode_mcp/jobs`. Live response buffers remain local to the MCP process, but discovery and cancellation can work across repository MCP instances.
+Async job metadata, including process-group data, is recorded under `/tmp/opencode_mcp/jobs`. Live response buffers remain local to the MCP process, but discovery and cancellation can work across repository MCP instances.
 
 ## Timeout
 
