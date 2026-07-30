@@ -55,3 +55,23 @@ See [.codex/skills/karpathy/SKILL.md](../.codex/skills/karpathy/SKILL.md), [.cod
 - Touch only the files and lines required; match existing style.
 - Define success criteria before editing; verify with the smallest useful check.
 - Before acting on a plan, ask: am I solving more than asked? What is the most likely failure?
+
+## OpenCode Triad
+
+- **Sol** (`agents/sol.md`): primary L1-L4 planner, gatekeeper, and publisher;
+  it cannot edit.
+- **Terra** (`agents/terra.md`): read-only L3 preflight and non-trivial
+  post-review; it cannot edit or delegate.
+- **Luna** (`agents/luna.md`): C++/CUDA implementer for source, tests, CMake,
+  CTest, and focused GPU checks; it cannot publish or broaden scope.
+
+Sol chooses the gate: L1-L2 may proceed directly, L3 requires Terra preflight,
+and L4 stops before implementation. Luna reports **red -> implement -> green
+-> GPU**, with at most 3 implement/fix loops. Terra has at most 2 Sol
+round-trips per task. After a passing phase, Sol stages only intended files
+and publishes unless the user explicitly prohibits publication.
+
+Permissions are guardrails, not a complete trust boundary. Role prompts,
+repository boundaries, managed sandboxing, and Sol's diff gate remain
+required. Preserve unrelated artifacts. No agent may read, print, copy,
+expose, or request credentials or secrets.
