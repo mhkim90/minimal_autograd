@@ -39,8 +39,8 @@ Always load these skills at the start of relevant tasks:
 - **caveman**: When token efficiency is needed — ultra-compressed output (~75% fewer tokens) while keeping full technical accuracy; trigger with `/caveman` or "talk like caveman"
 - Language-aware caveman default: use `full` for English responses and `korean-full` for Korean responses unless the user explicitly requests another level.
 - **opencode-delegate**: Delegate **tedious / mechanical / long-running** work — applying precise edits, sweeps, run→inspect→tweak loops, test runs. Via `mcp__opencode__opencode_run_async` / `mcp__opencode__opencode_session_fork_async` plus job/session tools.
-- **codex-delegate**: Delegate **hard reasoning, adversarial design review, and difficult implementation** (numerical correctness, gradient derivation, autograd engine design, optimizer behavior) to Codex using its configured default model. DISCUSS (read-only) for reasoning & second opinions; EXECUTE (workspace-write) for hard multi-file changes. Via `mcp__codex__codex` / `mcp__codex__codex-reply`.
-- **phase-gated-implementation**: Use for phased work from a plan, PR/issue/design doc, or approved checklist. OpenCode-heavy by default; Codex (via codex-delegate) absorbs escalation as risk rises; Claude stays minimal-footprint — orchestration, verification, and the final scope/test/diff/commit decision.
+- **codex-delegate**: Delegate **independent high-risk reasoning and final blocker gates** to the current Codex default (Sol-class). Use DISCUSS/read-only by default; EXECUTE is an explicit user-requested or approved fallback.
+- **phase-gated-implementation**: Use for phased work from a plan, PR/issue/design doc, or approved checklist. Claude Code orchestrates and controls publication; OpenCode's configured default implements bulk work, Luna handles evidence-based implementation escalation, Terra performs focused review, and Codex/Sol supplies the independent high-risk read-only gate. Do not use fixed token percentages.
 
 ### Delegation model
 
@@ -49,19 +49,21 @@ inline: decompose the goal, write precise cold-context specs, route each piece t
 right engine, verify results (the relevant test binaries above), decide keep/revert,
 and report.
 
-- **Codex** ← hard reasoning, adversarial review, and implementing *difficult* things.
-- **OpenCode** ← tedious / mechanical / long-running jobs.
-- **Claude** ← routing, verification, and decisions only.
+- **Codex/Sol** ← independent high-risk reasoning and final read-only blocker gate.
+- **OpenCode default / Luna** ← bulk implementation / evidence-based escalation.
+- **Terra** ← focused read-only review of important L2/L3 diffs.
+- **Claude Code** ← routing, evidence verification, publication, and user decisions.
 
-Before doing hard reasoning or a large edit inline, ask "Codex (hard) or OpenCode
-(tedious)?" — default to delegating for tasks that fit either bucket cleanly.
+Before a large phase, classify risk and follow `phase-gated-implementation`;
+do not route all difficult implementation to Codex.
 
 > **MCP availability restriction**: `mcp__opencode__*` and `mcp__codex__*` tools are
 > **only available when Claude is running as a remote-controlled agent (Claude Code Remote / CCR)**.
 > They are NOT accessible in standard local Claude Code sessions. Before invoking
 > either `opencode-delegate` or `codex-delegate`, confirm the session has these MCP
 > tools loaded (they appear in the deferred-tools list). If they are absent, fall
-> back to inline execution.
+> follow the active skill's stop/degrade rule. Do not silently replace a
+> required phase-gated implementation or independent gate with inline work.
 > Also note: the Codex MCP environment does **not** provide GPU access. Do not
 > delegate GPU-dependent builds, CUDA tests, benchmarks, profilers, or device
 > probes to `codex-delegate`; use Codex only for GPU/CUDA reasoning or code edits,

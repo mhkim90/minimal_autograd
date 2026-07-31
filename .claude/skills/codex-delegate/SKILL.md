@@ -1,6 +1,6 @@
 ---
 name: codex-delegate
-description: Codex is the engine for PHYSICS / deep thinking / adversarial design review / hard implementation. DISCUSS (read-only) for reasoning & second opinions; EXECUTE (workspace-write) for difficult multi-file changes. Trigger on "ask codex", "second opinion", "discuss with codex", "delegate to codex", or any hard/physics reasoning or implementation.
+description: Delegate independent high-risk reasoning, adversarial review, and final blocker gates from Claude Code to the current Codex default (Sol-class). Use DISCUSS/read-only by default. Use EXECUTE/workspace-write only when the user explicitly requests Codex implementation or approves it as a fallback.
 ---
 
 # Codex Delegate
@@ -14,8 +14,13 @@ reasoning, kernel review, and code edits, but do not ask it to run GPU-dependent
 builds, tests, benchmarks, profilers, or device probes. Run GPU validation from
 Claude/OpenCode/local shell where a GPU is actually available.
 
-Codex uses the model and reasoning effort configured by the active Codex
-environment. Pass `model` only when the task requires an explicit override.
+Codex uses the current configured default, which is Sol-class. Omit `model` to
+use that default; pass `model` only for an explicit user-selected override.
+
+For `phase-gated-implementation`, Codex/Sol is the independent high-risk
+read-only gate. OpenCode's configured default implements bulk work, Luna is
+the evidence-based implementation escalation, and Terra performs focused
+review. Do not use Codex EXECUTE as the normal phase implementer.
 
 In the delegation model Codex is the **hard-work engine**: numerics/algorithm design
 (autograd correctness, gradient formulas, optimizer behavior), deep thinking,
@@ -28,7 +33,7 @@ mechanical jobs (see [[opencode-delegate]]).
 | Mode | `sandbox` | `approval-policy` | Use it for |
 |---|---|---|---|
 | **Discuss** | `read-only` | `never` | Second opinion, adversarial review of a plan/root-cause, design forks (e.g. autograd tape design, tensor shape semantics, optimizer updates). Codex reads files and argues — does NOT touch the tree. |
-| **Execute** | `workspace-write` | `never` | Long CLI runs, sweeps, multi-file edits. The Codex twin of opencode-delegate. The sandbox is the safety boundary, so `never` is fine for unattended runs. |
+| **Execute** | `workspace-write` | `never` | Exception: explicit user request or a user-approved fallback after the normal OpenCode default/Luna path cannot safely complete the work. |
 
 Always set `cwd` to the repository root (`<repo-root>`).
 

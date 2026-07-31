@@ -1,6 +1,6 @@
 ---
 name: opencode-delegate
-description: Delegate TEDIOUS / mechanical / long-running work to OpenCode via async-first OpenCode MCP tools. Use for applying precise edits, sweeps, run→inspect→tweak loops, and test runs.
+description: Delegate precise, long-running, or plan-driven tasks from Claude Code to OpenCode via async-first MCP tools. Use OpenCode's configured default for bulk work, Luna for evidence-based implementation escalation, and Terra for focused read-only review.
 ---
 
 # OpenCode Delegate
@@ -72,11 +72,29 @@ Success criteria:
 
 Pass `model="provider/model"` to `opencode_run`, `opencode_run_async`, or
 `opencode_session_fork_async` to override OpenCode's default model for that call.
-Omit `model` to use the configured default.
+Omit `model` to use the configured default. The configured default is the bulk
+implementer for L1 and routine L2.
 
 Pass `variant="high"` / `"max"` / `"minimal"` (provider-specific reasoning
 effort) to those tools, plus `opencode_session_fork`, to override the model's
 default effort for that call. Omit `variant` to use the default.
+
+### Routing policy (matches `phase-gated-implementation`)
+
+- **Omit `model`** for bulk L1 and routine L2 implementation.
+- **`model="openai/gpt-5.6-luna"`** for non-trivial implementation only when
+  there is evidence: repeated focused failure, implementer uncertainty,
+  clearly weak diff, or known complex generation such as protocol contracts,
+  concurrency, numerical kernels, build, or CUDA.
+- **`model="openai/gpt-5.6-terra"`** for focused read-only review of important
+  L2 and L3 diffs.
+- **User-specified model** when the user names an implementation or review
+  model; explicit selection overrides automatic routing for that role.
+
+Native OpenCode `sol`/`terra`/`luna` triad agents are reserved for standalone
+OpenCode operation, unavailable Codex tooling, quota pressure,
+breakthrough/replan, or explicit user request. Do not add routine native
+OpenCode Sol review on top of the Codex/Sol gate.
 
 ## Context reset (fork)
 

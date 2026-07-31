@@ -76,11 +76,32 @@ Constraints:
 
 Pass `model="provider/model"` to `opencode_run`, `opencode_run_async`, or
 `opencode_session_fork_async` to override OpenCode's default model for that call.
-Omit `model` to use the configured default.
+Omit `model` to use the configured default. The configured default is the bulk
+implementer for L1 and routine L2; override it only when the phase-gated
+routing policy below calls for it.
 
 Pass `variant="high"` / `"max"` / `"minimal"` (provider-specific reasoning
 effort) to those tools, plus `opencode_session_fork`, to override the model's
 default effort for that call. Omit `variant` to use the default.
+
+### Routing policy (matches `phase-gated-implementation`)
+
+- **Omit `model`** for the OpenCode configured default. This is the bulk
+  implementer for L1 and routine L2 work passed through Codex/Sol.
+- **`model="openai/gpt-5.6-luna"`** — escalate non-trivial implementation only
+  when Codex has evidence: repeated focused failure on the same red gate,
+  implementer uncertainty, clearly weak diff, or known non-trivial code
+  generation (protocol contracts, complex refactors, concurrency, numerical
+  kernels, build/CUDA).
+- **`model="openai/gpt-5.6-terra"`** — focused read-only review of important
+  L2 and L3 diffs. Not a routine substitute for Codex judgment.
+- **User-specified OpenCode model** (e.g. `opencode-go/glm-5.2`) — when the
+  user names an implementation or review model. Explicit selection overrides
+  automatic routing for that role.
+
+Native OpenCode `sol`/`terra`/`luna` triad ids are reserved for standalone
+OpenCode operation, Codex quota pressure, breakthrough/replan, or explicit
+user request. Never nest routine OpenCode Sol under Codex/Sol.
 
 ## Async workflow
 
