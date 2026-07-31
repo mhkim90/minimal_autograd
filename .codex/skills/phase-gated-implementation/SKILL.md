@@ -51,7 +51,7 @@ Escalate implementation to `openai/gpt-5.6-luna` only with evidence:
 - diff is clearly weak (missing files, broken tests, obvious regressions)
 - task is known non-trivial code generation (protocol contracts, complex
   refactors, concurrency, numerical kernels, build/CUDA)
-- explicit user or plan request
+- explicit user or approved-plan request
 
 Use `openai/gpt-5.6-terra` for focused read-only review of important L2 and
 L3 diffs. It does not replace Claude and is not a routine substitute for Codex
@@ -70,6 +70,30 @@ more apply:
 Avoid duplicate delegated review. After `terra` reviews a diff, do not ask a
 second routine OpenCode reviewer to repeat it. Codex's final gate review remains
 mandatory. Claude is an independent escalation, not a routine duplicate.
+
+## Plan Audit Preflight
+
+Before implementation, identify the plan artifact, its authoring source, and
+the revision being executed.
+
+- For an externally authored plan, design document, issue, PR description,
+  decision record, migration outline, or checklist, run `plan-audit` once if
+  there is no audit for the current material revision.
+- For a plan drafted by the active agent, use `grilled-me` instead.
+- Do not repeat `plan-audit` at every phase. Re-run it only when a material
+  revision changes scope, contracts, sequencing, acceptance criteria, risk,
+  rollback, or implementation strategy.
+- An audit verdict of `blocked` is Level 4. Stop before implementation or
+  before the affected phase.
+- Preserve every manual stop named by `ready-with-manual-gates`.
+- Import the audit's phase dependencies, gates, risks, stop rules, and
+  downstream consumers into orientation and reporting.
+
+Audit recommendations are not approvals. Candidate scope globs, gates,
+sequencing changes, and risk levels remain drafts until the user or repository
+owner approves them. A `ready` verdict may allow manual implementation to
+start, but it cannot enable auto continuation unless the plan itself contains
+approved per-phase scope globs and gates.
 
 ## Risk Levels
 
@@ -96,8 +120,11 @@ Levels describe scope and Codex effort, not fixed token shares.
 
 1. **Orient Lightly**
    - Read plan/PR/issue/design doc.
+   - Confirm the `plan-audit` or `grilled-me` preflight for the artifact and
+     revision. Stop on a blocking or stale audit before the affected phase.
    - Confirm branch and dirty state.
-   - Check `.codex/state/PAUSE` at phase start; if present, stop.
+   - At phase start, stop if `.codex/state/PAUSE` or `.claude/state/PAUSE`
+     exists. Never remove either file automatically.
    - Identify phase boundary, scope globs, acceptance gates, and stop rules.
    - Classify the risk level and pick the implementation engine.
    - Avoid broad source loading until a risk signal justifies it.
@@ -152,6 +179,10 @@ Levels describe scope and Codex effort, not fixed token shares.
      criteria immediately before committing so the correct trailer is known.
    - Stage only intended files. Never `git add -A` when unrelated files exist.
    - Commit one phase at a time with the trailer `Phase-gate: auto (L1)` or `Phase-gate: manual`.
+   - Treat commit, push, and PR publication by default as an explicit
+     repository-owner policy. The step-7 manual gate controls whether the next
+     phase starts; it does not retroactively require approval to publish the
+     completed phase.
    - Push current branch by default.
    - Open or update the PR by default.
    - If the user explicitly prohibits commit, push, or open/update PR actions,
@@ -188,13 +219,14 @@ Levels describe scope and Codex effort, not fixed token shares.
 
    Consecutive auto-approve rule: before classifying the current phase auto,
    inspect the contiguous commit suffix immediately preceding `HEAD`. Count
-   commits carrying `Phase-gate: auto` trailers until the first commit without
-   one. If the count reaches 2, classify the current phase manual and wait. An
-   unexpected interleaved commit is scope drift and independently forces a
-   manual gate. Do not create a state counter for this.
+   commits whose `Phase-gate` trailer value begins with `auto`; the canonical
+   value is `auto (L1)`. Stop at the first commit without that prefix. If the
+   count reaches 2, classify the current phase manual and wait. An unexpected
+   interleaved commit is scope drift and independently forces a manual gate. Do
+   not create a state counter for this.
 
-   Kill switch: if `.codex/state/PAUSE` exists at phase start, stop. This file
-   is never removed automatically.
+   Kill switch: if `.codex/state/PAUSE` or `.claude/state/PAUSE` exists at
+   phase start, stop. These files are never removed automatically.
 
 ## Risk Escalation
 
@@ -224,6 +256,8 @@ gate.
 
 Stop and report instead of weakening gates when:
 
+- the required `plan-audit` or `grilled-me` preflight is missing, stale, or
+  blocked
 - core acceptance metric fails
 - implementation must change plan intent
 - test expectation appears wrong but fix is not defensible from plan facts
@@ -253,7 +287,7 @@ Constraints:
 - Working dir: <path>
 - Do not commit
 - Do not edit outside <paths/scope>
-- Max red-gate attempts: 3
+- Max red-gate attempts: <approved phase cap, default 3>
 - Stop and report if <stop rules>
 Final response (concise): changed files, key decisions, commands run, metrics,
 blockers, red-gate attempts used
@@ -289,6 +323,18 @@ Phase <N> complete: <commit or uncommitted local state>
 
 Publication:
 - <committed/pushed/PR URL or stopped before an explicitly prohibited action>
+
+Plan preflight:
+- artifact and audited revision: <identity + revision>
+- review: <plan-audit / grilled-me>
+- outcome: <ready / ready-with-manual-gates / blocked / grilled-me findings resolved>
+- freshness: <current / stale>
+- unresolved manual gates: <none or list>
+
+Imported audit handoff:
+- phase dependencies and preconditions: <none or list>
+- downstream consumers: <none or list>
+- applicable stop rules: <list>
 
 Scope:
 - approved scope globs: <list or "no per-phase scope declared - manual gate">
