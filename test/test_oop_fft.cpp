@@ -73,6 +73,7 @@
 namespace {
 
 int passed = 0;
+constexpr float kReferencePi = 3.14159265358979323846f;
 
 #define CHECK(...) do { \
     if (!(__VA_ARGS__)) { \
@@ -340,13 +341,12 @@ void test_fft_normalization() {
     // Compute reference FFT for the real-valued input.
     std::vector<float> ref_sr(H * W, 0.f);
     std::vector<float> ref_si(H * W, 0.f);
-    constexpr float kPi = 3.14159265358979323846f;
     for (int kr = 0; kr < H; ++kr) {
         for (int kc = 0; kc < W; ++kc) {
             float sum_r = 0.f, sum_i = 0.f;
             for (int r = 0; r < H; ++r) {
                 for (int c = 0; c < W; ++c) {
-                    const float a = 2.f * kPi *
+                    const float a = 2.f * kReferencePi *
                         (static_cast<float>(kr * r) / static_cast<float>(H) +
                          static_cast<float>(kc * c) / static_cast<float>(W));
                     sum_r += zr[r * W + c] * std::cos(a);
@@ -368,7 +368,6 @@ void test_fft_normalization() {
 std::pair<std::vector<float>, std::vector<float>> dft2_reference_plane(
         const std::vector<float>& real_in, const std::vector<float>& imag_in,
         int H, int W, bool inverse, bool scale_output) {
-    constexpr float kPi = 3.14159265358979323846f;
     const float norm = scale_output ? 1.f / static_cast<float>(H * W) : 1.f;
     std::vector<float> out_r(H * W, 0.f), out_i(H * W, 0.f);
     for (int kr = 0; kr < H; ++kr) {
@@ -376,7 +375,7 @@ std::pair<std::vector<float>, std::vector<float>> dft2_reference_plane(
             float sum_r = 0.f, sum_i = 0.f;
             for (int r = 0; r < H; ++r) {
                 for (int c = 0; c < W; ++c) {
-                    const float a = 2.f * kPi *
+                    const float a = 2.f * kReferencePi *
                         (static_cast<float>(kr * r) / static_cast<float>(H) +
                          static_cast<float>(kc * c) / static_cast<float>(W));
                     const float wr = std::cos(a);

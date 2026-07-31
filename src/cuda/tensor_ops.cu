@@ -1,5 +1,6 @@
 #include "detail/tensor_cuda_ops.h"
 
+#include "detail/constants.h"
 #include "detail/tensor_storage.h"
 
 #include <math_constants.h>
@@ -351,8 +352,6 @@ __global__ void maxpool2d_backward_kernel(float* out, const float* g,
     out[i] = value;
 }
 
-constexpr float kCudaFftPi = 3.14159265358979323846f;
-
 __global__ void dft2_last2_kernel(const float* real_in, const float* imag_in,
                                   float* real_out, float* imag_out,
                                   int total, int H, int W, bool inverse,
@@ -371,7 +370,7 @@ __global__ void dft2_last2_kernel(const float* real_in, const float* imag_in,
     const float* ip = imag_in + batch * plane;
     for (int r = 0; r < H; ++r) {
         for (int c = 0; c < W; ++c) {
-            const float angle = 2.f * kCudaFftPi *
+            const float angle = 2.f * detail::kPi *
                 (static_cast<float>(kr * r) / static_cast<float>(H) +
                  static_cast<float>(kc * c) / static_cast<float>(W));
             const float wr = cosf(angle);

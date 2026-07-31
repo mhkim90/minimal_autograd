@@ -11,6 +11,8 @@
 
 #include "autograd/tensor.h"
 
+#include "detail/constants.h"
+
 #ifdef AUTOGRAD_USE_CUDA
 #include "detail/tensor_cuda_ops.h"
 #endif
@@ -3170,10 +3172,6 @@ inline Tensor tensor_group_norm_nchw_backward_bias(const Tensor& g) {
 // 1/(H*W). The same kernel is used for the forward pass and for the
 // backward adjoint (with inverse and scale_output swapped); see
 // src/core/fft.cpp.
-namespace {
-constexpr float kFftPi = 3.14159265358979323846f;
-}  // namespace
-
 struct TensorDFT2Result {
     Tensor real;
     Tensor imag;
@@ -3248,7 +3246,7 @@ inline TensorDFT2Result tensor_dft2_last2(
                 float sum_i = 0.f;
                 for (int r = 0; r < H; ++r) {
                     for (int c = 0; c < W; ++c) {
-                        const float angle = 2.f * kFftPi *
+                        const float angle = 2.f * kPi *
                             (static_cast<float>(kr * r) /
                                  static_cast<float>(H) +
                              static_cast<float>(kc * c) /
