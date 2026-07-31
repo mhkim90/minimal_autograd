@@ -38,11 +38,8 @@
 //   * Row-major batch isolation: changes in one batch element do not
 //     leak into FFT outputs of other batches.
 //
-// Non-CPU device rejection is enforced in code (src/core/fft.cpp) but
-// cannot be exercised through this test until the CUDA Tensor
-// foundation makes a non-CPU replacement Tensor constructible. The
-// device branch is covered by code inspection, not by an executable
-// test.
+// CUDA device parity is exercised below when this target is built with the
+// optional CUDA backend; CPU-only builds retain the replacement CPU coverage.
 
 #include "autograd/core/complex.h"
 #include "autograd/core/fft.h"
@@ -700,6 +697,78 @@ void test_fft_invalid_arguments() {
     report("fft2 / ifft2 reject invalid arguments");
 }
 
+#ifdef AUTOGRAD_USE_CUDA
+bool replacement_fft_cuda_available() {
+    try {
+        (void)ag::Tensor::empty(ag::Shape{0}, ag::Device::cuda(0));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+void test_cuda_replacement_fft_rank4_parity() {
+    const ag::Device cuda = ag::Device::cuda(0);
+    const ag::Shape shape{2, 2, 3, 4};
+    std::vector<float> real_data(shape.numel()), imag_data(shape.numel());
+    for (std::size_t i = 0; i < real_data.size(); ++i) {
+        real_data[i] = 0.03f * static_cast<float>(static_cast<int>(i) - 11);
+        imag_data[i] = -0.02f * static_cast<float>(static_cast<int>(i) - 7);
+    }
+
+    ag::Variable cpu_real(make_tensor(real_data, shape), true);
+    ag::Variable cpu_imag(make_tensor(imag_data, shape), true);
+    ag::Variable cuda_real(ag::Tensor::from_host(
+        real_data.data(), shape, cuda), true);
+    ag::Variable cuda_imag(ag::Tensor::from_host(
+        imag_data.data(), shape, cuda), true);
+    ag::ComplexVariable cpu_z = ag::make_complex(cpu_real, cpu_imag);
+    ag::ComplexVariable cuda_z = ag::make_complex(cuda_real, cuda_imag);
+    CHECK_THROWS_AS(ag::make_complex(cuda_real, cpu_imag), std::invalid_argument);
+
+    ag::ComplexVariable cpu_spectrum = ag::fft2(cpu_z);
+    ag::ComplexVariable cuda_spectrum = ag::fft2(cuda_z);
+    CHECK(cuda_spectrum.real.value().device().is_cuda());
+    CHECK(cuda_spectrum.real.value().shape() == shape);
+    check_close(read_values(cuda_spectrum.real.value()),
+                read_values(cpu_spectrum.real.value()), 2e-4f);
+    check_close(read_values(cuda_spectrum.imag.value()),
+                read_values(cpu_spectrum.imag.value()), 2e-4f);
+
+    ag::ComplexVariable cpu_roundtrip = ag::ifft2(cpu_spectrum);
+    ag::ComplexVariable cuda_roundtrip = ag::ifft2(cuda_spectrum);
+    check_close(read_values(cuda_roundtrip.real.value()), real_data, 2e-4f);
+    check_close(read_values(cuda_roundtrip.imag.value()), imag_data, 2e-4f);
+    check_close(read_values(cuda_roundtrip.real.value()),
+                read_values(cpu_roundtrip.real.value()), 2e-4f);
+    check_close(read_values(cuda_roundtrip.imag.value()),
+                read_values(cpu_roundtrip.imag.value()), 2e-4f);
+
+    ag::Variable cpu_loss = ag::sum(ag::abs2(cpu_spectrum));
+    ag::Variable cuda_loss = ag::sum(ag::abs2(cuda_spectrum));
+    cpu_loss.backward();
+    cuda_loss.backward(ag::Tensor::ones(ag::Shape{}, cuda));
+    check_close(read_values(cuda_real.grad()), read_values(cpu_real.grad()),
+                2e-3f);
+    check_close(read_values(cuda_imag.grad()), read_values(cpu_imag.grad()),
+                2e-3f);
+
+    cpu_real.zero_grad();
+    cpu_imag.zero_grad();
+    cuda_real.zero_grad();
+    cuda_imag.zero_grad();
+    ag::Variable cpu_ifft_loss = ag::sum(ag::abs2(cpu_roundtrip));
+    ag::Variable cuda_ifft_loss = ag::sum(ag::abs2(cuda_roundtrip));
+    cpu_ifft_loss.backward();
+    cuda_ifft_loss.backward(ag::Tensor::ones(ag::Shape{}, cuda));
+    check_close(read_values(cuda_real.grad()), read_values(cpu_real.grad()),
+                2e-4f);
+    check_close(read_values(cuda_imag.grad()), read_values(cpu_imag.grad()),
+                2e-4f);
+    report("CUDA replacement fft2/ifft2 rank-4 batch parity and gradients");
+}
+#endif
+
 }  // namespace
 
 int main() {
@@ -719,6 +788,13 @@ int main() {
     test_fft_spectral_filter_gradient_finite_diff();
     test_fft_repeated_branch_gradient_accumulates();
     test_fft_invalid_arguments();
+#ifdef AUTOGRAD_USE_CUDA
+    if (replacement_fft_cuda_available()) {
+        test_cuda_replacement_fft_rank4_parity();
+    } else {
+        std::printf("  [skip] CUDA replacement FFT tests: no reachable CUDA device\n");
+    }
+#endif
 
     std::printf("\nALL OOP FFT TESTS PASSED (%d)\n", passed);
     return 0;

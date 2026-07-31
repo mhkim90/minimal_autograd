@@ -105,11 +105,6 @@ void validate_bias(const Tensor& bias, int OC, const char* op) {
            << OC << "; got " << s;
         throw std::invalid_argument(os.str());
     }
-    if (bias.device() != Device::cpu()) {
-        std::ostringstream os;
-        os << op << ": bias device must be CPU";
-        throw std::invalid_argument(os.str());
-    }
 }
 
 }  // namespace
@@ -119,10 +114,9 @@ Variable conv2d(const Variable& input,
                const Variable& bias,
                int stride,
                int pad) {
-    if (input.device().is_cuda() || weight.device().is_cuda() ||
-        bias.device().is_cuda()) {
-        throw std::runtime_error(
-            "ag::conv2d: CUDA tensors are not supported in this build");
+    if (input.device() != weight.device() || input.device() != bias.device()) {
+        throw std::invalid_argument(
+            "ag::conv2d: input, weight, and bias must use the same device");
     }
     const Shape& in_s = input.value().shape();
     if (in_s.rank() != 4) {
@@ -185,10 +179,6 @@ Variable conv2d(const Variable& input,
 Variable max_pool2d(const Variable& input,
                     int kH, int kW,
                     int stride) {
-    if (input.device().is_cuda()) {
-        throw std::runtime_error(
-            "ag::max_pool2d: CUDA tensors are not supported in this build");
-    }
     const Shape& in_s = input.value().shape();
     if (in_s.rank() != 4) {
         std::ostringstream os;

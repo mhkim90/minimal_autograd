@@ -78,6 +78,9 @@ bool cuda_backward_supported(detail::OpKind kind) {
         case detail::OpKind::Softplus:
         case detail::OpKind::Sub:
         case detail::OpKind::Div:
+        case detail::OpKind::Conv2d:
+        case detail::OpKind::MaxPool2d:
+        case detail::OpKind::Custom:
             return true;
         default:
             return false;

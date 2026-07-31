@@ -1993,10 +1993,16 @@ inline Tensor tensor_col2im_nchw(const Tensor& col,
 }
 
 inline Tensor tensor_conv2d_nchw_forward(const Tensor& input,
-                                          const Tensor& weight,
-                                          const Tensor& bias,
-                                          int stride, int pad,
-                                          Tensor& saved_col) {
+                                         const Tensor& weight,
+                                         const Tensor& bias,
+                                         int stride, int pad,
+                                         Tensor& saved_col) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (input.device().is_cuda()) {
+        return cuda_tensor_conv2d_nchw_forward(
+            input, weight, bias, stride, pad, saved_col);
+    }
+#endif
     const Shape& in_s = input.shape();
     const int N = static_cast<int>(in_s[0]);
     const int C = static_cast<int>(in_s[1]);
@@ -2075,6 +2081,12 @@ inline Tensor tensor_conv2d_nchw_backward_input(
         const Tensor& weight,
         int N, int C, int H, int W,
         int kH, int kW, int stride, int pad) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_conv2d_nchw_backward_input(
+            g, weight, N, C, H, W, kH, kW, stride, pad);
+    }
+#endif
     const int OC = static_cast<int>(weight.shape()[0]);
     const int oH = static_cast<int>(nchw_output_extent(
         H, kH, stride, pad, "conv2d_backward_input"));
@@ -2084,7 +2096,9 @@ inline Tensor tensor_conv2d_nchw_backward_input(
     const int P_flat = oH * oW;
 
     Tensor d_col = Tensor::zeros(Shape({N, K_flat, P_flat}), g.device());
-    if (d_col.elements() == 0) return Tensor::zeros(g.shape(), g.device());
+    if (d_col.elements() == 0) {
+        return Tensor::zeros(Shape({N, C, H, W}), g.device());
+    }
 
     std::vector<float> g_data(g.elements());
     std::vector<float> w_data(weight.elements());
@@ -2138,6 +2152,12 @@ inline Tensor tensor_conv2d_nchw_backward_input(
 
 inline Tensor tensor_conv2d_nchw_backward_weight(
         const Tensor& g, const Tensor& col, const Shape& w_shape) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_conv2d_nchw_backward_weight(
+            g, col, w_shape);
+    }
+#endif
     const int OC = static_cast<int>(w_shape[0]);
     const int C  = static_cast<int>(w_shape[1]);
     const int kH = static_cast<int>(w_shape[2]);
@@ -2201,6 +2221,9 @@ inline Tensor tensor_conv2d_nchw_backward_weight(
 }
 
 inline Tensor tensor_conv2d_nchw_backward_bias(const Tensor& g) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_conv2d_nchw_backward_bias(g);
+#endif
     const Shape& gs = g.shape();
     const int N = static_cast<int>(gs[0]);
     const int OC = static_cast<int>(gs[1]);
@@ -2242,6 +2265,12 @@ inline Tensor tensor_maxpool2d_nchw_forward(const Tensor& input,
                                             int kH, int kW,
                                             int stride,
                                             Tensor& saved_mask) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (input.device().is_cuda()) {
+        return cuda_tensor_maxpool2d_nchw_forward(
+            input, kH, kW, stride, saved_mask);
+    }
+#endif
     const Shape& s = input.shape();
     const int N = static_cast<int>(s[0]);
     const int C = static_cast<int>(s[1]);
@@ -2311,6 +2340,12 @@ inline Tensor tensor_maxpool2d_nchw_backward(const Tensor& g,
                                              const Tensor& mask,
                                              int N, int C, int H, int W,
                                              int kH, int kW, int stride) {
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_maxpool2d_nchw_backward(
+            g, mask, N, C, H, W, kH, kW, stride);
+    }
+#endif
     const int oH = static_cast<int>(nchw_output_extent(
         H, kH, stride, 0, "max_pool2d_backward"));
     const int oW = static_cast<int>(nchw_output_extent(
@@ -2319,7 +2354,9 @@ inline Tensor tensor_maxpool2d_nchw_backward(const Tensor& g,
     const int P_flat = oH * oW;
 
     Tensor d_col = Tensor::zeros(Shape({N, K_flat, P_flat}), g.device());
-    if (d_col.elements() == 0) return Tensor::zeros(g.shape(), g.device());
+    if (d_col.elements() == 0) {
+        return Tensor::zeros(Shape({N, C, H, W}), g.device());
+    }
 
     std::vector<float> g_data(g.elements());
     std::vector<float> mask_data(mask.elements());
@@ -3174,6 +3211,14 @@ inline TensorDFT2Result tensor_dft2_last2(
               "positive (got " << H << " x " << W << ")";
         throw std::invalid_argument(os.str());
     }
+#ifdef AUTOGRAD_USE_CUDA
+    if (real_in.device().is_cuda()) {
+        const CudaTensorDFT2Result cuda_out = cuda_tensor_dft2_last2(
+            real_in, imag_in, inverse, scale_output);
+        TensorDFT2Result out{cuda_out.real, cuda_out.imag};
+        return out;
+    }
+#endif
     const int64_t plane = static_cast<int64_t>(H) * W;
     const int64_t batch_count = s.numel() / plane;
 

@@ -22,8 +22,10 @@ Current delivery state:
 - the OOP CPU complex and FFT APIs are merged through PR #39;
 - the CUDA Tensor foundation is merged through PR #40;
 - the OOP CUDA elementwise and reduction bundle is merged through PR #41;
-- the OOP CUDA matrix multiplication, losses, and optimizer bundle is
-  implemented in the current branch, pending review.
+- the OOP CUDA matrix multiplication, losses, and optimizer bundle is merged
+  through PR #43;
+- the OOP CUDA spatial and FFT replacement bundle (`conv2d`, `max_pool2d`,
+  `fft2`, and `ifft2`) is implemented in the current branch, pending review.
 
 ## 2. Purpose
 
