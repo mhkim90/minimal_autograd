@@ -35,12 +35,22 @@ Always load these skills at the start of relevant tasks:
 
 - **karpathy**: When building/writing code — Karpathy's LLM coding best practices (simplicity, surgical changes, goal-driven execution)
 - **grilled-me**: When planning or reviewing plans — adversarial self-review to stress-test a plan before presenting
+- **plan-audit**: When auditing an externally authored plan, issue, PR
+  description, or design record before phased implementation. Run it once per
+  material revision; proposed boundaries and gates remain drafts until owner
+  approval.
 - **handoff**: When ending a session or switching context — write a HANDOFF.md so the next agent can continue seamlessly
 - **caveman**: When token efficiency is needed — ultra-compressed output (~75% fewer tokens) while keeping full technical accuracy; trigger with `/caveman` or "talk like caveman"
 - Language-aware caveman default: use `full` for English responses and `korean-full` for Korean responses unless the user explicitly requests another level.
 - **opencode-delegate**: Delegate **tedious / mechanical / long-running** work — applying precise edits, sweeps, run→inspect→tweak loops, test runs. Via `mcp__opencode__opencode_run_async` / `mcp__opencode__opencode_session_fork_async` plus job/session tools.
 - **codex-delegate**: Delegate **independent high-risk reasoning and final blocker gates** to the current Codex default (Sol-class). Use DISCUSS/read-only by default; EXECUTE is an explicit user-requested or approved fallback.
 - **phase-gated-implementation**: Use for phased work from a plan, PR/issue/design doc, or approved checklist. Claude Code orchestrates and controls publication; OpenCode's configured default implements bulk work, Luna handles evidence-based implementation escalation, Terra performs focused review, and Codex/Sol supplies the independent high-risk read-only gate. Do not use fixed token percentages.
+
+For phased work, use `plan-audit` for an external artifact and `grilled-me`
+for a plan drafted by the active agent. Resolve blocking findings and obtain
+owner approval for required scope globs and gates before relying on automatic
+continuation. Re-audit only after a material revision, then run
+`phase-gated-implementation`.
 
 ### Delegation model
 
@@ -69,7 +79,7 @@ do not route all difficult implementation to Codex.
 > probes to `codex-delegate`; use Codex only for GPU/CUDA reasoning or code edits,
 > then run GPU validation from Claude/OpenCode/local shell where a GPU is available.
 
-See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKILL.md), [skills/grilled-me/SKILL.md](skills/grilled-me/SKILL.md), [skills/handoff/SKILL.md](skills/handoff/SKILL.md), [skills/caveman/SKILL.md](skills/caveman/SKILL.md), [skills/opencode-delegate/SKILL.md](skills/opencode-delegate/SKILL.md), [skills/codex-delegate/SKILL.md](skills/codex-delegate/SKILL.md), and [skills/phase-gated-implementation/SKILL.md](skills/phase-gated-implementation/SKILL.md).
+See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKILL.md), [skills/grilled-me/SKILL.md](skills/grilled-me/SKILL.md), [skills/plan-audit/SKILL.md](skills/plan-audit/SKILL.md), [skills/handoff/SKILL.md](skills/handoff/SKILL.md), [skills/caveman/SKILL.md](skills/caveman/SKILL.md), [skills/opencode-delegate/SKILL.md](skills/opencode-delegate/SKILL.md), [skills/codex-delegate/SKILL.md](skills/codex-delegate/SKILL.md), and [skills/phase-gated-implementation/SKILL.md](skills/phase-gated-implementation/SKILL.md).
 
 ### Quick Reminders
 
@@ -77,4 +87,6 @@ See [skills/karpathy-best-practices/SKILL.md](skills/karpathy-best-practices/SKI
 - Write the minimum code that solves the problem — no speculative abstractions.
 - Touch only the files and lines required; match existing style.
 - Define success criteria before editing; verify with the smallest useful check.
-- Before acting on a plan, ask: am I solving more than asked? What is the most likely failure?
+- Before implementing an external plan, confirm a current `plan-audit` and
+  approved phase boundaries. For an agent-authored plan, confirm `grilled-me`
+  findings are resolved.

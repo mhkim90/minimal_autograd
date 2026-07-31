@@ -44,6 +44,10 @@ Load these skills at the start of relevant Codex tasks:
 
 - **karpathy**: When building, modifying, reviewing, or debugging code; keep changes simple, surgical, and goal-driven.
 - **grilled-me**: When drafting or reviewing plans; stress-test assumptions, risks, scope creep, and failure modes before presenting.
+- **plan-audit**: When an externally authored plan, issue, PR description, or
+  design document must be audited before phased implementation. Run it once
+  per material revision; its proposed boundaries and gates remain drafts until
+  the owner approves them.
 - **handoff**: When ending a session, switching context, or preserving progress for another agent.
 - **caveman**: When token efficiency is requested; use `full` for English and `korean-full` for Korean unless the user requests another level.
 - **phase-gated-implementation**: When implementing multi-phase work from a plan, PR description, issue, design doc, or approved checklist. From Codex, Codex/Sol owns the final gate, OpenCode's configured default handles bulk implementation, Luna is the evidence-based implementation escalation, Terra performs focused review, and Claude is a scarce independent read-only reviewer. From Claude Code, Claude orchestrates and controls publication, OpenCode default/Luna implement, Terra reviews, and Codex/Sol supplies the independent high-risk read-only gate. Use risk and evidence, not fixed token percentages.
@@ -53,7 +57,13 @@ Load these skills at the start of relevant Codex tasks:
   Claude may inspect files with `Read`, `Glob`, and `Grep` but has no shell,
   editing, or network tools.
 
-See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/skills/grilled-me/SKILL.md](.codex/skills/grilled-me/SKILL.md), [.codex/skills/handoff/SKILL.md](.codex/skills/handoff/SKILL.md), [.codex/skills/caveman/SKILL.md](.codex/skills/caveman/SKILL.md), [.codex/skills/phase-gated-implementation/SKILL.md](.codex/skills/phase-gated-implementation/SKILL.md), [.codex/skills/opencode-delegate/SKILL.md](.codex/skills/opencode-delegate/SKILL.md), [.codex/skills/claude-delegate/SKILL.md](.codex/skills/claude-delegate/SKILL.md), and [.claude/skills/phase-gated-implementation/SKILL.md](.claude/skills/phase-gated-implementation/SKILL.md).
+For phased work, use `plan-audit` for an external artifact and `grilled-me`
+for a plan drafted by the active agent. Resolve blocking findings and obtain
+owner approval for required scope globs and gates before relying on automatic
+continuation. Re-audit only after a material revision, then run
+`phase-gated-implementation`.
+
+See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/skills/grilled-me/SKILL.md](.codex/skills/grilled-me/SKILL.md), [.codex/skills/plan-audit/SKILL.md](.codex/skills/plan-audit/SKILL.md), [.codex/skills/handoff/SKILL.md](.codex/skills/handoff/SKILL.md), [.codex/skills/caveman/SKILL.md](.codex/skills/caveman/SKILL.md), [.codex/skills/phase-gated-implementation/SKILL.md](.codex/skills/phase-gated-implementation/SKILL.md), [.codex/skills/opencode-delegate/SKILL.md](.codex/skills/opencode-delegate/SKILL.md), [.codex/skills/claude-delegate/SKILL.md](.codex/skills/claude-delegate/SKILL.md), and [.claude/skills/phase-gated-implementation/SKILL.md](.claude/skills/phase-gated-implementation/SKILL.md).
 
 ### Quick Reminders
 
@@ -61,4 +71,6 @@ See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/
 - Write the minimum code that solves the problem; no speculative abstractions.
 - Touch only the files and lines required; match existing style.
 - Define success criteria before editing; verify with the smallest useful check.
-- Before acting on a plan, ask: am I solving more than asked? What is the most likely failure?
+- Before implementing an external plan, confirm a current `plan-audit` and
+  approved phase boundaries. For an agent-authored plan, confirm `grilled-me`
+  findings are resolved.

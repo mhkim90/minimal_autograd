@@ -1,0 +1,7 @@
+interface:
+  display_name: "Plan Audit"
+  short_description: "Audit external plans before phased implementation"
+  default_prompt: "Use $plan-audit to review this external plan and produce a phase-gate handoff."
+
+policy:
+  allow_implicit_invocation: true

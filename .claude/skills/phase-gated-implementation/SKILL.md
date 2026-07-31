@@ -73,8 +73,34 @@ the same deep review.
 
 If OpenCode tools are unavailable, stop before implementation unless the user
 explicitly authorizes a different engine. If Codex tools are unavailable, L1
-may continue, but any phase requiring the independent Sol gate becomes manual;
-report the missing gate instead of silently replacing it with Claude.
+or L2 phases that do not require the independent Sol gate may continue. Any
+phase requiring that gate is Level 4 and stops before implementation or
+publication; report the missing gate instead of silently replacing it with
+Claude.
+
+## Plan Audit Preflight
+
+Before implementation, identify the plan artifact, its authoring source, and
+the revision being executed.
+
+- For an externally authored plan, design document, issue, PR description,
+  decision record, migration outline, or checklist, run `plan-audit` once if
+  there is no audit for the current material revision.
+- For a plan drafted by the active agent, use `grilled-me` instead.
+- Do not repeat `plan-audit` at every phase. Re-run it only when a material
+  revision changes scope, contracts, sequencing, acceptance criteria, risk,
+  rollback, or implementation strategy.
+- An audit verdict of `blocked` is Level 4. Stop before implementation or
+  before the affected phase.
+- Preserve every manual stop named by `ready-with-manual-gates`.
+- Import the audit's phase dependencies, gates, risks, stop rules, and
+  downstream consumers into orientation and reporting.
+
+Audit recommendations are not approvals. Candidate scope globs, gates,
+sequencing changes, and risk levels remain drafts until the user or repository
+owner approves them. A `ready` verdict may allow manual implementation to
+start, but it cannot enable auto continuation unless the plan itself contains
+approved per-phase scope globs and gates.
 
 ## Risk Levels
 
@@ -95,6 +121,8 @@ report the missing gate instead of silently replacing it with Claude.
 
 1. **Orient Lightly**
    - Read the plan, PR, issue, or design doc.
+   - Confirm the `plan-audit` or `grilled-me` preflight for the artifact and
+     revision. Stop on a blocking or stale audit before the affected phase.
    - Confirm branch and dirty state.
    - At phase start, stop if `.claude/state/PAUSE` or `.codex/state/PAUSE`
      exists. Never remove either file automatically.
@@ -137,6 +165,10 @@ report the missing gate instead of silently replacing it with Claude.
    - Stage only intended files; never use `git add -A` around unrelated work.
    - Commit one phase at a time with `Phase-gate: auto (L1)` or
      `Phase-gate: manual`.
+   - Treat commit, push, and PR publication by default as an explicit
+     repository-owner policy. The step-7 manual gate controls whether the next
+     phase starts; it does not retroactively require approval to publish the
+     completed phase.
    - Push the current branch by default.
    - Open or update the PR by default.
    - If the user explicitly prohibits commit, push, or PR actions, stop before
@@ -164,15 +196,18 @@ report the missing gate instead of silently replacing it with Claude.
    Any violation forces a manual gate and explicit approval.
 
    Consecutive-auto limit: inspect the contiguous commit suffix before `HEAD`.
-   Count `Phase-gate: auto` trailers until the first commit without one. If the
-   count is already 2, classify the current phase manual. An unexpected
-   interleaved commit is scope drift and also forces a manual gate. Do not
-   create a state counter.
+   Count commits whose `Phase-gate` trailer value begins with `auto`; the
+   canonical value is `auto (L1)`. Stop at the first commit without that
+   prefix. If the count is already 2, classify the current phase manual. An
+   unexpected interleaved commit is scope drift and also forces a manual gate.
+   Do not create a state counter.
 
 ## Stop Rules
 
 Stop and report instead of weakening gates when:
 
+- the required `plan-audit` or `grilled-me` preflight is missing, stale, or
+  blocked
 - an acceptance metric fails
 - implementation must change plan intent
 - a test expectation appears wrong without strong supporting evidence
@@ -197,7 +232,7 @@ Constraints:
 - Working dir: <path>
 - Do not commit
 - Do not edit outside scope
-- Max red-gate attempts: 3
+- Max red-gate attempts: <approved phase cap, default 3>
 - Stop and report on <stop rules>
 Final response: changed files, decisions, commands, metrics, blockers,
 red-gate attempts used
@@ -232,6 +267,18 @@ Phase <N> complete: <commit or uncommitted state>
 
 Publication:
 - <commit/push/PR URL or stopped before prohibited action>
+
+Plan preflight:
+- artifact and audited revision: <identity + revision>
+- review: <plan-audit / grilled-me>
+- outcome: <ready / ready-with-manual-gates / blocked / grilled-me findings resolved>
+- freshness: <current / stale>
+- unresolved manual gates: <none or list>
+
+Imported audit handoff:
+- phase dependencies and preconditions: <none or list>
+- downstream consumers: <none or list>
+- applicable stop rules: <list>
 
 Scope:
 - approved scope globs: <list or missing - manual gate>
