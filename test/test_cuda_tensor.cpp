@@ -644,10 +644,10 @@ void test_legacy_extension_eigen_aliases_still_available() {
 }
 
 // The OOP math/optim/conv path supports a CUDA Variable for
-// matmul, mse_loss, cross_entropy, optim::SGD, and optim::Adam. The
-// remaining rejections cover ops whose CUDA kernels are not yet
-// implemented (transpose / reshape / cumsum / sin_op / concat /
-// conv2d). These tests build a CUDA Variable explicitly and assert
+// matmul, mse_loss, cross_entropy, optim::SGD, optim::Adam, and the
+// replacement conv2d. The remaining rejections cover ops whose CUDA
+// kernels are not yet implemented (transpose / reshape / cumsum /
+// sin_op / concat). These tests build a CUDA Variable explicitly and assert
 // that those unsupported calls surface a runtime_error rather than
 // silently falling through copy_to_host / copy_from_host into the
 // CPU kernels.
@@ -988,15 +988,17 @@ void test_oop_optimizer_unsupported_cuda_constructs_reject() {
     report("Tensor CUDA: optim::Adam hyperparameter validation rejects invalid values");
 }
 
-void test_oop_conv2d_rejects_cuda_inputs() {
-    // conv2d free function rejects CUDA inputs even on a CUDA-enabled
-    // build (the conv2d kernels remain CPU-only in this gate).
+void test_oop_conv2d_cuda_inputs() {
     Variable input(Tensor::ones(Shape{1, 1, 4, 4}, Device::cuda(0)), true);
-    Variable weight(Tensor::ones(Shape{1, 1, 3, 3}), true);
-    Variable bias(Tensor::zeros(Shape{1}), true);
-    CHECK_THROWS_AS(std::runtime_error,
-                    ag::conv2d(input, weight, bias, 1, 0));
-    report("Tensor CUDA: ag::conv2d rejects CUDA inputs");
+    Variable weight(Tensor::ones(Shape{1, 1, 3, 3}, Device::cuda(0)), true);
+    Variable bias(Tensor::zeros(Shape{1}, Device::cuda(0)), true);
+    Variable out = ag::conv2d(input, weight, bias, 1, 0);
+    CHECK(out.value().device().is_cuda());
+    out.backward(Tensor::ones(out.value().shape(), Device::cuda(0)));
+    CHECK(input.grad().device().is_cuda());
+    CHECK(weight.grad().device().is_cuda());
+    CHECK(bias.grad().device().is_cuda());
+    report("Tensor CUDA: ag::conv2d supports CUDA inputs and gradients");
 }
 
 void test_oop_loss_mixed_device_rejects() {
@@ -1683,7 +1685,7 @@ int main() {
     test_oop_backward_cuda_accumulates_and_matmul_works();
     test_oop_diffusion_rejects_cuda_tensor();
     test_oop_optimizer_unsupported_cuda_constructs_reject();
-    test_oop_conv2d_rejects_cuda_inputs();
+    test_oop_conv2d_cuda_inputs();
     test_oop_loss_mixed_device_rejects();
     test_oop_matmul_rank2_cuda_parity();
     test_oop_matmul_batched_rank3_cuda_parity();

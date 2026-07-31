@@ -1,5 +1,7 @@
 #include "autograd/fft.h"
 
+#include "detail/constants.h"
+
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -8,8 +10,6 @@
 
 namespace ag {
 namespace {
-
-constexpr float kPi = 3.14159265358979323846f;
 
 struct ComplexMats {
     Mat real;
@@ -38,7 +38,7 @@ ComplexMats dft2_reference(const Mat& real,
             float sum_i = 0.f;
             for (int r = 0; r < rows; ++r) {
                 for (int c = 0; c < cols; ++c) {
-                    const float angle = 2.f * kPi *
+                    const float angle = 2.f * detail::kPi *
                         (static_cast<float>(kr * r) / static_cast<float>(rows) +
                          static_cast<float>(kc * c) / static_cast<float>(cols));
                     const float wr = std::cos(angle);

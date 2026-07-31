@@ -12,8 +12,8 @@
 //     every leading batch coordinate.
 //   * Last two axes must be positive. Rank-1 and zero-extent inputs
 //     are rejected with std::invalid_argument.
-//   * Non-CPU devices are rejected with std::runtime_error; CUDA
-//     support is not silently forwarded to the legacy path.
+//   * CPU and CUDA devices are supported; mixed real/imag devices are
+//     rejected with std::invalid_argument.
 //   * Only FftNorm::Backward is supported; any other value throws
 //     std::runtime_error. Backward normalization: forward is the
 //     unscaled DFT, inverse is the inverse DFT scaled by 1/(H*W).

@@ -125,9 +125,9 @@ Variable clamp(const Variable& a, float lo, float hi);
 // must be a rank-1 tensor of length equal to the channel axis. Stride
 // must be a positive integer; pad must be a non-negative integer such
 // that the resulting output extent is well-defined (i.e. (H + 2*pad -
-// kH) is a non-negative multiple of stride). All operations are
-// CPU-only: a non-CPU operand raises std::runtime_error; shape,
-// geometry, and channel-mismatch errors raise std::invalid_argument.
+// kH) is a non-negative multiple of stride). Conv2d and MaxPool2d run
+// on CPU and CUDA; shape, geometry, channel-mismatch, and mixed-device
+// errors raise std::invalid_argument.
 
 // 2D convolution. Computes the standard cross-correlation:
 //
@@ -144,7 +144,8 @@ Variable conv2d(const Variable& input,
                int stride,
                int pad);
 
-// 2D max pooling. stride defaults to kernel size (non-overlapping).
+// 2D max pooling. The explicit stride controls overlap; use kernel-sized
+// stride for non-overlapping windows.
 // The forward graph records the per-output argmax position as a
 // rank-4 (N, C, oH, oW) float tensor of kernel-flat indices; backward
 // routes the upstream gradient to the recorded argmax (with

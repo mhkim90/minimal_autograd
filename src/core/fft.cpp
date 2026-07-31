@@ -16,9 +16,8 @@
 //   * H and W must be positive integers; rank < 2 or zero H/W are
 //     rejected with std::invalid_argument.
 //   * Real and imag must share shape and device.
-//   * Non-CPU devices are rejected with std::runtime_error. CUDA
-//     support is not silently forwarded to the legacy path; the
-//     replacement surface is CPU-only.
+//   * CPU and CUDA devices use the replacement Tensor kernels directly;
+//     CUDA support is not silently forwarded to the legacy path.
 //
 // Normalization: FftNorm::Backward only. Forward is the unscaled DFT,
 // inverse is the inverse DFT scaled by 1/(H*W), so composing them is
@@ -43,11 +42,6 @@ namespace {
 
 void validate_fft_input(const ComplexVariable& z, const char* op) {
     validate_complex_pair(z, op);
-    if (z.real.device().is_cuda() || z.imag.device().is_cuda()) {
-        std::ostringstream os;
-        os << op << ": CUDA tensors are not supported in this build";
-        throw std::runtime_error(os.str());
-    }
     const Shape& s = z.real.value().shape();
     if (s.rank() < 2) {
         std::ostringstream os;
@@ -78,7 +72,14 @@ std::pair<Variable, Variable> fft_impl_variables(
     auto real_backward =
         [forward_was_inverse, dev](
             const Tensor& upstream) -> std::vector<Tensor> {
-        Tensor zero = Tensor::zeros(upstream.shape(), dev);
+        Tensor zero;
+#ifdef AUTOGRAD_USE_CUDA
+        zero = dev.is_cuda()
+            ? detail::cuda_tensor_zeros(upstream.shape(), dev)
+            : Tensor::zeros(upstream.shape(), dev);
+#else
+        zero = Tensor::zeros(upstream.shape(), dev);
+#endif
         auto adj = detail::tensor_dft2_last2(
             upstream, zero,
             /*inverse=*/!forward_was_inverse,
@@ -88,7 +89,14 @@ std::pair<Variable, Variable> fft_impl_variables(
     auto imag_backward =
         [forward_was_inverse, dev](
             const Tensor& upstream) -> std::vector<Tensor> {
-        Tensor zero = Tensor::zeros(upstream.shape(), dev);
+        Tensor zero;
+#ifdef AUTOGRAD_USE_CUDA
+        zero = dev.is_cuda()
+            ? detail::cuda_tensor_zeros(upstream.shape(), dev)
+            : Tensor::zeros(upstream.shape(), dev);
+#else
+        zero = Tensor::zeros(upstream.shape(), dev);
+#endif
         auto adj = detail::tensor_dft2_last2(
             zero, upstream,
             /*inverse=*/!forward_was_inverse,

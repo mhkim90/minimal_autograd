@@ -71,6 +71,42 @@ Tensor cuda_tensor_matmul_backward_a_nd(const Tensor& g,
 Tensor cuda_tensor_matmul_backward_b_nd(const Tensor& a,
                                         const Tensor& g);
 
+Tensor cuda_tensor_conv2d_nchw_forward(const Tensor& input,
+                                       const Tensor& weight,
+                                       const Tensor& bias,
+                                       int stride,
+                                       int pad,
+                                       Tensor& saved_col);
+Tensor cuda_tensor_conv2d_nchw_backward_input(const Tensor& g,
+                                              const Tensor& weight,
+                                              int N, int C, int H, int W,
+                                              int kH, int kW,
+                                              int stride, int pad);
+Tensor cuda_tensor_conv2d_nchw_backward_weight(const Tensor& g,
+                                               const Tensor& col,
+                                               const Shape& weight_shape);
+Tensor cuda_tensor_conv2d_nchw_backward_bias(const Tensor& g);
+
+Tensor cuda_tensor_maxpool2d_nchw_forward(const Tensor& input,
+                                          int kH, int kW, int stride,
+                                          Tensor& saved_mask);
+Tensor cuda_tensor_maxpool2d_nchw_backward(const Tensor& g,
+                                           const Tensor& mask,
+                                           int N, int C, int H, int W,
+                                           int kH, int kW, int stride);
+
+Tensor cuda_tensor_zeros(const Shape& shape, Device device);
+
+struct CudaTensorDFT2Result {
+    Tensor real;
+    Tensor imag;
+};
+
+CudaTensorDFT2Result cuda_tensor_dft2_last2(const Tensor& real,
+                                            const Tensor& imag,
+                                            bool inverse,
+                                            bool scale_output);
+
 // In-place parameter updates on CUDA for the OOP optim::SGD /
 // optim::Adam free path. They operate directly on the device
 // pointers supplied through the private CudaTensorAccess bridge so

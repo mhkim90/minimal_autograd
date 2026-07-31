@@ -614,6 +614,123 @@ void test_maxpool2d_invalid_arguments() {
     report("ag::max_pool2d / ag::nn::MaxPool2d reject invalid arguments");
 }
 
+void test_zero_batch_spatial_backward_shapes() {
+    const ag::Shape input_shape{0, 1, 3, 3};
+    const ag::Shape weight_shape{2, 1, 2, 2};
+    ag::Variable input(ag::Tensor::empty(input_shape), true);
+    ag::Variable weight(ag::Tensor::ones(weight_shape), true);
+    ag::Variable bias(ag::Tensor::zeros(ag::Shape{2}), true);
+    ag::Variable conv = ag::conv2d(input, weight, bias, 1, 0);
+    conv.backward(ag::Tensor::ones(conv.value().shape()));
+    CHECK(input.grad().shape() == input_shape);
+    CHECK(weight.grad().shape() == weight_shape);
+    CHECK(bias.grad().shape() == ag::Shape{2});
+
+    ag::Variable pool_input(ag::Tensor::empty(input_shape), true);
+    ag::Variable pool = ag::max_pool2d(pool_input, 2, 2, 1);
+    pool.backward(ag::Tensor::ones(pool.value().shape()));
+    CHECK(pool_input.grad().shape() == input_shape);
+    report("zero-batch conv2d/max_pool2d backward preserves input gradient shapes");
+}
+
+#ifdef AUTOGRAD_USE_CUDA
+bool replacement_cuda_available() {
+    try {
+        (void)ag::Tensor::empty(ag::Shape{0}, ag::Device::cuda(0));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+void test_cuda_replacement_conv_and_pool_parity() {
+    const ag::Device cuda = ag::Device::cuda(0);
+    const ag::Shape input_shape{2, 2, 5, 5};
+    const ag::Shape weight_shape{3, 2, 3, 3};
+    std::vector<float> input_data(input_shape.numel());
+    std::vector<float> weight_data(weight_shape.numel());
+    std::vector<float> bias_data{0.1f, -0.2f, 0.3f};
+    for (std::size_t i = 0; i < input_data.size(); ++i) {
+        input_data[i] = 0.03f * static_cast<float>(static_cast<int>(i) - 17);
+    }
+    for (std::size_t i = 0; i < weight_data.size(); ++i) {
+        weight_data[i] = 0.02f * static_cast<float>(static_cast<int>(i) - 8);
+    }
+
+    ag::Variable cpu_input(make_tensor(input_data, input_shape), true);
+    ag::Variable cpu_weight(make_tensor(weight_data, weight_shape), true);
+    ag::Variable cpu_bias(make_tensor(bias_data, ag::Shape{3}), true);
+    ag::Variable cuda_input(
+        ag::Tensor::from_host(input_data.data(), input_shape, cuda), true);
+    ag::Variable cuda_weight(
+        ag::Tensor::from_host(weight_data.data(), weight_shape, cuda), true);
+    ag::Variable cuda_bias(
+        ag::Tensor::from_host(bias_data.data(), ag::Shape{3}, cuda), true);
+
+    ag::Variable cpu_conv = ag::conv2d(
+        cpu_input, cpu_weight, cpu_bias, /*stride=*/2, /*pad=*/1);
+    ag::Variable cuda_conv = ag::conv2d(
+        cuda_input, cuda_weight, cuda_bias, /*stride=*/2, /*pad=*/1);
+    CHECK(cuda_conv.value().device().is_cuda());
+    CHECK((cuda_conv.value().shape() == ag::Shape{2, 3, 3, 3}));
+    check_close(read_values(cuda_conv.value()), read_values(cpu_conv.value()),
+                2e-4f);
+
+    cpu_conv.backward(ag::Tensor::ones(cpu_conv.value().shape()));
+    cuda_conv.backward(ag::Tensor::ones(cuda_conv.value().shape(), cuda));
+    check_close(read_values(cuda_input.grad()), read_values(cpu_input.grad()),
+                2e-4f);
+    check_close(read_values(cuda_weight.grad()), read_values(cpu_weight.grad()),
+                2e-4f);
+    check_close(read_values(cuda_bias.grad()), read_values(cpu_bias.grad()),
+                2e-4f);
+    CHECK_THROWS_AS(
+        ag::conv2d(cuda_input, cpu_weight, cuda_bias, /*stride=*/2, /*pad=*/1),
+        std::invalid_argument);
+
+    const ag::Shape pool_shape{2, 2, 4, 4};
+    std::vector<float> pool_data(pool_shape.numel());
+    for (std::size_t i = 0; i < pool_data.size(); ++i) {
+        pool_data[i] = static_cast<float>((i * 7 + 3) % 19) - 5.f;
+    }
+    ag::Variable cpu_pool_input(make_tensor(pool_data, pool_shape), true);
+    ag::Variable cuda_pool_input(
+        ag::Tensor::from_host(pool_data.data(), pool_shape, cuda), true);
+    ag::Variable cpu_pool = ag::max_pool2d(cpu_pool_input, 2, 2, 1);
+    ag::Variable cuda_pool = ag::max_pool2d(cuda_pool_input, 2, 2, 1);
+    CHECK(cuda_pool.value().device().is_cuda());
+    check_close(read_values(cuda_pool.value()), read_values(cpu_pool.value()),
+                1e-5f);
+    cpu_pool.backward(ag::Tensor::ones(cpu_pool.value().shape()));
+    cuda_pool.backward(ag::Tensor::ones(cuda_pool.value().shape(), cuda));
+    check_close(read_values(cuda_pool_input.grad()),
+                read_values(cpu_pool_input.grad()), 1e-5f);
+
+    std::vector<float> ties{1.f, 1.f, 1.f, 1.f};
+    ag::Variable tie_input(ag::Tensor::from_host(
+        ties.data(), ag::Shape{1, 1, 2, 2}, cuda), true);
+    ag::Variable tie_pool = ag::max_pool2d(tie_input, 2, 2, 2);
+    tie_pool.backward(ag::Tensor::ones(tie_pool.value().shape(), cuda));
+    const std::vector<float> tie_grad = read_values(tie_input.grad());
+    CHECK(tie_grad == std::vector<float>({1.f, 0.f, 0.f, 0.f}));
+
+    ag::Variable empty_input(ag::Tensor::empty(
+        ag::Shape{0, 2, 5, 5}, cuda), true);
+    ag::Variable empty_conv = ag::conv2d(
+        empty_input, cuda_weight, cuda_bias, /*stride=*/2, /*pad=*/1);
+    CHECK(empty_conv.value().empty());
+    empty_conv.backward(ag::Tensor::ones(empty_conv.value().shape(), cuda));
+    CHECK(empty_input.grad().shape() == ag::Shape{0, 2, 5, 5});
+    CHECK(cuda_weight.grad().shape() == weight_shape);
+    CHECK(cuda_bias.grad().shape() == ag::Shape{3});
+    ag::Variable empty_pool = ag::max_pool2d(empty_input, 2, 2, 1);
+    CHECK(empty_pool.value().empty());
+    empty_pool.backward(ag::Tensor::ones(empty_pool.value().shape(), cuda));
+    CHECK(empty_input.grad().shape() == ag::Shape{0, 2, 5, 5});
+    report("CUDA replacement conv2d/max_pool2d match CPU forward and backward");
+}
+#endif
+
 // ── DepthwiseConv2d, AvgPool2d, NearestUpsample2d ───────────────────
 
 // Naive NCHW DepthwiseConv2d reference. Input (N, C, H, W),
@@ -1147,6 +1264,14 @@ int main() {
     test_conv2d_invalid_arguments();
     test_conv2d_rank1_bias_backward_shape();
     test_maxpool2d_invalid_arguments();
+    test_zero_batch_spatial_backward_shapes();
+#ifdef AUTOGRAD_USE_CUDA
+    if (replacement_cuda_available()) {
+        test_cuda_replacement_conv_and_pool_parity();
+    } else {
+        std::printf("  [skip] CUDA replacement spatial tests: no reachable CUDA device\n");
+    }
+#endif
 
     test_depthwise_conv2d_forward_matches_naive();
     test_depthwise_conv2d_gradients();

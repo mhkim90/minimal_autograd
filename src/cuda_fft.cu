@@ -1,6 +1,8 @@
 #include "autograd/fft.h"
 #include "autograd/cuda_core.h"
 
+#include "detail/constants.h"
+
 #include <cuda_runtime.h>
 
 #include <memory>
@@ -12,7 +14,6 @@ namespace ag {
 namespace detail {
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
 constexpr int kBlock = 256;
 constexpr int kMaxCudaFftDim = 256;
 
