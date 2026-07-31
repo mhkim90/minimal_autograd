@@ -22,7 +22,7 @@ add_executable(autograd_smoke main.cpp)
 target_link_libraries(autograd_smoke PRIVATE autograd::autograd)
 
 # --- Inheritance self-check -------------------------------------------------
-# The Phase 1 package boundary contract is "embedded add_subdirectory
+# The package boundary contract is "embedded add_subdirectory
 # consumers do not inherit autograd's in-tree tests/examples". The check
 # below makes that contract executable: configure fails if any of the
 # known autograd test/example targets are visible in this consumer's scope

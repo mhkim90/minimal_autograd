@@ -258,13 +258,23 @@ because the consumer's configure step builds autograd itself, passing
 `-DAUTOGRAD_USE_CUDA=ON` to the parent project does enable CUDA on the
 embedded autograd build.
 
-Minimal consumer smoke projects (deterministic compile/link/run checks
-exercising the normal public API via `#include "autograd.h"` only — no
-internal, Eigen, or CUDA headers) live in `tests/consumer/find_package/`
-and `tests/consumer/add_subdir/`. The `add_subdirectory` smoke project's
-own `CMakeLists.txt` enforces the no-inheritance contract at configure
-time by failing if any known autograd test/example target is visible to
-the consumer.
+Minimal replacement-API consumer smoke projects live in
+`tests/consumer/find_package/` and `tests/consumer/add_subdir/`. They include
+the canonical Tensor/Variable, module, optimizer, and free-function headers
+directly rather than the legacy umbrella surface. The two programs are
+identical deterministic compile/link/run checks covering forward/backward,
+registered parameter traversal, Adam, and AdamState snapshot/load_state. The
+`add_subdirectory` smoke project's own `CMakeLists.txt` enforces the
+no-inheritance contract at configure time by failing if any known autograd
+test/example target is visible to the consumer.
+
+For CPU interoperation, include the opt-in `autograd/extension/eigen.h` header.
+Its `tensor_from_eigen` and `tensor_to_eigen` helpers copy values between
+Eigen's column-major matrices and the Tensor row-major layout while preserving
+logical `(row, col)` values. The helpers are non-aliasing, rank-2/CPU checked
+on the Tensor-to-Eigen path, and never perform a hidden device transfer. The
+standalone `tests/consumer/eigen_custom/` project exercises this boundary with
+an asymmetric 2x3 custom operation.
 
 #### Enabling CUDA as a downstream consumer
 
@@ -275,6 +285,12 @@ in the parent configure step (along with
 autograd side at install time; install a CUDA-enabled autograd into a
 prefix and point the consumer at that prefix via `CMAKE_PREFIX_PATH`.
 The CPU default build is unaffected when CUDA is left off.
+
+Hosted CPU automation covers installation plus the `find_package`, Eigen
+custom-operation, and `add_subdirectory` consumers. The standalone CUDA custom
+consumer is a manual gate because hosted CI does not provide a CUDA device.
+Its exact build and run commands, including the CUDA-enabled install prefix,
+are documented in `tests/consumer/README.md`.
 
 ## Quick start
 
