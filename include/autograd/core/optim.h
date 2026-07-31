@@ -24,17 +24,16 @@ namespace optim {
 // eligible parameter.
 //
 // Constraints:
-//   * CPU-only. Non-CPU parameters cause std::runtime_error to be
-//     thrown from step().
+//   * CPU and CUDA parameters are both accepted and may be mixed in
+//     a single parameter list; each parameter is updated on its own
+//     device.
 //   * Parameters without requires_grad, or with no current gradient
 //     (has_grad == false), are skipped without error.
 //   * The learning rate must be finite and non-negative. The
 //     constructor rejects non-finite and negative values.
-//   * Mutation is performed through the narrow internal
-//     detail::VariableAccess::apply_to_storage helper. The Tensor
-//     storage is mutated in place; the Variable's node Tensor is not
-//     replaced. A Tensor alias taken before step() observes the
-//     updated values.
+//   * Mutation is performed in place; the parameter Tensor's storage
+//     identity is preserved. A Tensor alias taken before step()
+//     observes the updated values.
 class SGD {
 public:
     SGD(std::vector<Variable> params, float lr);
@@ -79,23 +78,30 @@ struct AdamState {
 //   p -= lr * m_hat / (sqrt(v_hat) + eps).
 //
 // Constraints:
-//   * CPU-only. The constructor rejects every CUDA parameter up front.
+//   * CPU and CUDA parameters are both accepted and may be mixed in
+//     a single parameter list. Moment Tensors live on the same device
+//     as their parameter; the trajectory matches a single-device run
+//     with the same gradients.
 //   * Constructor validates: lr is finite and non-negative; beta1 and
 //     beta2 are finite and lie in [0, 1); eps is finite and positive.
 //   * Parameters without requires_grad / has_grad are skipped by step();
 //     their moments are unchanged. The optimizer-wide step count advances
 //     once only when at least one parameter is eligible.
 //   * Empty parameter lists are accepted (no-op step/zero_grad).
-//   * step() prevalidates every eligible parameter before any state or
-//     parameter mutation, and computes all new values into temporaries
+//   * step() prevalidates every eligible parameter before any state
+//     or parameter mutation. CPU eligible parameters have their new
+//     moments and parameter values prepared in host temporaries and
+//     are committed together once every eligible index is computed,
 //     so a failure cannot leave the optimizer or parameters partially
-//     updated.
+//     updated. CUDA eligible parameters are updated in place on the
+//     device after validation completes.
 //   * Parameter Tensor storage is preserved during commit through the
 //     internal optimizer mutation boundary.
-//   * state() returns independent deep-cloned moments; load_state()
-//     validates the entire snapshot before mutating any live state,
-//     and a failed load leaves both optimizer state and parameter
-//     values unchanged.
+//   * state() returns independent deep-cloned moments on each
+//     parameter's device; load_state() validates the entire snapshot
+//     (step count, hyperparameters, moment counts, shapes, devices)
+//     before mutating any live state, and a failed load leaves both
+//     optimizer state and parameter values unchanged.
 class Adam {
 public:
     Adam(std::vector<Variable> params,

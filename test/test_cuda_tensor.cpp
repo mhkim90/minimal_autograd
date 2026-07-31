@@ -114,6 +114,19 @@ void write_host(Tensor& t, const float* src) {
     t.copy_from_host(src, t.elements());
 }
 
+// Drive backward through a no-op scale to set p.grad() to a known
+// tensor on p's device. Variable::grad() returns a const reference,
+// so we cannot call copy_from_host on it directly; the backward path
+// is the only public way to install a chosen gradient value without
+// widening the public API.
+void assign_grad(Variable& p, const std::vector<float>& g) {
+    p.zero_grad();
+    Tensor upstream = Tensor::from_host(g.data(), p.value().shape(),
+                                        p.value().device());
+    Variable loss = ag::scale(p, 1.0f);
+    loss.backward(upstream);
+}
+
 // Skip everything when no CUDA device is visible. The probe asks
 // for a Tensor on cuda:0 through the public Tensor surface; the
 // factory validates the device index eagerly even for zero-element
@@ -630,12 +643,14 @@ void test_legacy_extension_eigen_aliases_still_available() {
     report("Tensor CUDA: Device descriptor remains intact on a CUDA-enabled build");
 }
 
-// The new OOP math/optim/conv path is CPU-only in this gate. These
-// tests build a CUDA Variable explicitly, then run each class of op
-// and assert that the call surfaces a runtime_error rather than
+// The OOP math/optim/conv path supports a CUDA Variable for
+// matmul, mse_loss, cross_entropy, optim::SGD, and optim::Adam. The
+// remaining rejections cover ops whose CUDA kernels are not yet
+// implemented (transpose / reshape / cumsum / sin_op / concat /
+// conv2d). These tests build a CUDA Variable explicitly and assert
+// that those unsupported calls surface a runtime_error rather than
 // silently falling through copy_to_host / copy_from_host into the
-// CPU kernels. We use small free functions to dispatch quickly and
-// keep the per-op test bodies short.
+// CPU kernels.
 void test_oop_math_rejects_cuda_variable() {
     auto cuda_var_of = [](const Tensor& t) {
         return ag::Variable(t, /*requires_grad=*/true);
@@ -650,13 +665,6 @@ void test_oop_math_rejects_cuda_variable() {
         CHECK_THROWS_AS(std::runtime_error, ag::sin_op(x));
     }
 
-    // binary operations outside this gate remain rejected.
-    {
-        Variable a = cuda_var_of(Tensor::ones(Shape{2, 3}, Device::cuda(0)));
-        Variable b = cuda_var_of(Tensor::ones(Shape{2, 3}, Device::cuda(0)));
-        CHECK_THROWS_AS(std::runtime_error, ag::matmul(a, b));
-    }
-
     // batched concat with one CUDA input and a CPU input remains
     // a CUDA rejection (concat validates every input uniformly).
     {
@@ -666,7 +674,7 @@ void test_oop_math_rejects_cuda_variable() {
                         ag::concat({cuda_a, cpu_b}, 0));
     }
 
-    report("Tensor CUDA: OOP math free functions reject CUDA inputs at the boundary");
+    report("Tensor CUDA: OOP math free functions reject remaining unsupported CUDA inputs");
 }
 
 Variable composed_elementwise_graph(const Variable& x) {
@@ -925,7 +933,7 @@ void test_oop_broadcast_repeated_backward_cuda() {
     report("Tensor CUDA: broadcast graph accumulates repeated backward on CUDA");
 }
 
-void test_oop_backward_cuda_accumulates_and_unsupported_rejects() {
+void test_oop_backward_cuda_accumulates_and_matmul_works() {
     Variable scalar(Tensor::ones(Shape{}, Device::cuda(0)), true);
     scalar.backward();
     CHECK(scalar.has_grad());
@@ -939,11 +947,17 @@ void test_oop_backward_cuda_accumulates_and_unsupported_rejects() {
     read_host(vector.grad(), accumulated.data());
     check_close(accumulated, std::vector<float>{2.f, 2.f});
 
+    // matmul on CUDA now succeeds and produces a CUDA Variable;
+    // its backward stays on CUDA as well.
     Variable a(Tensor::ones(Shape{2, 2}, Device::cuda(0)), true);
     Variable b(Tensor::ones(Shape{2, 2}, Device::cuda(0)), true);
-    CHECK_THROWS_AS(std::runtime_error, ag::matmul(a, b));
+    Variable mm = ag::matmul(a, b);
+    CHECK(mm.value().device().is_cuda());
+    mm.backward(Tensor::ones(Shape{2, 2}, Device::cuda(0)));
+    CHECK(a.grad().device().is_cuda());
+    CHECK(b.grad().device().is_cuda());
 
-    report("Tensor CUDA: backward stays on CUDA, accumulates, and matmul rejects");
+    report("Tensor CUDA: backward stays on CUDA, accumulates, matmul forward+backward on CUDA");
 }
 
 void test_oop_diffusion_rejects_cuda_tensor() {
@@ -955,32 +969,23 @@ void test_oop_diffusion_rejects_cuda_tensor() {
     report("Tensor CUDA: randn_like rejects CUDA input");
 }
 
-void test_oop_optimizer_rejects_cuda_variable() {
-    // optim::Adam rejects a CUDA parameter at construction
-    // (the constructor pre-validates every parameter's device).
+void test_oop_optimizer_unsupported_cuda_constructs_reject() {
+    // optim::Adam constructor pre-validates hyperparameters; only
+    // finite/non-negative lr / finite beta in [0,1) / positive eps
+    // are accepted. We confirm those contracts still reject on CUDA.
     {
         Variable p(Tensor::ones(Shape{2, 2}, Device::cuda(0)), true);
         bool threw = false;
         try {
-            ag::optim::Adam adam({p}, 1e-3f);
+            ag::optim::Adam adam({p}, /*lr=*/-1.f);
             (void)adam;
-        } catch (const std::runtime_error&) {
+        } catch (const std::invalid_argument&) {
             threw = true;
         }
         CHECK(threw);
     }
 
-    // optim::AdamState.load_state() rejects a snapshot whose
-    // parameters are on CUDA when the live optimizer is on CUDA
-    // and the original construction rejected CUDA at all. We
-    // verify the upside by attempting to load_state from a CPU
-    // AdamState into an optimizer that was constructed with all
-    // CPU parameters (this should succeed) and then a CUDA
-    // snapshot (which would fail at construction so we cannot
-    // reach load_state). We confirm that construction-time
-    // rejection is sufficient for the snapshot path as well.
-
-    report("Tensor CUDA: optim::Adam rejects CUDA parameters at construction");
+    report("Tensor CUDA: optim::Adam hyperparameter validation rejects invalid values");
 }
 
 void test_oop_conv2d_rejects_cuda_inputs() {
@@ -994,19 +999,653 @@ void test_oop_conv2d_rejects_cuda_inputs() {
     report("Tensor CUDA: ag::conv2d rejects CUDA inputs");
 }
 
-void test_oop_loss_rejects_cuda_inputs() {
-    // mse_loss: pred Variable or target Tensor on CUDA rejects.
+void test_oop_loss_mixed_device_rejects() {
+    // mse_loss / cross_entropy accept all-CUDA inputs (covered in
+    // dedicated parity tests below). Mixed-device calls (pred on
+    // one device, target on the other) keep throwing so silent
+    // device transfers cannot leak through loss APIs.
     Variable pred_cuda(Tensor::ones(Shape{2, 3}, Device::cuda(0)), true);
     Tensor target_cpu = Tensor::zeros(Shape{2, 3});
     CHECK_THROWS_AS(std::runtime_error,
                     ag::mse_loss(pred_cuda, target_cpu));
+    CHECK_THROWS_AS(std::runtime_error,
+                    ag::cross_entropy(pred_cuda, target_cpu));
 
     Variable pred_cpu_v(Tensor::ones(Shape{2, 3}), true);
     Tensor target_cuda = Tensor::zeros(Shape{2, 3}, Device::cuda(0));
     CHECK_THROWS_AS(std::runtime_error,
                     ag::mse_loss(pred_cpu_v, target_cuda));
+    CHECK_THROWS_AS(std::runtime_error,
+                    ag::cross_entropy(pred_cpu_v, target_cuda));
 
-    report("Tensor CUDA: mse_loss rejects CUDA pred or target tensors");
+    report("Tensor CUDA: mse_loss / cross_entropy reject mixed-device pred/target");
+}
+
+// ── CUDA matmul / loss / optimizer parity ──────────────────────────────
+//
+// Each test below exercises a single OOP operation end-to-end on a
+// real CUDA device and asserts CPU <-> CUDA parity within a small
+// tolerance. The matmul tests cover rank-2, batched rank-3, and
+// rank-4 inputs. The optim tests cover SGD and Adam in-place updates,
+// alias visibility, mixed-device parameter lists, and AdamState
+// snapshot/restore with device preservation.
+
+void test_oop_matmul_rank2_cuda_parity() {
+    // Deterministic non-square fixtures for forward + both gradients.
+    const Shape a_shape{2, 3};
+    const Shape b_shape{3, 4};
+    std::vector<float> av{
+        1.f, -2.f, 3.f,
+        -4.f, 5.f, -6.f,
+    };
+    std::vector<float> bv{
+        0.5f, -1.f, 1.5f, -2.f,
+        2.5f, -3.f, 3.5f, -4.f,
+        -4.5f, 5.f, -5.5f, 6.f,
+    };
+
+    Variable cpu_a(Tensor::from_host(av.data(), a_shape), true);
+    Variable cpu_b(Tensor::from_host(bv.data(), b_shape), true);
+    Variable cuda_a(Tensor::from_host(av.data(), a_shape, Device::cuda(0)), true);
+    Variable cuda_b(Tensor::from_host(bv.data(), b_shape, Device::cuda(0)), true);
+
+    Variable cpu_out = ag::matmul(cpu_a, cpu_b);
+    Variable cuda_out = ag::matmul(cuda_a, cuda_b);
+    CHECK(cpu_out.value().shape() == (Shape{2, 4}));
+    CHECK(cuda_out.value().shape() == (Shape{2, 4}));
+    CHECK(cuda_out.value().device().is_cuda());
+
+    std::vector<float> cpu_value(cpu_out.value().elements());
+    std::vector<float> cuda_value(cuda_out.value().elements());
+    read_host(cpu_out.value(), cpu_value.data());
+    read_host(cuda_out.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value, 5e-5f);
+
+    Tensor upstream = Tensor::ones(cpu_out.value().shape(), Device::cuda(0));
+    Tensor cpu_up = Tensor::ones(cpu_out.value().shape());
+    cpu_out.backward(cpu_up);
+    cuda_out.backward(upstream);
+    std::vector<float> cpu_a_grad(av.size()), cuda_a_grad(av.size());
+    std::vector<float> cpu_b_grad(bv.size()), cuda_b_grad(bv.size());
+    read_host(cpu_a.grad(), cpu_a_grad.data());
+    read_host(cuda_a.grad(), cuda_a_grad.data());
+    read_host(cpu_b.grad(), cpu_b_grad.data());
+    read_host(cuda_b.grad(), cuda_b_grad.data());
+    check_close(cuda_a_grad, cpu_a_grad, 5e-5f);
+    check_close(cuda_b_grad, cpu_b_grad, 5e-5f);
+    CHECK(cuda_a.grad().device().is_cuda());
+    CHECK(cuda_b.grad().device().is_cuda());
+
+    report("Tensor CUDA: matmul rank-2 forward + both operand gradients match CPU");
+}
+
+void test_oop_matmul_batched_rank3_cuda_parity() {
+    // (B, M, K) @ (B, K, N) with non-trivial batch dim.
+    const Shape a_shape{2, 3, 4};
+    const Shape b_shape{2, 4, 5};
+    std::vector<float> av(a_shape.numel()), bv(b_shape.numel());
+    for (std::size_t i = 0; i < av.size(); ++i) {
+        av[i] = static_cast<float>(i) * 0.125f - 0.5f;
+    }
+    for (std::size_t i = 0; i < bv.size(); ++i) {
+        bv[i] = static_cast<float>(i) * 0.25f - 1.f;
+    }
+
+    Variable cpu_a(Tensor::from_host(av.data(), a_shape), true);
+    Variable cpu_b(Tensor::from_host(bv.data(), b_shape), true);
+    Variable cuda_a(Tensor::from_host(av.data(), a_shape, Device::cuda(0)), true);
+    Variable cuda_b(Tensor::from_host(bv.data(), b_shape, Device::cuda(0)), true);
+
+    Variable cpu_out = ag::matmul(cpu_a, cpu_b);
+    Variable cuda_out = ag::matmul(cuda_a, cuda_b);
+    CHECK(cpu_out.value().shape() == (Shape{2, 3, 5}));
+    CHECK(cuda_out.value().shape() == (Shape{2, 3, 5}));
+
+    std::vector<float> cpu_value(cpu_out.value().elements());
+    std::vector<float> cuda_value(cuda_out.value().elements());
+    read_host(cpu_out.value(), cpu_value.data());
+    read_host(cuda_out.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value, 5e-5f);
+
+    Tensor cpu_up = Tensor::ones(cpu_out.value().shape());
+    Tensor cuda_up = Tensor::ones(cpu_out.value().shape(), Device::cuda(0));
+    cpu_out.backward(cpu_up);
+    cuda_out.backward(cuda_up);
+    std::vector<float> cpu_a_grad(av.size()), cuda_a_grad(av.size());
+    std::vector<float> cpu_b_grad(bv.size()), cuda_b_grad(bv.size());
+    read_host(cpu_a.grad(), cpu_a_grad.data());
+    read_host(cuda_a.grad(), cuda_a_grad.data());
+    read_host(cpu_b.grad(), cpu_b_grad.data());
+    read_host(cuda_b.grad(), cuda_b_grad.data());
+    check_close(cuda_a_grad, cpu_a_grad, 5e-5f);
+    check_close(cuda_b_grad, cpu_b_grad, 5e-5f);
+
+    report("Tensor CUDA: matmul rank-3 batched forward + both gradients match CPU");
+}
+
+void test_oop_matmul_later_batches_cuda() {
+    // Each batch of the operands is filled with a different constant
+    // (batch 0 = all -1, batch 1 = all 0, batch 2 = all +1). A
+    // correct batched matmul must produce per-batch outputs whose
+    // magnitudes differ; a kernel that silently drops blockIdx.z (or
+    // any other source of cross-batch confusion) would collapse the
+    // outputs to a single batch's value.
+    const Shape a_shape{3, 2, 3};  // B=3, M=2, K=3
+    const Shape b_shape{3, 3, 4};  // B=3, K=3, N=4
+    const int64_t per_batch_a = a_shape[1] * a_shape[2];  // 6
+    const int64_t per_batch_b = b_shape[1] * b_shape[2];  // 12
+    std::vector<float> av(a_shape.numel());
+    std::vector<float> bv(b_shape.numel());
+    for (int b = 0; b < 3; ++b) {
+        const float av_v = static_cast<float>(b) - 1.f;  // -1, 0, +1
+        const float bv_v = static_cast<float>(b) * 0.5f + 0.25f;  // 0.25, 0.75, 1.25
+        for (int i = 0; i < per_batch_a; ++i) {
+            av[b * per_batch_a + i] = av_v;
+        }
+        for (int i = 0; i < per_batch_b; ++i) {
+            bv[b * per_batch_b + i] = bv_v;
+        }
+    }
+
+    Variable cpu_a(Tensor::from_host(av.data(), a_shape), true);
+    Variable cpu_b(Tensor::from_host(bv.data(), b_shape), true);
+    Variable cuda_a(Tensor::from_host(av.data(), a_shape, Device::cuda(0)), true);
+    Variable cuda_b(Tensor::from_host(bv.data(), b_shape, Device::cuda(0)), true);
+
+    Variable cpu_out = ag::matmul(cpu_a, cpu_b);
+    Variable cuda_out = ag::matmul(cuda_a, cuda_b);
+    CHECK(cpu_out.value().shape() == (Shape{3, 2, 4}));
+    CHECK(cuda_out.value().shape() == (Shape{3, 2, 4}));
+
+    std::vector<float> cpu_v(cpu_out.value().elements());
+    std::vector<float> cuda_v(cuda_out.value().elements());
+    read_host(cpu_out.value(), cpu_v.data());
+    read_host(cuda_out.value(), cuda_v.data());
+    check_close(cuda_v, cpu_v, 5e-5f);
+
+    // Each batch's per-output element is a*b_scalar * K (constant
+    // per batch). The batches must therefore produce distinct
+    // constant outputs that visibly differ from one another. This
+    // guards against a kernel bug that drops blockIdx.z or any
+    // other cross-batch addressing.
+    const int64_t per_batch_out = cpu_out.value().shape()[1] *
+                                  cpu_out.value().shape()[2];  // 8
+    for (int b = 1; b < 3; ++b) {
+        bool any_diff = false;
+        for (int64_t i = 0; i < per_batch_out; ++i) {
+            if (std::fabs(cuda_v[b * per_batch_out + i] -
+                          cuda_v[0 * per_batch_out + i]) > 1e-6f) {
+                any_diff = true;
+                break;
+            }
+        }
+        CHECK(any_diff);
+    }
+
+    report("Tensor CUDA: matmul rank-3 each batch has distinct per-batch output");
+}
+
+void test_oop_matmul_batched_rank4_cuda_parity() {
+    // (B1, B2, M, K) @ (B1, B2, K, N): two leading batch dims.
+    const Shape a_shape{2, 3, 2, 4};
+    const Shape b_shape{2, 3, 4, 3};
+    std::vector<float> av(a_shape.numel()), bv(b_shape.numel());
+    for (std::size_t i = 0; i < av.size(); ++i) {
+        av[i] = static_cast<float>(i) * 0.1f - 0.6f;
+    }
+    for (std::size_t i = 0; i < bv.size(); ++i) {
+        bv[i] = static_cast<float>(i) * -0.15f + 0.4f;
+    }
+
+    Variable cpu_a(Tensor::from_host(av.data(), a_shape), true);
+    Variable cpu_b(Tensor::from_host(bv.data(), b_shape), true);
+    Variable cuda_a(Tensor::from_host(av.data(), a_shape, Device::cuda(0)), true);
+    Variable cuda_b(Tensor::from_host(bv.data(), b_shape, Device::cuda(0)), true);
+
+    Variable cpu_out = ag::matmul(cpu_a, cpu_b);
+    Variable cuda_out = ag::matmul(cuda_a, cuda_b);
+    CHECK(cpu_out.value().shape() == (Shape{2, 3, 2, 3}));
+    CHECK(cuda_out.value().shape() == (Shape{2, 3, 2, 3}));
+
+    std::vector<float> cpu_value(cpu_out.value().elements());
+    std::vector<float> cuda_value(cuda_out.value().elements());
+    read_host(cpu_out.value(), cpu_value.data());
+    read_host(cuda_out.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value, 5e-5f);
+
+    Tensor cpu_up = Tensor::ones(cpu_out.value().shape());
+    Tensor cuda_up = Tensor::ones(cpu_out.value().shape(), Device::cuda(0));
+    cpu_out.backward(cpu_up);
+    cuda_out.backward(cuda_up);
+    std::vector<float> cpu_a_grad(av.size()), cuda_a_grad(av.size());
+    std::vector<float> cpu_b_grad(bv.size()), cuda_b_grad(bv.size());
+    read_host(cpu_a.grad(), cpu_a_grad.data());
+    read_host(cuda_a.grad(), cuda_a_grad.data());
+    read_host(cpu_b.grad(), cpu_b_grad.data());
+    read_host(cuda_b.grad(), cuda_b_grad.data());
+    check_close(cuda_a_grad, cpu_a_grad, 5e-5f);
+    check_close(cuda_b_grad, cpu_b_grad, 5e-5f);
+
+    report("Tensor CUDA: matmul rank-4 batched forward + both gradients match CPU");
+}
+
+void test_oop_matmul_shape_and_zero_cuda() {
+    // Mixed-device matmul: pred on CUDA, other on CPU remains an
+    // invalid_argument from the binary shape/device check, exactly
+    // like on CPU.
+    {
+        Variable a(Tensor::ones(Shape{2, 3}, Device::cuda(0)), true);
+        Variable b(Tensor::ones(Shape{2, 3}), true);
+        CHECK_THROWS_AS(std::invalid_argument, ag::matmul(a, b));
+    }
+
+    // Inner-dim mismatch on CUDA.
+    {
+        Variable a(Tensor::ones(Shape{2, 3}, Device::cuda(0)), true);
+        Variable b(Tensor::ones(Shape{4, 2}, Device::cuda(0)), true);
+        CHECK_THROWS_AS(std::invalid_argument, ag::matmul(a, b));
+    }
+
+    // Rank<2 rejection on CUDA.
+    {
+        Variable a(Tensor::ones(Shape{4}, Device::cuda(0)), true);
+        Variable b(Tensor::ones(Shape{4}, Device::cuda(0)), true);
+        CHECK_THROWS_AS(std::invalid_argument, ag::matmul(a, b));
+    }
+
+    // Batch-dim mismatch on CUDA.
+    {
+        Variable a(Tensor::ones(Shape{2, 3, 2}, Device::cuda(0)), true);
+        Variable b(Tensor::ones(Shape{3, 2, 3}, Device::cuda(0)), true);
+        CHECK_THROWS_AS(std::invalid_argument, ag::matmul(a, b));
+    }
+
+    // Zero-sized leading batch is valid on CUDA.
+    {
+        Variable a(Tensor::zeros(Shape{0, 2, 3}, Device::cuda(0)), true);
+        Variable b(Tensor::zeros(Shape{0, 3, 4}, Device::cuda(0)), true);
+        Variable out = ag::matmul(a, b);
+        CHECK(out.value().shape() == (Shape{0, 2, 4}));
+        CHECK(out.value().device().is_cuda());
+        Tensor up = Tensor::ones(out.value().shape(), Device::cuda(0));
+        out.backward(up);
+        CHECK(a.grad().shape() == (Shape{0, 2, 3}));
+        CHECK(b.grad().shape() == (Shape{0, 3, 4}));
+        CHECK(a.grad().device().is_cuda());
+        CHECK(b.grad().device().is_cuda());
+        CHECK(a.grad().empty());
+        CHECK(b.grad().empty());
+    }
+
+    // Zero inner dimension has a non-empty, all-zero output.
+    {
+        Variable cpu_a(Tensor::zeros(Shape{2, 0}), true);
+        Variable cpu_b(Tensor::zeros(Shape{0, 3}), true);
+        Variable cuda_a(
+            Tensor::zeros(Shape{2, 0}, Device::cuda(0)), true);
+        Variable cuda_b(
+            Tensor::zeros(Shape{0, 3}, Device::cuda(0)), true);
+        Variable cpu_out = ag::matmul(cpu_a, cpu_b);
+        Variable cuda_out = ag::matmul(cuda_a, cuda_b);
+        CHECK(cuda_out.value().shape() == (Shape{2, 3}));
+        std::vector<float> cpu_value(6), cuda_value(6);
+        read_host(cpu_out.value(), cpu_value.data());
+        read_host(cuda_out.value(), cuda_value.data());
+        check_close(cuda_value, cpu_value);
+        check_close(cuda_value, std::vector<float>(6, 0.f));
+
+        cpu_out.backward(Tensor::ones(Shape{2, 3}));
+        cuda_out.backward(Tensor::ones(Shape{2, 3}, Device::cuda(0)));
+        CHECK(cuda_a.grad().shape() == (Shape{2, 0}));
+        CHECK(cuda_b.grad().shape() == (Shape{0, 3}));
+        CHECK(cuda_a.grad().empty());
+        CHECK(cuda_b.grad().empty());
+    }
+
+    // Empty output axes can still produce a non-empty zero gradient
+    // for the opposite operand.
+    {
+        Variable cuda_a(
+            Tensor::ones(Shape{2, 3}, Device::cuda(0)), true);
+        Variable cuda_b(
+            Tensor::zeros(Shape{3, 0}, Device::cuda(0)), true);
+        Variable out = ag::matmul(cuda_a, cuda_b);
+        out.backward(Tensor::ones(Shape{2, 0}, Device::cuda(0)));
+        std::vector<float> a_grad(6);
+        read_host(cuda_a.grad(), a_grad.data());
+        check_close(a_grad, std::vector<float>(6, 0.f));
+        CHECK(cuda_b.grad().empty());
+    }
+    {
+        Variable cuda_a(
+            Tensor::zeros(Shape{0, 3}, Device::cuda(0)), true);
+        Variable cuda_b(
+            Tensor::ones(Shape{3, 2}, Device::cuda(0)), true);
+        Variable out = ag::matmul(cuda_a, cuda_b);
+        out.backward(Tensor::ones(Shape{0, 2}, Device::cuda(0)));
+        CHECK(cuda_a.grad().empty());
+        std::vector<float> b_grad(6);
+        read_host(cuda_b.grad(), b_grad.data());
+        check_close(b_grad, std::vector<float>(6, 0.f));
+    }
+
+    report("Tensor CUDA: matmul validates shapes; zero-sized dimensions work");
+}
+
+void test_oop_mse_loss_cuda_parity() {
+    // All-CUDA pred + target produces an all-CUDA scalar loss whose
+    // forward value and gradient match CPU.
+    const Shape shape{2, 3};
+    std::vector<float> pv{
+        0.5f, -1.f, 1.5f,
+        -2.f, 2.5f, -3.f,
+    };
+    std::vector<float> tv{
+        0.f, 1.f, -1.f,
+        1.5f, -1.5f, 2.f,
+    };
+    Variable cpu_p(Tensor::from_host(pv.data(), shape), true);
+    Variable cuda_p(Tensor::from_host(pv.data(), shape, Device::cuda(0)), true);
+    Tensor cpu_t = Tensor::from_host(tv.data(), shape);
+    Tensor cuda_t = Tensor::from_host(tv.data(), shape, Device::cuda(0));
+
+    Variable cpu_loss = ag::mse_loss(cpu_p, cpu_t);
+    Variable cuda_loss = ag::mse_loss(cuda_p, cuda_t);
+    CHECK(cpu_loss.value().shape() == (Shape{}));
+    CHECK(cuda_loss.value().shape() == (Shape{}));
+    CHECK(cuda_loss.value().device().is_cuda());
+
+    std::vector<float> cpu_value(1), cuda_value(1);
+    read_host(cpu_loss.value(), cpu_value.data());
+    read_host(cuda_loss.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value, 5e-5f);
+
+    cpu_loss.backward();
+    cuda_loss.backward(Tensor::ones(Shape{}, Device::cuda(0)));
+    std::vector<float> cpu_grad(pv.size()), cuda_grad(pv.size());
+    read_host(cpu_p.grad(), cpu_grad.data());
+    read_host(cuda_p.grad(), cuda_grad.data());
+    check_close(cuda_grad, cpu_grad, 5e-5f);
+    CHECK(cuda_p.grad().device().is_cuda());
+
+    report("Tensor CUDA: mse_loss all-CUDA pred+target forward + backward parity");
+}
+
+void test_oop_cross_entropy_cuda_parity() {
+    // All-CUDA pred + one-hot target.
+    const Shape shape{2, 3};
+    std::vector<float> pv{
+        0.5f, -1.f, 1.5f,
+        -2.f, 2.5f, -3.f,
+    };
+    std::vector<float> tv{
+        0.f, 1.f, 0.f,
+        0.f, 0.f, 1.f,
+    };
+    Variable cpu_p(Tensor::from_host(pv.data(), shape), true);
+    Variable cuda_p(Tensor::from_host(pv.data(), shape, Device::cuda(0)), true);
+    Tensor cpu_t = Tensor::from_host(tv.data(), shape);
+    Tensor cuda_t = Tensor::from_host(tv.data(), shape, Device::cuda(0));
+
+    Variable cpu_loss = ag::cross_entropy(cpu_p, cpu_t);
+    Variable cuda_loss = ag::cross_entropy(cuda_p, cuda_t);
+    CHECK(cpu_loss.value().shape() == (Shape{}));
+    CHECK(cuda_loss.value().device().is_cuda());
+
+    std::vector<float> cpu_value(1), cuda_value(1);
+    read_host(cpu_loss.value(), cpu_value.data());
+    read_host(cuda_loss.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value, 5e-5f);
+
+    cpu_loss.backward();
+    cuda_loss.backward(Tensor::ones(Shape{}, Device::cuda(0)));
+    std::vector<float> cpu_grad(pv.size()), cuda_grad(pv.size());
+    read_host(cpu_p.grad(), cpu_grad.data());
+    read_host(cuda_p.grad(), cuda_grad.data());
+    check_close(cuda_grad, cpu_grad, 5e-5f);
+    CHECK(cuda_p.grad().device().is_cuda());
+
+    report("Tensor CUDA: cross_entropy all-CUDA pred+target forward + backward parity");
+}
+
+void test_oop_sgd_cuda_step_parity_and_alias_visible() {
+    // Same initial value and gradient on CPU and CUDA. SGD step()
+    // parity within a small tolerance; alias-visible mutation
+    // observed through a Tensor taken before step().
+    const std::vector<float> pv{
+        1.f, -2.f, 3.f, -4.f,
+        5.f, -6.f, 7.f, -8.f,
+    };
+    const std::vector<float> gv{
+        0.1f, -0.2f, 0.3f, -0.4f,
+        0.5f, -0.6f, 0.7f, -0.8f,
+    };
+    Variable cpu_p(Tensor::from_host(pv.data(), Shape{2, 4}), true);
+    Variable cuda_p(Tensor::from_host(pv.data(), Shape{2, 4}, Device::cuda(0)), true);
+    Tensor cpu_alias = cpu_p.value();  // Tensor alias before step
+    Tensor cuda_alias = cuda_p.value();
+
+    assign_grad(cpu_p, gv);
+    assign_grad(cuda_p, gv);
+
+    ag::optim::SGD cpu_opt({cpu_p}, 0.05f);
+    ag::optim::SGD cuda_opt({cuda_p}, 0.05f);
+    cpu_opt.step();
+    cuda_opt.step();
+
+    // Aliases observe the post-step values without an explicit copy.
+    std::vector<float> cpu_after(pv.size()), cuda_after(pv.size());
+    read_host(cpu_p.value(), cpu_after.data());
+    read_host(cuda_p.value(), cuda_after.data());
+    read_host(cpu_alias, cpu_after.data());    // alias sees update
+    read_host(cuda_alias, cuda_after.data());  // alias sees update
+    check_close(cuda_after, cpu_after, 5e-5f);
+
+    // zero_grad clears the gradient.
+    cpu_opt.zero_grad();
+    cuda_opt.zero_grad();
+    CHECK(!cpu_p.has_grad());
+    CHECK(!cuda_p.has_grad());
+
+    report("Tensor CUDA: optim::SGD step parity and alias-visible mutation");
+}
+
+void test_oop_sgd_cuda_mixed_list() {
+    // Mixed CPU/CUDA parameter list: both parameters receive the
+    // step; CUDA one observes it through alias.
+    Variable cpu_p(Tensor::from_host(
+        std::vector<float>{2.f, 4.f}.data(), Shape{2}), true);
+    Variable cuda_p(Tensor::from_host(
+        std::vector<float>{6.f, 8.f}.data(), Shape{2}, Device::cuda(0)), true);
+    Tensor cuda_alias = cuda_p.value();
+    assign_grad(cpu_p, std::vector<float>{1.f, -1.f});
+    assign_grad(cuda_p, std::vector<float>{0.5f, -0.5f});
+
+    ag::optim::SGD mixed({cpu_p, cuda_p}, 0.1f);
+    mixed.step();
+
+    std::vector<float> cpu_v(2), cuda_v(2);
+    read_host(cpu_p.value(), cpu_v.data());
+    read_host(cuda_p.value(), cuda_v.data());
+    check_close(cpu_v, std::vector<float>{1.9f, 4.1f}, 5e-5f);
+    check_close(cuda_v, std::vector<float>{5.95f, 8.05f}, 5e-5f);
+    std::vector<float> alias_v(2);
+    read_host(cuda_alias, alias_v.data());
+    check_close(alias_v, std::vector<float>{5.95f, 8.05f}, 5e-5f);
+
+    report("Tensor CUDA: optim::SGD mixed CPU/CUDA parameter list updates both");
+}
+
+void test_oop_adam_cuda_step_parity_and_moments() {
+    // Same gradient sequence on CPU and CUDA. After three steps
+    // both parameters match the CPU trajectory; CUDA moments evolve
+    // alongside. t_ advances once per step (verified via state()).
+    const std::vector<float> pv{
+        0.5f, -0.25f, 0.75f, -0.5f,
+        0.125f, -0.875f, 0.625f, 0.375f,
+    };
+    Variable cpu_p(Tensor::from_host(pv.data(), Shape{2, 4}), true);
+    Variable cuda_p(Tensor::from_host(pv.data(), Shape{2, 4}, Device::cuda(0)), true);
+
+    ag::optim::Adam cpu_adam({cpu_p}, 1e-2f);
+    ag::optim::Adam cuda_adam({cuda_p}, 1e-2f);
+
+    const std::vector<std::vector<float>> gradients{
+        {0.05f, -0.05f, 0.1f, -0.1f, 0.2f, -0.2f, 0.3f, -0.3f},
+        {-0.1f, 0.1f, -0.2f, 0.2f, -0.05f, 0.05f, -0.15f, 0.15f},
+        {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+    };
+
+    for (const auto& g : gradients) {
+        assign_grad(cpu_p, g);
+        assign_grad(cuda_p, g);
+        cpu_adam.step();
+        cuda_adam.step();
+        std::vector<float> cpu_v(pv.size()), cuda_v(pv.size());
+        read_host(cpu_p.value(), cpu_v.data());
+        read_host(cuda_p.value(), cuda_v.data());
+        check_close(cuda_v, cpu_v, 5e-5f);
+    }
+
+    // state() preserves device on the moments and matches CPU data.
+    ag::optim::AdamState cpu_state = cpu_adam.state();
+    ag::optim::AdamState cuda_state = cuda_adam.state();
+    CHECK(cpu_state.first_moments.size() == 1);
+    CHECK(cuda_state.first_moments.size() == 1);
+    CHECK(cuda_state.first_moments[0].device().is_cuda());
+    CHECK(cuda_state.second_moments[0].device().is_cuda());
+    std::vector<float> cpu_m(cpu_state.first_moments[0].elements());
+    std::vector<float> cuda_m(cuda_state.first_moments[0].elements());
+    read_host(cpu_state.first_moments[0], cpu_m.data());
+    read_host(cuda_state.first_moments[0], cuda_m.data());
+    check_close(cuda_m, cpu_m, 5e-5f);
+
+    // state() does not alias the live moments: mutating the snapshot
+    // does not change the optimizer's parameters on a future step.
+    std::vector<float> zeros(cuda_m.size(), 0.f);
+    cuda_state.first_moments[0].copy_from_host(zeros.data(), zeros.size());
+    assign_grad(cuda_p, gradients.back());
+    cuda_adam.step();
+    std::vector<float> post(pv.size());
+    read_host(cuda_p.value(), post.data());
+    assign_grad(cpu_p, gradients.back());
+    cpu_adam.step();
+    std::vector<float> cpu_after(pv.size());
+    read_host(cpu_p.value(), cpu_after.data());
+    check_close(post, cpu_after, 5e-5f);
+
+    // Step counter advances once per non-empty step.
+    CHECK(cpu_adam.step_count() == 4);
+    CHECK(cuda_adam.step_count() == 4);
+
+    report("Tensor CUDA: optim::Adam multi-step parity, moments on CUDA, snapshot non-aliasing");
+}
+
+void test_oop_adam_cuda_mixed_list() {
+    // Mixed CPU/CUDA Adam parameter list: both parameters receive
+    // the same step update and stay in sync with their
+    // single-device references.
+    const std::vector<float> pv{
+        0.5f, -0.25f, 0.75f, -0.5f,
+    };
+    Variable cpu_p(Tensor::from_host(pv.data(), Shape{2, 2}), true);
+    Variable cuda_p(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
+    Variable ref_cpu(Tensor::from_host(pv.data(), Shape{2, 2}), true);
+    Variable ref_cuda(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
+
+    ag::optim::Adam mixed({cpu_p, cuda_p}, 1e-2f);
+    ag::optim::Adam ref_c({ref_cpu}, 1e-2f);
+    ag::optim::Adam ref_g({ref_cuda}, 1e-2f);
+
+    const std::vector<float> g{0.05f, -0.05f, 0.1f, -0.1f};
+    for (int step = 0; step < 2; ++step) {
+        assign_grad(cpu_p, g);
+        assign_grad(cuda_p, g);
+        assign_grad(ref_cpu, g);
+        assign_grad(ref_cuda, g);
+        mixed.step();
+        ref_c.step();
+        ref_g.step();
+        std::vector<float> mv(pv.size()), cv(pv.size()), rv(pv.size());
+        read_host(cpu_p.value(), mv.data());
+        read_host(cuda_p.value(), cv.data());
+        read_host(ref_cpu.value(), rv.data());
+        check_close(mv, rv, 5e-5f);
+        read_host(ref_cuda.value(), rv.data());
+        check_close(cv, rv, 5e-5f);
+    }
+
+    report("Tensor CUDA: optim::Adam mixed CPU/CUDA parameter list updates both");
+}
+
+void test_oop_adam_cuda_load_state_preserves_device() {
+    // Construct two CUDA Adam optimizers with the same params.
+    // Run a step on source, snapshot source.state(), and load that
+    // snapshot into target. Then drive both target and a fresh
+    // reference optimizer through the same next gradient and verify
+    // that the parameter values match: load_state restores the
+    // optimizer's full state (step count + moments + hyperparameters)
+    // so the resumed trajectory is identical to one that took the
+    // original step in-line.
+    const std::vector<float> pv{
+        0.5f, -0.25f, 0.75f, -0.5f,
+    };
+    Variable source_p(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
+    Variable target_p(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
+    Variable ref_p(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
+
+    ag::optim::Adam source({source_p}, 1e-2f);
+    ag::optim::Adam target({target_p}, 1e-2f);
+    ag::optim::Adam reference({ref_p}, 1e-2f);
+
+    const std::vector<float> g1{0.05f, -0.05f, 0.1f, -0.1f};
+    const std::vector<float> g2{-0.1f, 0.1f, -0.05f, 0.05f};
+
+    // Bring target to the same post-g1 state as source.
+    assign_grad(source_p, g1);
+    source.step();
+    source.zero_grad();
+    assign_grad(target_p, g1);
+    target.step();
+    target.zero_grad();
+    // Reference needs to also see g1 so its bias-correction step
+    // count matches target's after load_state (t_ = 1).
+    assign_grad(ref_p, g1);
+    reference.step();
+    reference.zero_grad();
+
+    // Snapshot source's state and load it into target. After the
+    // load, target's optimizer state (moments, step_count,
+    // hyperparameters) is identical to source's — but target_p.value
+    // already matches source_p.value because we stepped target too.
+    ag::optim::AdamState snapshot = source.state();
+    CHECK(snapshot.first_moments[0].device().is_cuda());
+    CHECK(snapshot.second_moments[0].device().is_cuda());
+    target.load_state(snapshot);
+    CHECK(target.step_count() == source.step_count());
+
+    // Snapshot moments are deep copies: mutating them does not
+    // perturb the live target optimizer's moments.
+    std::vector<float> zeros(pv.size(), 0.f);
+    snapshot.first_moments[0].copy_from_host(zeros.data(), zeros.size());
+    snapshot.second_moments[0].copy_from_host(zeros.data(), zeros.size());
+
+    // Continue both target (loaded) and reference (fresh) with the
+    // same gradient; they must converge to the same parameters
+    // because load_state restored target's full AdamState (step
+    // count + moments) before the next step.
+    assign_grad(target_p, g2);
+    target.step();
+    assign_grad(ref_p, g2);
+    reference.step();
+
+    std::vector<float> tv(pv.size()), rv(pv.size());
+    read_host(target_p.value(), tv.data());
+    read_host(ref_p.value(), rv.data());
+    check_close(tv, rv, 5e-5f);
+
+    report("Tensor CUDA: optim::Adam load_state preserves device, "
+           "continues trajectory, deep copies moments");
 }
 
 }  // namespace
@@ -1041,11 +1680,23 @@ int main() {
     test_oop_sum_axes_and_mean_cuda();
     test_oop_softmax_nonlast_axis_cuda();
     test_oop_broadcast_repeated_backward_cuda();
-    test_oop_backward_cuda_accumulates_and_unsupported_rejects();
+    test_oop_backward_cuda_accumulates_and_matmul_works();
     test_oop_diffusion_rejects_cuda_tensor();
-    test_oop_optimizer_rejects_cuda_variable();
+    test_oop_optimizer_unsupported_cuda_constructs_reject();
     test_oop_conv2d_rejects_cuda_inputs();
-    test_oop_loss_rejects_cuda_inputs();
+    test_oop_loss_mixed_device_rejects();
+    test_oop_matmul_rank2_cuda_parity();
+    test_oop_matmul_batched_rank3_cuda_parity();
+    test_oop_matmul_later_batches_cuda();
+    test_oop_matmul_batched_rank4_cuda_parity();
+    test_oop_matmul_shape_and_zero_cuda();
+    test_oop_mse_loss_cuda_parity();
+    test_oop_cross_entropy_cuda_parity();
+    test_oop_sgd_cuda_step_parity_and_alias_visible();
+    test_oop_sgd_cuda_mixed_list();
+    test_oop_adam_cuda_step_parity_and_moments();
+    test_oop_adam_cuda_mixed_list();
+    test_oop_adam_cuda_load_state_preserves_device();
 
     std::printf("\nALL CUDA TENSOR TESTS PASSED (%d)\n", passed);
     return 0;

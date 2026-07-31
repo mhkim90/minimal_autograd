@@ -61,5 +61,27 @@ Tensor cuda_tensor_log_softmax_backward(const Tensor& g,
                                         const Tensor& saved_log_softmax,
                                         int axis);
 
+// matmul forward + backward for the OOP N-D matmul free function.
+// Inputs are required to satisfy the same rank/batch/inner contract
+// as the CPU tensor_matmul_nd family; validation runs on the host
+// before the kernels are launched.
+Tensor cuda_tensor_matmul_nd(const Tensor& a, const Tensor& b);
+Tensor cuda_tensor_matmul_backward_a_nd(const Tensor& g,
+                                        const Tensor& b);
+Tensor cuda_tensor_matmul_backward_b_nd(const Tensor& a,
+                                        const Tensor& g);
+
+// In-place parameter updates on CUDA for the OOP optim::SGD /
+// optim::Adam free path. They operate directly on the device
+// pointers supplied through the private CudaTensorAccess bridge so
+// the optimizer hot path does not pay a host round-trip.
+void cuda_sgd_step(float* p, const float* grad, float lr,
+                   std::size_t n, int device);
+void cuda_adam_step(float* p, float* m, float* v,
+                    const float* grad,
+                    float lr, float beta1, float beta2, float eps,
+                    float bias_correction1, float bias_correction2,
+                    std::size_t n, int device);
+
 }  // namespace detail
 }  // namespace ag

@@ -4,6 +4,10 @@
 // Both losses return a scalar Variable (Shape{}). The target tensor is
 // supplied separately; it is consumed for forward computation only and is
 // not part of the autograd graph.
+//
+// Both losses accept CPU or CUDA pred/target. pred and target must
+// share a device; mixed-device pairs throw. On CUDA the result and
+// the pred gradient stay on the device.
 
 #include "autograd/core/variable.h"
 

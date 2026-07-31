@@ -2,6 +2,7 @@
 
 #include "autograd/core/variable.h"
 #include "autograd/extension/custom_op.h"
+#include "detail/tensor_storage.h"
 
 #include <cstdint>
 #include <memory>
@@ -141,6 +142,23 @@ struct VariableAccess {
                                 const std::vector<float>& data) {
         Tensor& t = v.node_->value;
         t.copy_from_host(data.empty() ? nullptr : data.data(), data.size());
+    }
+
+    // Device-only parameter mutation boundary for the OOP optimizer
+    // CUDA path. The callback f receives raw device pointers
+    // (p_data, g_data) plus the device index and element count so it
+    // can launch kernels that touch device memory directly. The
+    // parameter pointer is mutable; the gradient pointer is const
+    // because the optimizer never writes to the gradient buffer in
+    // the hot path. Empty parameters are a no-op.
+    template <typename F>
+    static void apply_to_storage_cuda(Variable& v, F&& f) {
+        if (v.node_->value.empty()) return;
+        Tensor& t = v.node_->value;
+        const Tensor& g = v.node_->grad;
+        float* p_data = CudaTensorAccess::cuda_data_mutable(t);
+        const float* g_data = CudaTensorAccess::cuda_data_const(g);
+        f(p_data, g_data, t.device().index(), t.elements());
     }
 };
 

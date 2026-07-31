@@ -21,8 +21,9 @@ Current delivery state:
   through PR #38;
 - the OOP CPU complex and FFT APIs are merged through PR #39;
 - the CUDA Tensor foundation is merged through PR #40;
-- the OOP CUDA elementwise and reduction bundle is implemented in the current
-  branch, pending review.
+- the OOP CUDA elementwise and reduction bundle is merged through PR #41;
+- the OOP CUDA matrix multiplication, losses, and optimizer bundle is
+  implemented in the current branch, pending review.
 
 ## 2. Purpose
 

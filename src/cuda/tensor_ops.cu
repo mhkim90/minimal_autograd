@@ -879,5 +879,278 @@ Tensor cuda_tensor_log_softmax_backward(const Tensor& g,
     return out;
 }
 
+// ── matmul (rank-N, batched over identical leading dims) ──────────────
+//
+// Each kernel runs as a flat 1-D launch that covers all batches
+// simultaneously: the host launches blocks(total_elements) blocks
+// (single grid-X dim), where total = batch * per_batch_count. The
+// kernel derives batch = idx / per_batch_count and the local
+// row/column from the flat remainder. Because storage is dense
+// contiguous row-major, every batch slice is exactly per_batch_count
+// contiguous floats so the kernel can compute each operand's base
+// directly as `operand + batch * per_batch_count`; no offset table
+// or device metadata is required. The flat launch avoids the CUDA
+// grid-Z dimension cap (65535) so large batched matmuls do not
+// silently truncate.
+
+__global__ void matmul_forward_kernel(
+    const float* a, const float* b, float* out,
+    int64_t M, int64_t N, int64_t K, int64_t total) {
+    const int64_t idx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    const int64_t per_batch = M * N;
+    const int64_t batch = idx / per_batch;
+    const int64_t rem = idx - batch * per_batch;
+    const int64_t row = rem / N;
+    const int64_t col = rem - row * N;
+    const float* a_ptr = a + batch * (M * K);
+    const float* b_ptr = b + batch * (K * N);
+    float* out_ptr = out + batch * per_batch;
+    float acc = 0.f;
+    for (int64_t p = 0; p < K; ++p) {
+        acc += a_ptr[row * K + p] * b_ptr[p * N + col];
+    }
+    out_ptr[row * N + col] = acc;
+}
+
+__global__ void matmul_backward_a_kernel(
+    const float* g, const float* b, float* out,
+    int64_t M, int64_t N, int64_t K, int64_t total) {
+    const int64_t idx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    const int64_t per_batch = M * K;
+    const int64_t batch = idx / per_batch;
+    const int64_t rem = idx - batch * per_batch;
+    const int64_t row = rem / K;
+    const int64_t col = rem - row * K;
+    const float* g_ptr = g + batch * (M * N);
+    const float* b_ptr = b + batch * (K * N);
+    float* out_ptr = out + batch * per_batch;
+    float acc = 0.f;
+    for (int64_t n = 0; n < N; ++n) {
+        acc += g_ptr[row * N + n] * b_ptr[col * N + n];
+    }
+    out_ptr[row * K + col] = acc;
+}
+
+__global__ void matmul_backward_b_kernel(
+    const float* a, const float* g, float* out,
+    int64_t M, int64_t N, int64_t K, int64_t total) {
+    const int64_t idx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    const int64_t per_batch = K * N;
+    const int64_t batch = idx / per_batch;
+    const int64_t rem = idx - batch * per_batch;
+    const int64_t row = rem / N;
+    const int64_t col = rem - row * N;
+    const float* a_ptr = a + batch * (M * K);
+    const float* g_ptr = g + batch * (M * N);
+    float* out_ptr = out + batch * per_batch;
+    float acc = 0.f;
+    for (int64_t m = 0; m < M; ++m) {
+        acc += a_ptr[m * K + row] * g_ptr[m * N + col];
+    }
+    out_ptr[row * N + col] = acc;
+}
+
+// Element-wise per-index in-place updates for optim::SGD and
+// optim::Adam. They take raw device pointers (no Tensor API) so the
+// OOP optimizer can mutate parameters without an extra host
+// round-trip in the hot path.
+__global__ void sgd_step_kernel(float* p, const float* grad,
+                                float lr, std::size_t n) {
+    const std::size_t i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    p[i] -= lr * grad[i];
+}
+
+__global__ void adam_step_kernel(float* p, float* m, float* v,
+                                 const float* grad,
+                                 float lr, float beta1, float beta2,
+                                 float eps,
+                                 float bias_correction1, float bias_correction2,
+                                 std::size_t n) {
+    const std::size_t i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const float g = grad[i];
+    const float mi = beta1 * m[i] + (1.f - beta1) * g;
+    const float vi = beta2 * v[i] + (1.f - beta2) * g * g;
+    m[i] = mi;
+    v[i] = vi;
+    const float m_hat = mi / bias_correction1;
+    const float v_hat = vi / bias_correction2;
+    p[i] -= lr * m_hat / (sqrtf(v_hat) + eps);
+}
+
+void validate_matmul_nd(const Tensor& a, const Tensor& b, const char* what) {
+    if (a.device() != b.device()) {
+        throw std::invalid_argument(std::string(what) + ": device mismatch");
+    }
+    const Shape& sa = a.shape();
+    const Shape& sb = b.shape();
+    const int rank_a = static_cast<int>(sa.rank());
+    const int rank_b = static_cast<int>(sb.rank());
+    if (rank_a < 2 || rank_b < 2) {
+        std::ostringstream os;
+        os << what << ": requires rank >= 2 (got " << sa << " vs " << sb << ")";
+        throw std::invalid_argument(os.str());
+    }
+    if (rank_a != rank_b) {
+        std::ostringstream os;
+        os << what << ": rank mismatch (" << sa << " vs " << sb << ")";
+        throw std::invalid_argument(os.str());
+    }
+    const int64_t K = sa[rank_a - 1];
+    const int64_t K2 = sb[rank_b - 2];
+    if (K != K2) {
+        std::ostringstream os;
+        os << what << ": inner dimensions mismatch ("
+           << sa << " vs " << sb << ")";
+        throw std::invalid_argument(os.str());
+    }
+    for (int d = 0; d < rank_a - 2; ++d) {
+        if (sa[d] != sb[d]) {
+            std::ostringstream os;
+            os << what << ": batch dim " << d << " mismatch ("
+               << sa[d] << " vs " << sb[d] << ")";
+            throw std::invalid_argument(os.str());
+        }
+    }
+}
+
+Tensor cuda_tensor_matmul_nd(const Tensor& a, const Tensor& b) {
+    validate_matmul_nd(a, b, "matmul");
+    const Shape& sa = a.shape();
+    const int rank = static_cast<int>(sa.rank());
+    const int64_t M = sa[rank - 2];
+    const int64_t K = sa[rank - 1];
+    const int64_t N = b.shape()[rank - 1];
+
+    Dims out_sizes(sa.sizes.begin(), sa.sizes.end());
+    out_sizes[rank - 2] = M;
+    out_sizes[rank - 1] = N;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, a.device());
+    if (out.elements() == 0) return out;
+    if (K == 0) return Tensor::zeros(out_shape, a.device());
+
+    int64_t batch = 1;
+    for (int d = 0; d < rank - 2; ++d) batch *= sa[d];
+
+    set_device(a, "cuda_tensor_matmul_nd");
+    const int64_t total = batch * M * N;
+    matmul_forward_kernel<<<blocks(total), 256>>>(
+        tensor_data(a), tensor_data(b), tensor_data(out),
+        M, N, K, total);
+    finish_kernel("cuda_tensor_matmul_nd");
+    return out;
+}
+
+Tensor cuda_tensor_matmul_backward_a_nd(const Tensor& g, const Tensor& b) {
+    const Shape& sg = g.shape();
+    const Shape& sb = b.shape();
+    const int rank_g = static_cast<int>(sg.rank());
+    if (rank_g < 2) {
+        throw std::invalid_argument(
+            "matmul_backward_a: requires rank >= 2");
+    }
+    if (rank_g != static_cast<int>(sb.rank())) {
+        throw std::invalid_argument("matmul_backward_a: rank mismatch");
+    }
+    const int64_t M = sg[rank_g - 2];
+    const int64_t N = sg[rank_g - 1];
+    const int64_t K = sb[rank_g - 2];
+    if (N != sb[rank_g - 1]) {
+        throw std::invalid_argument(
+            "matmul_backward_a: g/b inner mismatch");
+    }
+    for (int d = 0; d < rank_g - 2; ++d) {
+        if (sg[d] != sb[d]) {
+            throw std::invalid_argument("matmul_backward_a: batch mismatch");
+        }
+    }
+    Dims out_sizes(sg.sizes.begin(), sg.sizes.end());
+    out_sizes[rank_g - 1] = K;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, g.device());
+    if (out.elements() == 0) return out;
+    if (N == 0) return Tensor::zeros(out_shape, g.device());
+
+    int64_t batch = 1;
+    for (int d = 0; d < rank_g - 2; ++d) batch *= sg[d];
+
+    set_device(g, "cuda_tensor_matmul_backward_a_nd");
+    const int64_t total = batch * M * K;
+    matmul_backward_a_kernel<<<blocks(total), 256>>>(
+        tensor_data(g), tensor_data(b), tensor_data(out),
+        M, N, K, total);
+    finish_kernel("cuda_tensor_matmul_backward_a_nd");
+    return out;
+}
+
+Tensor cuda_tensor_matmul_backward_b_nd(const Tensor& a, const Tensor& g) {
+    const Shape& sa = a.shape();
+    const Shape& sg = g.shape();
+    const int rank_a = static_cast<int>(sa.rank());
+    if (rank_a < 2) {
+        throw std::invalid_argument(
+            "matmul_backward_b: requires rank >= 2");
+    }
+    if (rank_a != static_cast<int>(sg.rank())) {
+        throw std::invalid_argument("matmul_backward_b: rank mismatch");
+    }
+    const int64_t M = sa[rank_a - 2];
+    const int64_t K = sa[rank_a - 1];
+    const int64_t N = sg[rank_a - 1];
+    if (sg[rank_a - 2] != M) {
+        throw std::invalid_argument(
+            "matmul_backward_b: a/g inner mismatch");
+    }
+    for (int d = 0; d < rank_a - 2; ++d) {
+        if (sa[d] != sg[d]) {
+            throw std::invalid_argument("matmul_backward_b: batch mismatch");
+        }
+    }
+    Dims out_sizes(sa.sizes.begin(), sa.sizes.end());
+    out_sizes[rank_a - 2] = K;
+    out_sizes[rank_a - 1] = N;
+    Shape out_shape(out_sizes);
+    Tensor out = Tensor::empty(out_shape, g.device());
+    if (out.elements() == 0) return out;
+    if (M == 0) return Tensor::zeros(out_shape, g.device());
+
+    int64_t batch = 1;
+    for (int d = 0; d < rank_a - 2; ++d) batch *= sa[d];
+
+    set_device(g, "cuda_tensor_matmul_backward_b_nd");
+    const int64_t total = batch * K * N;
+    matmul_backward_b_kernel<<<blocks(total), 256>>>(
+        tensor_data(a), tensor_data(g), tensor_data(out),
+        M, N, K, total);
+    finish_kernel("cuda_tensor_matmul_backward_b_nd");
+    return out;
+}
+
+void cuda_sgd_step(float* p, const float* grad, float lr,
+                   std::size_t n, int device) {
+    if (n == 0) return;
+    check(cudaSetDevice(device), "cuda_sgd_step");
+    sgd_step_kernel<<<blocks(n), 256>>>(p, grad, lr, n);
+    finish_kernel("cuda_sgd_step");
+}
+
+void cuda_adam_step(float* p, float* m, float* v,
+                    const float* grad,
+                    float lr, float beta1, float beta2, float eps,
+                    float bias_correction1, float bias_correction2,
+                    std::size_t n, int device) {
+    if (n == 0) return;
+    check(cudaSetDevice(device), "cuda_adam_step");
+    adam_step_kernel<<<blocks(n), 256>>>(
+        p, m, v, grad, lr, beta1, beta2, eps,
+        bias_correction1, bias_correction2, n);
+    finish_kernel("cuda_adam_step");
+}
+
 }  // namespace detail
 }  // namespace ag

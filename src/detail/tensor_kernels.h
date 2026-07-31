@@ -1612,6 +1612,9 @@ inline Tensor tensor_matmul_nd(const Tensor& a, const Tensor& b) {
     if (a.device() != b.device()) {
         throw std::invalid_argument("matmul: device mismatch");
     }
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) return cuda_tensor_matmul_nd(a, b);
+#endif
     const Shape& sa = a.shape();
     const Shape& sb = b.shape();
     const int rank_a = static_cast<int>(sa.rank());
@@ -1697,6 +1700,9 @@ inline Tensor tensor_matmul_backward_a_nd(const Tensor& g,
                                           const Tensor& b) {
     // d_a = g @ b_swap_last2. Validate shapes:
     // g.shape = (..., M, N); b.shape = (..., K, N).
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_matmul_backward_a_nd(g, b);
+#endif
     const Shape& sg = g.shape();
     const Shape& sb = b.shape();
     const int rank_g = static_cast<int>(sg.rank());
@@ -1769,6 +1775,9 @@ inline Tensor tensor_matmul_backward_a_nd(const Tensor& g,
 inline Tensor tensor_matmul_backward_b_nd(const Tensor& a,
                                           const Tensor& g) {
     // d_b = a_swap_last2 @ g. a.shape = (..., M, K); g.shape = (..., M, N).
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) return cuda_tensor_matmul_backward_b_nd(a, g);
+#endif
     const Shape& sa = a.shape();
     const Shape& sg = g.shape();
     const int rank_a = static_cast<int>(sa.rank());
