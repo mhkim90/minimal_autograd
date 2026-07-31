@@ -1,6 +1,6 @@
 ---
 name: phase-gated-implementation
-description: Use when implementing multi-phase work from a plan, PR description, issue, design doc, or user-approved checklist. Guides Codex to preserve TDD phase gates with adaptive risk levels: OpenCode handles most source reading, implementation, test iteration, and routine review; Codex remains the final scope/test/diff/commit gatekeeper; Claude/Sonnet or a user-specified OpenCode model provides targeted read-only second opinion when useful.
+description: Use when implementing multi-phase work from a plan, PR description, issue, design doc, or approved checklist. Keeps Codex/Sol as final gatekeeper, routes bulk implementation to OpenCode's configured default, escalates implementation to Luna and focused review to Terra only with evidence, and reserves Claude/Sonnet for scarce independent read-only review.
 ---
 
 # Phase-Gated Implementation
@@ -11,48 +11,95 @@ code, docs, experiments, migrations, data pipelines, build systems, and UI work.
 
 ## Operating Principle
 
-Default to OpenCode-heavy implementation. OpenCode spends tokens on source
-exploration, red gates, mechanical edits, run-inspect-tweak loops, and routine
-read-only review. Codex spends judgment on phase boundaries, TDD evidence,
-final diff review, commits, pushes, PR/issue comments, and stop/go decisions.
-Claude/Sonnet is scarce and reserved for targeted high-value blocker checks;
-use a user-specified OpenCode model instead when requested. Second opinion is
-read-only and advisory.
+Codex/Sol owns the gate. Codex reads the plan, classifies risk, runs the red
+gate, reviews the final diff and validation output, commits, pushes, opens or
+updates the PR/issue, and decides continue/stop. Codex does not implement by
+default; it verifies and decides.
+
+OpenCode is the bulk implementer. The OpenCode configured default model handles
+source exploration, mechanical edits, run-inspect-tweak loops, and routine L1
+and L2 implementation. Codex defines and verifies the red gate. Delegates
+produce patches or reviews; Codex verifies and decides.
+
+Claude/Sonnet is scarce, independent, and read-only. Claude does not implement.
+Use Claude only for architecture/API, security, memory/concurrency/CUDA,
+numerical, release, suspicious tests, uncertainty/disagreement, or explicit
+request. Respect user overrides: if the user says Claude quota is low/exhausted,
+or asks to avoid Claude, skip Claude and keep the normal non-Claude route. If
+the user names an OpenCode model for second opinion, use that exact model
+instead. Example: `opencode-go/glm-5.2`.
+
+Native OpenCode `sol`/`terra`/`luna` triad ids are reserved for standalone
+OpenCode operation, Codex quota pressure, breakthrough/replan, or explicit
+user request. Never nest routine OpenCode Sol under Codex/Sol.
+
+An explicit user-selected implementation or review model overrides automatic
+routing for that role.
 
 Use delegation to reduce duplicate context loading, not to reduce verification
-quality. Do not outsource final accountability. Delegates produce patches or
-reviews; Codex verifies and decides.
+quality. Do not outsource final accountability.
 
-## Role Budgeting
+## Role Routing
 
-- **Level 1, low risk / default**: OpenCode 80-90%, Codex 5-15%,
-  Claude/Sonnet 0-5%. Use for mechanical edits, docs/config changes, narrow bug
-  fixes, routine test fixes, and repetitive refactors.
-- **Level 2, medium risk / Codex-expanded**: OpenCode 65-80%, Codex 15-25%,
-  Claude/Sonnet 0-5%. Use when touched logic is important, tests are nontrivial,
-  scope is broader than expected, or OpenCode reports uncertainty.
-- **Level 3, high risk / Codex-reviewed gate**: OpenCode 45-65%, Codex 30-45%,
-  Claude/Sonnet 0-10%. Use for architecture/API changes, memory, concurrency,
-  build, CUDA, release behavior, subtle numerical correctness, weak tests,
-  suspicious red gates, or unexpected diff expansion. OpenCode remains the
-  plurality of token share even here; "Codex-reviewed" reflects Codex's
-  judgment/gatekeeper role, not a token-share majority.
+Default implementation engine: OpenCode configured default model (omit the
+`model` override). Treat this as the bulk implementer for L1 and routine L2.
+
+Escalate implementation to `openai/gpt-5.6-luna` only with evidence:
+
+- repeated focused failure on the same red gate
+- implementer reports uncertainty, broadens scope, or asks for guidance
+- diff is clearly weak (missing files, broken tests, obvious regressions)
+- task is known non-trivial code generation (protocol contracts, complex
+  refactors, concurrency, numerical kernels, build/CUDA)
+- explicit user or plan request
+
+Use `openai/gpt-5.6-terra` for focused read-only review of important L2 and
+L3 diffs. It does not replace Claude and is not a routine substitute for Codex
+judgment. Skip routine review on trivial L1 patches to avoid duplicate work.
+
+Use Claude/Sonnet for scarce, independent, read-only escalation when one or
+more apply:
+
+- architecture or API contract risk
+- security, memory, concurrency, CUDA, or numerical correctness risk
+- release or packaging behavior risk
+- weak, missing, flaky, or suspicious tests
+- implementer and reviewer disagree, or repeated uncertainty
+- explicit user request
+
+Avoid duplicate delegated review. After `terra` reviews a diff, do not ask a
+second routine OpenCode reviewer to repeat it. Codex's final gate review remains
+mandatory. Claude is an independent escalation, not a routine duplicate.
+
+## Risk Levels
+
+Levels describe scope and Codex effort, not fixed token shares.
+
+- **Level 1, low risk / default**: mechanical edits, docs/config, narrow bug
+  fixes, routine test fixes, repetitive refactors. OpenCode default implements.
+  Codex reviews diff/gate only.
+- **Level 2, medium risk / Codex-expanded**: touched logic matters, tests are
+  nontrivial, scope is broader than expected, or implementer reports
+  uncertainty. OpenCode default implements; `openai/gpt-5.6-terra` reviews
+  important L2 diffs.
+- **Level 3, high risk / Codex-reviewed gate**: architecture/API changes,
+  memory, concurrency, build, CUDA, release behavior, subtle numerical
+  correctness, weak tests, suspicious red gates, or unexpected diff expansion.
+  Escalate implementation to `openai/gpt-5.6-luna` only when evidence warrants
+  it; otherwise OpenCode default implements and Codex reads source/tests
+  directly to verify.
 - **Level 4, stop**: stop and report when the gate is invalid, implementation
   must change plan intent, required tooling is unavailable, unrelated user
   changes block safe work, or correctness cannot be verified.
-
-Within each level, OpenCode is the default implementer and must not commit.
-Codex reads the plan, phase boundary, git status, diff stat, key hunks,
-validation output, and risky files only as needed. If the user says Claude
-quota is low/exhausted, asks to avoid Claude, or names an OpenCode model for
-second opinion, use that exact model instead. Example: `opencode-go/glm-5.2`.
 
 ## Standard Loop
 
 1. **Orient Lightly**
    - Read plan/PR/issue/design doc.
    - Confirm branch and dirty state.
-   - Identify phase boundary, expected files, acceptance gates, and stop rules.
+   - Check `.codex/state/PAUSE` at phase start; if present, stop.
+   - Identify phase boundary, scope globs, acceptance gates, and stop rules.
+   - Classify the risk level and pick the implementation engine.
    - Avoid broad source loading until a risk signal justifies it.
    - Tell user a concise proceed plan if asked or if next step is risky.
 
@@ -65,50 +112,89 @@ second opinion, use that exact model instead. Example: `opencode-go/glm-5.2`.
      check, benchmark threshold, or manual acceptance evidence.
    - Do not skip the red gate unless no meaningful gate is practical; document
      the alternate evidence in the phase report.
+   - Apply exactly one attempt cap: max 3 red-gate attempts. Do not introduce a
+     second loop cap.
 
 3. **Delegate Implementation**
-   - Use OpenCode default model as the primary implementer.
+   - Use OpenCode configured default model as the bulk implementer for L1 and
+     routine L2.
+   - Escalate to `openai/gpt-5.6-luna` only with the evidence above.
    - Keep prompts narrow: phase context, files/scope, red gate, success
      criteria, constraints, stop rules, and no commit.
-   - Let OpenCode read source, edit, run tests, and iterate within scope.
-   - Require a compact final report: changed files, key decisions, commands run,
-     metrics, and blockers.
+   - Let the implementer read source, edit, run tests, and iterate within scope.
+   - Require a compact final report: changed files, key decisions, commands
+     run, metrics, and blockers.
 
 4. **Codex Gate Review**
    - Review diff stat and key hunks before trusting delegate output.
    - Verify red/green evidence, test validity, and command output.
-   - Run formatting/lint/diff checks appropriate to repo.
-   - Confirm diff scope matches phase.
-   - Read deeper source, raise the level, or drive directly when risk escalation
-     rules apply.
+   - Run formatting/lint/diff checks appropriate to the repository.
+   - Confirm diff scope matches the approved phase.
+   - Read deeper source or drive targeted fixes directly when escalation rules
+     apply.
 
-5. **Second Opinion**
-   - Ask OpenCode by default for routine read-only blocker review.
-   - Use Claude/Sonnet only for architecture/API risk, weak or suspicious tests,
-     subtle correctness risk, delegate uncertainty, delegate/reviewer
-     disagreement, or explicit user request.
-   - If the user notified quota limits, asked to avoid Claude, or specified an
-     OpenCode model for second opinion, ask OpenCode with that exact model.
+5. **Targeted Reviews**
+   - Use `openai/gpt-5.6-terra` for focused read-only review of important L2
+     and L3 diffs.
+   - Skip routine review on trivial L1 patches to avoid duplicate work.
+   - Ask Claude/Sonnet only for scarce, independent, read-only escalation when
+     the routing policy above lists it.
+   - If the user signals Claude quota pressure or asks to avoid Claude, skip
+     Claude and keep the normal non-Claude route.
+   - If the user names an OpenCode model for second opinion, use that exact
+     model instead.
    - Ask focused questions: blockers, spec mismatches, test validity, scope,
      and stop/go.
    - Treat advice as input, not authority.
 
 6. **Commit + Report**
+   - After steps 2-5 have produced all gate evidence, evaluate the step-7
+     criteria immediately before committing so the correct trailer is known.
    - Stage only intended files. Never `git add -A` when unrelated files exist.
-   - Commit one phase at a time.
-   - Push current branch.
+   - Commit one phase at a time with the trailer `Phase-gate: auto (L1)` or `Phase-gate: manual`.
+   - Push current branch by default.
+   - Open or update the PR by default.
+   - If the user explicitly prohibits commit, push, or open/update PR actions,
+     stop before the first prohibited action, report local state, and wait.
    - Leave PR/issue comment with:
      - commit hash
      - scope
      - validation commands and key metrics
      - deviations from plan and rationale
-     - level used and Codex review scope
-     - second-opinion result
+     - level used, implementation model, routine reviewer, independent
+       reviewer, and routing/escalation reason
      - explicit next phase / waiting-for-approval state
 
-7. **Wait**
-   - Stop after report if user requested per-phase approval.
-   - Do not start next phase until approval is given.
+7. **Gate**
+
+   Publication and continuation are distinct: a successful phase may already be
+   published by step 6. This gate decides whether the next phase starts.
+
+   Degrade rule (evaluated first): if the approved plan lacks per-phase scope
+   globs, automatic continuation is disabled and the loop waits for explicit
+   user approval. An agent may draft scope globs, but they do not count as
+   approved until the owner/user approves them.
+
+   Auto continuation — proceed to the next phase without waiting only when all hold:
+   - final level == 1 (any escalation raises the level, so an escalated phase
+     cannot auto-continue)
+   - every changed file falls inside the phase's approved scope globs
+   - the red gate failed for the right reason, then passed, within the red-gate
+     attempt cap (max 3 by default; an approved phase override may raise it)
+   - plan deviations: none
+   - every required routine or independent review: no blocker
+
+   Any violation: manual gate — stop and wait for explicit approval.
+
+   Consecutive auto-approve rule: before classifying the current phase auto,
+   inspect the contiguous commit suffix immediately preceding `HEAD`. Count
+   commits carrying `Phase-gate: auto` trailers until the first commit without
+   one. If the count reaches 2, classify the current phase manual and wait. An
+   unexpected interleaved commit is scope drift and independently forces a
+   manual gate. Do not create a state counter for this.
+
+   Kill switch: if `.codex/state/PAUSE` exists at phase start, stop. This file
+   is never removed automatically.
 
 ## Risk Escalation
 
@@ -119,18 +205,20 @@ Escalate one or more levels when:
   behavior is involved
 - tests are weak, missing, flaky, or suspicious
 - numerical correctness risk appears
-- OpenCode reports uncertainty, blockers, or broadens scope
+- the implementer reports uncertainty, blockers, or broadens scope
 - unexpected files change
 - the red gate is missing or fails for the wrong reason
-- second opinion finds a blocker
-- delegate and reviewer disagree
+- routine or independent review finds a blocker
+- implementer and reviewer disagree
 - diff scope expands beyond phase boundary
 - Codex cannot verify quality from diff/test evidence without reading more
   context
 
-Escalation means spending more Codex tokens on direct source/test inspection.
-For high risk, Codex may drive targeted fixes directly. For blocking risk,
-stop instead of weakening the gate.
+Escalation means spending more Codex tokens on direct source/test inspection
+and/or switching the implementation engine to `openai/gpt-5.6-luna` only when
+the engine-evidence rules above apply. For high risk, Codex may drive
+targeted fixes directly. For blocking risk, stop instead of weakening the
+gate.
 
 ## Stop Rules
 
@@ -141,15 +229,19 @@ Stop and report instead of weakening gates when:
 - test expectation appears wrong but fix is not defensible from plan facts
 - required dependency/tool is unavailable
 - diff scope expands beyond phase boundary
-- OpenCode implementation exceeds requested scope
+- implementer exceeds requested scope
 - existing unrelated user changes block safe work
+- red-gate attempt cap reached; report red-gate attempt history instead of
+  weakening the gate. Codex decides whether to raise the level or stop; the
+  gate is never weakened.
 
 If a test gate is wrong, fix only when evidence is strong. Document the
 correction in the plan/report so future readers do not revert it.
 
 ## Delegation Prompts
 
-Mechanical edit prompt should include:
+Mechanical edit prompt (OpenCode default or `openai/gpt-5.6-luna`) should
+include:
 
 ```text
 Context: <project + phase>
@@ -161,11 +253,14 @@ Constraints:
 - Working dir: <path>
 - Do not commit
 - Do not edit outside <paths/scope>
+- Max red-gate attempts: 3
 - Stop and report if <stop rules>
-Final response: changed files, key decisions, commands run, metrics, blockers
+Final response (concise): changed files, key decisions, commands run, metrics,
+blockers, red-gate attempts used
 ```
 
-Second-opinion prompt should include:
+Focused review prompt (`openai/gpt-5.6-terra` or user-specified OpenCode
+model):
 
 ```text
 Read-only review. Do not edit.
@@ -190,18 +285,35 @@ Question: is there a blocking issue? Return only findings or "no blocker".
 ## Phase Report Template
 
 ```text
-Phase <N> complete and pushed: <commit>
+Phase <N> complete: <commit or uncommitted local state>
+
+Publication:
+- <committed/pushed/PR URL or stopped before an explicitly prohibited action>
 
 Scope:
-- ...
+- approved scope globs: <list or "no per-phase scope declared - manual gate">
+- changed files: <list>
 
 Implementation:
-- level: <1 low / 2 medium / 3 high>
-- model: <OpenCode default or other>
-- Codex review scope: <diff stat/key hunks/source files inspected>
+- final level: <1 low / 2 medium / 3 high>
+- model: <OpenCode configured default | openai/gpt-5.6-luna | other>
+- routing/escalation reason: <why this engine; "default" if none>
+
+Routine review:
+- reviewer: <openai/gpt-5.6-terra | OpenCode default | none>
+- verdict: <no blocker | blocker: ...>
+
+Independent review:
+- reviewer: <Claude/Sonnet | user-specified OpenCode model | none>
+- verdict: <no blocker | blocker: ...>
+
+Codex review scope:
+- <diff stat/key hunks/source files inspected>
 
 Red gate:
-- `<command>`: <failing result before implementation>
+- `<command>`: <failing result before implementation, then passing result after>
+- evidence: failed for the right reason, then passed within the red-gate attempt cap
+- attempts used / cap: <used> / <cap, default 3>
 
 Validation:
 - `<command>`: <result>
@@ -210,8 +322,5 @@ Validation:
 Plan deviations:
 - <none or rationale>
 
-Second opinion:
-- <OpenCode routine review and optional Claude/Sonnet or named OpenCode model escalation>: <verdict>
-
-Waiting for approval before Phase <N+1>.
+Gate: <auto - proceeding to Phase N+1 / waiting-for-approval>
 ```

@@ -5,7 +5,21 @@ description: Delegate bounded second opinions, adversarial review, planning crit
 
 # Claude Delegate
 
-Use Claude as a bounded reasoning delegate through this repository's MCP server. The wrapper runs Claude Code print mode with read-only Claude tools (`Read,Glob,Grep`) and `dontAsk` permissions, so treat Claude as a reviewer that may inspect files but must not execute commands or edit anything.
+Use Claude as a bounded reasoning delegate through the connected Claude MCP
+server. The wrapper runs Claude Code print mode with read-only Claude tools
+(`Read,Glob,Grep`) and `dontAsk` permissions, so treat Claude as a reviewer
+that may inspect files but must not execute commands or edit anything.
+
+## Boundary
+
+This is a Claude **tool/permission boundary**, not an OS-level sandbox:
+
+- By default, Claude has **read-only** access to the caller's cwd via `Read`, `Glob`, and `Grep`.
+- The wrapper grants **no additional directories** — `--add-dir` is never passed.
+- `/tmp/claude_mcp` is **server-managed registry storage**, not delegated workspace access.
+- Tasks needing writes, shell, network, credentials, or external-directory access are unsuitable here.
+
+Admin-managed Claude Code policy may still apply.
 
 ## Tool Availability
 
@@ -33,7 +47,7 @@ Delegate to Claude when the task benefits from a second model's perspective:
 Do not delegate to Claude:
 
 - Mechanical edits, sweeps, build loops, or long test runs; use `$opencode-delegate` when appropriate.
-- Tasks where Claude needs shell, network, credentials, editing, or non-read-only project-specific tool access.
+- Tasks where Claude needs writes, shell, network, credentials, or external-directory access.
 - Single-step commands that Codex can run directly.
 - Ambiguous decisions that should be resolved with the user first.
 

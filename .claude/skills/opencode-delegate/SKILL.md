@@ -1,11 +1,15 @@
 ---
 name: opencode-delegate
-description: Delegate TEDIOUS / mechanical / long-running work to OpenCode via async-first OpenCode MCP tools. Use for applying precise edits, sweeps, run→inspect→tweak loops, and test runs.
+description: Delegate precise, long-running, or plan-driven tasks from Claude Code to OpenCode via async-first MCP tools. Use OpenCode's configured default for bulk work, Luna for evidence-based implementation escalation, and Terra for focused read-only review.
 ---
 
 # OpenCode Delegate
 
 Use `mcp__opencode__opencode_run_async` by default. Use blocking `mcp__opencode__opencode_run` only for trivial, known-short prompts where losing the result would be acceptable. Reviews, implementation, iteration, and test-running should use async even when they look quick.
+
+Delegated runs can access only the caller's working directory. External paths,
+including `/tmp`, are denied; `/tmp/opencode_mcp` is server-managed registry
+storage.
 
 OpenCode is the **tedious-work engine**: Claude manages/orchestrates, OpenCode executes
 mechanical jobs. It runs a light LLM — excellent at executing precise instructions, weak
@@ -68,7 +72,29 @@ Success criteria:
 
 Pass `model="provider/model"` to `opencode_run`, `opencode_run_async`, or
 `opencode_session_fork_async` to override OpenCode's default model for that call.
-Omit `model` to use the configured default.
+Omit `model` to use the configured default. The configured default is the bulk
+implementer for L1 and routine L2.
+
+Pass `variant="high"` / `"max"` / `"minimal"` (provider-specific reasoning
+effort) to those tools, plus `opencode_session_fork`, to override the model's
+default effort for that call. Omit `variant` to use the default.
+
+### Routing policy (matches `phase-gated-implementation`)
+
+- **Omit `model`** for bulk L1 and routine L2 implementation.
+- **`model="openai/gpt-5.6-luna"`** for non-trivial implementation only when
+  there is evidence: repeated focused failure, implementer uncertainty,
+  clearly weak diff, or known complex generation such as protocol contracts,
+  concurrency, numerical kernels, build, or CUDA.
+- **`model="openai/gpt-5.6-terra"`** for focused read-only review of important
+  L2 and L3 diffs.
+- **User-specified model** when the user names an implementation or review
+  model; explicit selection overrides automatic routing for that role.
+
+Native OpenCode `sol`/`terra`/`luna` triad agents are reserved for standalone
+OpenCode operation, unavailable Codex tooling, quota pressure,
+breakthrough/replan, or explicit user request. Do not add routine native
+OpenCode Sol review on top of the Codex/Sol gate.
 
 ## Context reset (fork)
 
@@ -95,7 +121,7 @@ For delegated work:
 4. Use `mcp__opencode__opencode_job_list` to recover or discover jobs; `scope="all"` includes jobs recorded by other repository MCP instances.
 5. Use `mcp__opencode__opencode_job_cancel` only when the job should stop.
 
-Async job metadata is recorded under `/tmp/opencode_mcp/jobs`. Live response buffers remain local to the MCP process, but discovery and cancellation can work across repository MCP instances.
+Async job metadata, including process-group data, is recorded under `/tmp/opencode_mcp/jobs`. Live response buffers remain local to the MCP process, but discovery and cancellation can work across repository MCP instances.
 
 ## Timeout
 
