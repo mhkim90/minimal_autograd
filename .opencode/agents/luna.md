@@ -1,6 +1,6 @@
 ---
 description: High-effort implementer for C++ source, tests, CMake, and CUDA checks.
-mode: subagent
+mode: all
 model: openai/gpt-5.6-luna
 reasoningEffort: high
 steps: 40

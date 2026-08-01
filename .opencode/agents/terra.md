@@ -1,6 +1,6 @@
 ---
 description: Read-only reviewer for concise preflight and post-review findings.
-mode: subagent
+mode: all
 model: openai/gpt-5.6-terra
 reasoningEffort: high
 steps: 12
