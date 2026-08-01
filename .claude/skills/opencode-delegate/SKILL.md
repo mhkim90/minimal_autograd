@@ -1,138 +1,142 @@
 ---
 name: opencode-delegate
-description: Delegate precise, long-running, or plan-driven tasks from Claude Code to OpenCode via async-first MCP tools. Use OpenCode's configured default for bulk work, Luna for evidence-based implementation escalation, and Terra for focused read-only review.
+description: Delegate precise, long-running, or plan-driven work through async-first OpenCode MCP tools. Use agent="luna" for normal role-bound implementation, the configured default for mechanical or economy work, and agent="terra" for focused read-only review.
 ---
 
 # OpenCode Delegate
 
-Use `mcp__opencode__opencode_run_async` by default. Use blocking `mcp__opencode__opencode_run` only for trivial, known-short prompts where losing the result would be acceptable. Reviews, implementation, iteration, and test-running should use async even when they look quick.
+Use `mcp__opencode__opencode_run_async` by default. MCP clients may cap
+blocking calls before OpenCode finishes, and delegated jobs can run for many
+minutes. Use blocking `mcp__opencode__opencode_run` only for trivial,
+known-short prompts. Use async for implementation, review, iteration, and test
+runs.
 
 Delegated runs can access only the caller's working directory. External paths,
-including `/tmp`, are denied; `/tmp/opencode_mcp` is server-managed registry
-storage.
-
-OpenCode is the **tedious-work engine**: Claude manages/orchestrates, OpenCode executes
-mechanical jobs. It runs a light LLM — excellent at executing precise instructions, weak
-at judgment, so give it fully-specified, mechanical tasks.
-
-OpenCode MCP tools:
-
-- `mcp__opencode__opencode_run_async` — default for delegated work; returns a job ID immediately.
-- `mcp__opencode__opencode_session_fork_async` — reset long context in the background.
-- `mcp__opencode__opencode_job_status` / `mcp__opencode__opencode_job_result` — poll and fetch results.
-- `mcp__opencode__opencode_job_list` / `mcp__opencode__opencode_job_cancel` — discover or stop jobs.
-- `mcp__opencode__opencode_run` / `mcp__opencode__opencode_session_fork` — blocking; only for trivial, known-short calls.
-- `mcp__opencode__opencode_session_new` / `mcp__opencode__opencode_session_list` — create or find sessions.
+including `/tmp`, are denied; `/tmp/opencode_mcp` is MCP-server-managed
+registry storage.
 
 ## When to delegate
 
-Delegate when the task is any of:
-- **Precise mechanical edit** — apply an exact, fully-specified change to files
-- **Long CLI run** — build sweeps, multi-config test runs, benchmark loops
-- **Tedious iteration** — run → inspect → tweak → repeat cycles with a known plan
-- **Detailed agreed plan** — user approved a step-by-step plan; execution is mechanical
-- **Parallel workstream** — background work while main conversation handles something else
+Delegate:
 
-Do NOT delegate to OpenCode:
-- Hard reasoning, architecture/design decisions, or ambiguous tasks (resolve those in
-  conversation first, or handle inline)
-- Single-step commands (just run them directly)
+- **Long CLI run** — experiment scripts, training loops, or sweeps
+- **Tedious iteration** — run → inspect → tweak → repeat work with a known plan
+- **Detailed agreed plan** — execution of an approved step-by-step plan
+- **Parallel workstream** — background work while the main conversation proceeds
+
+Do not delegate design decisions, ambiguous tasks, work requiring unavailable
+conversation history, or a single-step command that can be run directly.
+
+## Agent routing
+
+- Use `agent="luna"` as the normal role-bound implementation route. Omit
+  `model` and `variant`; the named agent configuration is authoritative.
+- Use the OpenCode configured default by omitting `agent`, `model`, and
+  `variant` for mechanical, repetitive, economy, or quota-preserving work.
+  Record this as the configured-default route; do not imply that it is Luna.
+- Use `agent="terra"` for focused read-only review in a separate Terra session.
+  Omit `model` and `variant`; never use Terra as an implementer.
+- Use a raw `model="provider/model"` only for an explicit user override or an
+  explicitly approved degraded fallback. In a fallback, restate the complete
+  role constraints and report `routing mode: model fallback`.
+- Use `agent="sol"` only for an explicit whole-phase triad handoff. Do not
+  routinely nest OpenCode Sol beneath Codex/Sol. In a whole-phase handoff, do
+  not also call Luna or Terra; verify the returned evidence once.
+
+Fail closed when agent selection is missing from the MCP schema, unavailable,
+or not proven by live evidence. Never silently substitute the configured
+default or a raw model for a requested named agent. Stop and report the
+missing or unproven route unless an approved fallback is selected explicitly.
 
 ## How to write the prompt
 
 Include everything OpenCode needs to work cold:
 
-```
-Context: <1-2 sentences on what this project is and what we're doing>
+```text
+Context: <1-2 sentences on the project and task>
 
 Task: <exact steps to perform>
 
-Files to read first: <list key files if needed>
+Files to read first: <key files if needed>
 
 Success criteria:
 - <what done looks like>
-- <any output to produce or check, e.g. which test binary must print ALL TESTS PASSED>
+- <outputs or checks to run>
 
-  Constraints:
-    - Working dir: <repo-root>
+Routing:
+- requested agent: <luna | terra | sol | none>
+- routing mode: <role-bound | mechanical/economy | review | whole-phase | user override | model fallback>
+- model/variant: <omitted for named agents; otherwise explicit override>
+
+Constraints:
+- Working dir: /home/mhkim90/workspace/minimal_autograd
 - Never commit unless explicitly told
 - Match existing code style
+- Do not edit outside the stated scope
+
+Final response: changed files, decisions, commands, metrics, blockers,
+requested agent, session ID, bound/reported model, and routing mode
 ```
 
 ## Session management
 
-- **New task** → omit `session_id` on `opencode_run_async` (starts fresh), or call
-  `opencode_session_new` first to reserve an ID before sending work.
-- **Continue same task** → pass the `session_id` returned from the previous call.
-- **Find a session** → `opencode_session_list` returns recent session IDs + titles
-  (use when you've lost the ID from an earlier turn).
-- The response prefix `[session:ses_xxx]` carries the session ID — store it if you plan to follow up.
+- Start a new task without `session_id`.
+- Keep one session lineage per role. Never reuse or convert a Luna session for
+  Terra review, or a Terra session for implementation.
+- Continue the same role with its returned `session_id` and repeat the same
+  named `agent` on every run or fork:
 
-## Model selection
-
-Pass `model="provider/model"` to `opencode_run`, `opencode_run_async`, or
-`opencode_session_fork_async` to override OpenCode's default model for that call.
-Omit `model` to use the configured default. The configured default is the bulk
-implementer for L1 and routine L2.
-
-Pass `variant="high"` / `"max"` / `"minimal"` (provider-specific reasoning
-effort) to those tools, plus `opencode_session_fork`, to override the model's
-default effort for that call. Omit `variant` to use the default.
-
-### Routing policy (matches `phase-gated-implementation`)
-
-- **Omit `model`** for bulk L1 and routine L2 implementation.
-- **`model="openai/gpt-5.6-luna"`** for non-trivial implementation only when
-  there is evidence: repeated focused failure, implementer uncertainty,
-  clearly weak diff, or known complex generation such as protocol contracts,
-  concurrency, numerical kernels, build, or CUDA.
-- **`model="openai/gpt-5.6-terra"`** for focused read-only review of important
-  L2 and L3 diffs.
-- **User-specified model** when the user names an implementation or review
-  model; explicit selection overrides automatic routing for that role.
-
-Native OpenCode `sol`/`terra`/`luna` triad agents are reserved for standalone
-OpenCode operation, unavailable Codex tooling, quota pressure,
-breakthrough/replan, or explicit user request. Do not add routine native
-OpenCode Sol review on top of the Codex/Sol gate.
-
-## Context reset (fork)
-
-When a session grows long and context quality degrades, fork it:
-
-```
-mcp__opencode__opencode_session_fork_async(
+```text
+mcp__opencode__opencode_run_async(
     session_id="ses_xxx",
-    message="Summarize what we've done so far and continue with <next task>"
+    agent="luna",
+    message="Continue the Luna implementation with <next task>"
 )
 ```
 
-- Returns a `[job:job_id]` immediately; poll the result for the new `[session:ses_yyy]` and use that session ID for subsequent async calls
-- The fork snapshots the old session; the new session starts fresh from that point
-- Original session is preserved and unaffected
+- Fork a role lineage with the same agent:
+
+```text
+mcp__opencode__opencode_session_fork_async(
+    session_id="ses_xxx",
+    agent="luna",
+    message="Summarize the work and continue the Luna implementation"
+)
+```
+
+Do not pass `model` or `variant` on named-agent calls. Capture the returned
+session ID and the bound/reported model; requested agent text alone is not
+identity evidence.
 
 ## Async workflow
 
-For delegated work:
-
-1. Start with `mcp__opencode__opencode_run_async`, or `mcp__opencode__opencode_session_fork_async` when resetting context.
+1. Start with `mcp__opencode__opencode_run_async`, or fork with
+   `mcp__opencode__opencode_session_fork_async` when resetting context.
 2. Poll with `mcp__opencode__opencode_job_status`.
 3. Fetch the final response with `mcp__opencode__opencode_job_result`.
-4. Use `mcp__opencode__opencode_job_list` to recover or discover jobs; `scope="all"` includes jobs recorded by other repository MCP instances.
+4. Use `mcp__opencode__opencode_job_list` to recover jobs, including
+   `scope="all"` for jobs recorded by other repository MCP instances.
 5. Use `mcp__opencode__opencode_job_cancel` only when the job should stop.
 
-Async job metadata, including process-group data, is recorded under `/tmp/opencode_mcp/jobs`. Live response buffers remain local to the MCP process, but discovery and cancellation can work across repository MCP instances.
+## Focused review prompt
 
-## Timeout
+Start Terra review in a fresh session and use:
 
-- Blocking `opencode_run` and `opencode_session_fork` retain their timeout arguments, but they are not the normal path.
-- Use blocking tools only for trivial, known-short calls, with a small explicit timeout.
-- For anything uncertain, start async first instead of retrying after a client timeout.
-- A client may abort a blocking call before the server timeout fires, losing the result.
+```text
+Read-only focused review. Do not edit.
+Requested agent: terra
+Context: <phase and changed files>
+Validation: <red gate, passing checks, and metrics>
+Review scope: <diff summary and key hunks>
+Question: any blocking scope, test-validity, acceptance, or bug issue?
+Return findings first or "no blocker".
+Report session ID and bound/reported model.
+```
 
-## After delegation
+## Timeout and reporting
 
-1. Report the job ID immediately, and the session ID once the result contains it
-2. Summarize what OpenCode was asked to do
-3. When OpenCode returns, relay its findings concisely — don't just dump the full response
-4. If OpenCode hits a blocker or asks a question, surface it to the user before continuing
+- Keep known-short blocking calls small and explicit.
+- Use async first for uncertain work instead of retrying after a client timeout.
+- Report the job ID immediately and the session ID once returned.
+- Summarize the request and relay findings concisely.
+- Surface blockers or questions before continuing.
