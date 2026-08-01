@@ -69,7 +69,7 @@ Routing:
 - model/variant: <omitted for named agents; otherwise explicit override>
 
 Constraints:
-- Working dir: /home/mhkim90/workspace/minimal_autograd
+- Working dir: <absolute caller working directory>
 - Never commit unless explicitly told
 - Match existing code style
 - Do not edit outside the stated scope
