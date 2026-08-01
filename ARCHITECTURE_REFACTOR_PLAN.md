@@ -25,7 +25,9 @@ Current delivery state:
 - the OOP CUDA matrix multiplication, losses, and optimizer bundle is merged
   through PR #43;
 - the OOP CUDA spatial and FFT replacement bundle (`conv2d`, `max_pool2d`,
-  `fft2`, and `ifft2`) is implemented in the current branch, pending review.
+  `fft2`, and `ifft2`) is merged through PR #47;
+- the in-repository extension and consumer qualification slice is implemented
+  in the current branch, pending review.
 
 ## 2. Purpose
 
@@ -1104,10 +1106,27 @@ both migrations or extracting a shared core prematurely.
 
 ## 14. Recommended Execution Order
 
-Phases 0–6 establish the CPU Tensor, Variable, operation, training, spatial,
-normalization, and diffusion foundation. The next implementation milestone is
-Phase 7: migrate complex values and CPU FFT support before beginning the CUDA
-Tensor foundation.
+Phases 0–9 are complete through the CUDA spatial and FFT bundle. The current
+implementation milestone is the in-repository portion of Phase 10: qualify
+replacement-only package consumers, copied Eigen interoperation, an external
+CUDA custom operation, and optimizer-state continuation. The focused
+CppResist migration spike remains the next manual gate; Phase 11 remains
+blocked until downstream migration and qualification complete.
+
+### Phase 10 in-repository qualification facts
+
+The normal `find_package` and `add_subdirectory` consumers use only the
+replacement `Tensor`, `Variable`, registered-module, free-operation, and
+optimizer APIs. They compile with checks that normal headers expose neither
+Eigen nor CUDA runtime headers. The opt-in Eigen extension provides copied,
+rank-2 conversion helpers that preserve logical `(row, col)` values across
+Eigen column-major and Tensor row-major storage without aliasing or hidden
+device transfer. A standalone Eigen consumer proves a custom operation and
+its backward path on an asymmetric `2 x 3` fixture. A standalone CUDA consumer
+allocates owned output tensors, launches external kernels only through
+borrowed CUDA views, synchronizes explicitly, and validates forward and
+backward results. Hosted CPU CI executes the installed and source-tree
+consumers; CUDA execution remains a recorded GPU gate.
 
 ### Phase 7 delivery facts (CPU complex + FFT replacement)
 

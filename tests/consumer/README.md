@@ -1,90 +1,95 @@
-# Consumer smoke tests for `minimal_autograd`
+# Downstream Consumer Checks
 
-This directory contains minimal external-consumer smoke projects that
-demonstrate the supported consumption boundaries of `minimal_autograd`:
+This directory contains standalone projects for the supported consumption
+boundaries of `minimal_autograd`:
 
-- `find_package/` — CONFIG-based consumption via
-  `find_package(autograd CONFIG REQUIRED)`.
-- `add_subdir/`  — tree-embedded consumption via `add_subdirectory(...)`.
+- `find_package/` uses an installed CONFIG package.
+- `add_subdir/` embeds the source tree with `add_subdirectory(...)`.
+- `eigen_custom/` uses the installed package and the opt-in Eigen extension
+  header for a copied custom operation.
+- `cuda_custom/` uses the installed CUDA package and an external CUDA kernel.
 
-Each consumer links the namespaced target `autograd::autograd` and
-produces an executable named `autograd_smoke`. The two consumer projects
-share the same minimal `main.cpp`: a deterministic compile/link/run check
-that does fixed `Var` / `scale` / `sum` / `backward` work and verifies
-exact forward and gradient values. There is no training loop, no random
-init, and no internal / Eigen / CUDA header includes — only the normal
-public umbrella `#include "autograd.h"`.
+The `find_package` and `add_subdir` smoke programs are identical. They use the
+replacement Tensor/Variable API, `nn::Module` modules, canonical free
+functions, and `optim::Adam`. They intentionally do not include the umbrella
+header or any legacy graph and Eigen surface. The smoke check covers a fixed
+forward/backward pass, registered parameter names and traversal, an Adam step,
+and an AdamState snapshot/load_state round trip with deterministic values.
 
-Both projects live under `tests/consumer/` so they are visible to repo
-maintainers, but they are NEVER picked up by the autograd build itself
-(the project's top-level `CMakeLists.txt` only lists source files
-explicitly and does not recurse into subdirectories).
+The normal Tensor storage contract is dense row-major. The opt-in
+`autograd/extension/eigen.h` helpers are explicit copies: `tensor_from_eigen`
+creates a CPU Tensor and `tensor_to_eigen` materializes a rank-2 CPU Tensor as
+an Eigen matrix. Both preserve logical `(row, col)` values while reordering
+between Tensor row-major and Eigen column-major storage. They do not alias
+storage, create raw views, or perform hidden device transfers.
 
-## `tests/consumer/find_package/`
+## CPU Checks
 
-Standalone `find_package(CONFIG REQUIRED)` smoke project. The consumer
-does **not** influence the autograd build itself: it discovers the
-installed `autogradConfig.cmake` from `CMAKE_PREFIX_PATH` (or
-`autograd_DIR`) and links the resulting `autograd::autograd` target.
-Whether CUDA is in the package was decided at autograd install time.
-
-## `tests/consumer/add_subdir/`
-
-Standalone `add_subdirectory` smoke project. The consumer consumes the
-autograd source tree via `add_subdirectory(... AUTOGRAD_SRC_DIR)`, so
-passing `-DAUTOGRAD_USE_CUDA=ON` to the parent does enable CUDA on the
-embedded autograd build.
-
-This consumer's own `CMakeLists.txt` enforces the no-inheritance
-contract at configure time: after `add_subdirectory(...)` it checks for
-any of the known autograd in-tree test/example targets
-(`test_core`, `test_nn`, `test_conv`, `test_fft`,
-`test_characterization`, `test_extensions`, `test_diffusion`,
-`test_smoke`, `test_cuda_core`, `test_cuda_fft`, `test_cuda_tensor`,
-`linear_regression`, `mnist_classify_cpu`, `mnist_classify_gpu`, and the
-legacy `example`)
-and fails the configure step if any of them are visible. The check
-exists so the package boundary is verified by the build itself rather
-than only by manual inspection. It can be silenced with
-`-DAUTOGRAD_CONSUMER_ALLOW_TARGET_LEAK=ON` for the explicit opt-in case
-(see `-DAUTOGRAD_BUILD_TESTS=ON` / `-DAUTOGRAD_BUILD_EXAMPLES=ON`).
-
-## Building the consumers
+Build and install the library to a local prefix:
 
 ```sh
-# CPU top-level build → install to a repo-local prefix
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 cmake --install build --prefix .scratch/install
+```
 
-# find_package consumer
+Run the installed `find_package` smoke check and the installed Eigen custom
+consumer:
+
+```sh
 cmake -S tests/consumer/find_package -B .scratch/findpkg_build \
-    -DCMAKE_PREFIX_PATH=.scratch/install
+    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install"
 cmake --build .scratch/findpkg_build
-.scratch/findpkg_build/autograd_smoke   # prints "OK: forward=60, grad=2.5"
+.scratch/findpkg_build/autograd_smoke
 
-# add_subdirectory consumer (the blueprint must live outside the autograd
-# source tree or the add_subdirectory call would recurse into itself)
+cmake -S tests/consumer/eigen_custom -B .scratch/eigen_custom_build \
+    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install"
+cmake --build .scratch/eigen_custom_build
+.scratch/eigen_custom_build/autograd_eigen_custom
+```
+
+Run the source-tree consumer from a copy outside the source tree so the
+embedded `add_subdirectory` call cannot recurse into itself:
+
+```sh
 cp -r tests/consumer/add_subdir .scratch/addsub_consumer
 cmake -S .scratch/addsub_consumer -B .scratch/addsub_build \
     -DAUTOGRAD_SRC_DIR="$PWD"
 cmake --build .scratch/addsub_build
-.scratch/addsub_build/autograd_smoke   # prints "OK: forward=60, grad=2.5"
+.scratch/addsub_build/autograd_smoke
 ```
 
-For CUDA-enabled autograd:
+The add-subdirectory project also fails at configure time if known in-tree test
+or example targets leak into the consumer.
+
+Hosted CI runs the CPU build, install, installed `find_package` consumer,
+installed Eigen custom consumer, and source-tree consumer. It does not claim to
+run CUDA without a CUDA runner and device.
+
+## Manual CUDA Check
+
+Build and install a CUDA-enabled library, then configure the standalone CUDA
+consumer against that install. The toolkit path may be omitted when `nvcc` is
+already on `PATH`.
 
 ```sh
 PATH=/usr/local/cuda/bin:$PATH cmake -S . -B build-cuda \
-    -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_USE_CUDA=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DAUTOGRAD_USE_CUDA=ON \
     -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 PATH=/usr/local/cuda/bin:$PATH cmake --build build-cuda --parallel
 PATH=/usr/local/cuda/bin:$PATH cmake --install build-cuda \
     --prefix .scratch/install_cuda
 
-PATH=/usr/local/cuda/bin:$PATH cmake -S tests/consumer/find_package \
-    -B .scratch/findpkg_cuda_build \
-    -DCMAKE_PREFIX_PATH=.scratch/install_cuda
-PATH=/usr/local/cuda/bin:$PATH cmake --build .scratch/findpkg_cuda_build
-.scratch/findpkg_cuda_build/autograd_smoke   # prints "OK: forward=60, grad=2.5"
+PATH=/usr/local/cuda/bin:$PATH cmake -S tests/consumer/cuda_custom \
+    -B .scratch/cuda_custom_build \
+    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install_cuda" \
+    -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+PATH=/usr/local/cuda/bin:$PATH cmake --build .scratch/cuda_custom_build --parallel
+PATH=/usr/local/cuda/bin:$PATH \
+    .scratch/cuda_custom_build/autograd_cuda_custom
 ```
+
+The CUDA custom consumer keeps ownership in `Tensor`, obtains only borrowed
+device views from `autograd/extension/cuda.h`, launches and synchronizes its
+own kernels, and checks forward and backward results through host copies.

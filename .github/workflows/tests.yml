@@ -30,6 +30,26 @@ jobs:
           make -j$(nproc)
       - name: Run tests
         run: ctest --test-dir build --output-on-failure
+      - name: Install and qualify CPU consumers
+        run: |
+          cmake --install build --prefix .scratch/install
+
+          cmake -S tests/consumer/find_package -B .scratch/findpkg_build \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/.scratch/install"
+          cmake --build .scratch/findpkg_build --parallel
+          .scratch/findpkg_build/autograd_smoke
+
+          cmake -S tests/consumer/eigen_custom -B .scratch/eigen_custom_build \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/.scratch/install"
+          cmake --build .scratch/eigen_custom_build --parallel
+          .scratch/eigen_custom_build/autograd_eigen_custom
+
+          mkdir -p .scratch
+          cp -r tests/consumer/add_subdir .scratch/addsub_consumer
+          cmake -S .scratch/addsub_consumer -B .scratch/addsub_build \
+            -DAUTOGRAD_SRC_DIR="$GITHUB_WORKSPACE"
+          cmake --build .scratch/addsub_build --parallel
+          .scratch/addsub_build/autograd_smoke
       - name: Build advanced tests
         run: |
           mkdir build-advanced && cd build-advanced
