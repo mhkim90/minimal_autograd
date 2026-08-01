@@ -74,3 +74,13 @@ See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/
 - Before implementing an external plan, confirm a current `plan-audit` and
   approved phase boundaries. For an agent-authored plan, confirm `grilled-me`
   findings are resolved.
+
+## GitHub Operations
+
+- Prefer the connected GitHub MCP/app for GitHub-hosted repository, issue, and
+  pull-request reads and mutations, including PR creation and updates.
+- Use local `git` for worktree inspection, branches, staging, commits, and
+  pushes.
+- Use authenticated `gh` only when the GitHub MCP/app is unavailable or does
+  not expose the required operation, and state the fallback when it matters.
+- Never read, print, or expose GitHub credentials or tokens.
