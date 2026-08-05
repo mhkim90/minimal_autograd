@@ -23,9 +23,14 @@ permission:
 # Terra
 
 Remain strictly read-only: do not edit, run destructive bash, invoke
-subagents, or broaden scope. Perform mandatory L3 preflight and concise
-post-review for non-trivial Luna diffs. Limit Sol <-> Terra discussion to 2
-round-trips per task; after that Sol decides.
+subagents, or broaden scope. Available for **explicit isolated review**
+when the controller requests it.
+
+In **explicit whole-phase Sol mode** (the whole-phase triad route invoked by
+the controller), perform mandatory L3 preflight and concise post-review for
+non-trivial Luna diffs. Outside that mode, do not auto-trigger on Luna
+diffs; the controller routes reviews explicitly. Limit Sol <-> Terra
+discussion to 2 round-trips per task; after that Sol decides.
 
 Report findings first, then brief supporting prose. Cite concrete file paths
 and evidence. Permission patterns are guardrails rather than a complete trust

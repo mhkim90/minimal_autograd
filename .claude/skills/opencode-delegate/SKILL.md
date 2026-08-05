@@ -1,142 +1,82 @@
 ---
 name: opencode-delegate
-description: Delegate precise, long-running, or plan-driven work through async-first OpenCode MCP tools. Use agent="luna" for normal role-bound implementation, the configured default for mechanical or economy work, and agent="terra" for focused read-only review.
+description: Delegate approved, tedious, or long-running work through async-first OpenCode MCP. Route mechanical work to the configured default, standard work to Luna, and justified difficult preflight to Sol-expert.
 ---
 
 # OpenCode Delegate
 
-Use `mcp__opencode__opencode_run_async` by default. MCP clients may cap
-blocking calls before OpenCode finishes, and delegated jobs can run for many
-minutes. Use blocking `mcp__opencode__opencode_run` only for trivial,
-known-short prompts. Use async for implementation, review, iteration, and test
-runs.
+Use `mcp__opencode__opencode_run_async` by default; use blocking calls only for
+known-short work. Delegate execution, iteration, review, and long test runs,
+not ambiguous design decisions or single-step commands.
 
-Delegated runs can access only the caller's working directory. External paths,
-including `/tmp`, are denied; `/tmp/opencode_mcp` is MCP-server-managed
-registry storage.
+## Routes
 
-## When to delegate
+- **Mechanical/economy**: omit `agent`, `model`, and `variant`; use the
+  configured default and report that route explicitly.
+- **Standard**: use `agent="luna"`; omit `model` and `variant`.
+- **Difficult**: use `agent="sol-expert"` only for a bounded preflight or
+  breakthrough when warranted, then use `agent="luna"` for implementation.
+- Use `agent="terra"` only for a separate, fresh-context, read-only review
+  with a recorded reason; never use Terra as implementer.
+- Use `agent="sol"` only for explicit whole-phase triad compatibility. Do not
+  call Luna or Terra separately in that route.
+- Use a raw model only for an explicit user override or approved fallback.
 
-Delegate:
+## Route evidence
 
-- **Long CLI run** — experiment scripts, training loops, or sweeps
-- **Tedious iteration** — run → inspect → tweak → repeat work with a known plan
-- **Detailed agreed plan** — execution of an approved step-by-step plan
-- **Parallel workstream** — background work while the main conversation proceeds
+- Record requested agent, job ID, session ID, and bound/reported model.
+- Accept an honored named selector plus a terminal role response as minimum
+  route evidence. Query normalized usage after terminal state when available.
+- Report unresolved normalized model identity or partial accounting as an
+  observability warning when no evidence contradicts the selected role.
+- Stop on selector rejection, mismatched continuations, explicit model
+  contradiction, or silent fallback. Never substitute silently.
 
-Do not delegate design decisions, ambiguous tasks, work requiring unavailable
-conversation history, or a single-step command that can be run directly.
+## Luna and Sol-expert lifecycle
 
-## Agent routing
+- Keep one bounded phase or subphase per Luna session and end it after green.
+- Start or fork a new same-role session after a material scope, red-gate,
+  strategy, or blocker change. Repeat the same named agent on continuations.
+- Allow at most three implementation/fix attempts. After two failures on the
+  same blocker, request one bounded Sol-expert consultation. Permit a third
+  attempt only after a materially revised approach is agreed.
+- Give Sol-expert approved scope, one focused question or blocker, and compact
+  diff/test evidence. Allow one consultation and at most one follow-up.
+  Require: findings, proposed approach, acceptance gate, stop/go. Sol-expert
+  never implements, edits, publishes, or delegates.
 
-- Use `agent="luna"` as the normal role-bound implementation route. Omit
-  `model` and `variant`; the named agent configuration is authoritative.
-- Use the OpenCode configured default by omitting `agent`, `model`, and
-  `variant` for mechanical, repetitive, economy, or quota-preserving work.
-  Record this as the configured-default route; do not imply that it is Luna.
-- Use `agent="terra"` for focused read-only review in a separate Terra session.
-  Omit `model` and `variant`; never use Terra as an implementer.
-- Use a raw `model="provider/model"` only for an explicit user override or an
-  explicitly approved degraded fallback. In a fallback, restate the complete
-  role constraints and report `routing mode: model fallback`.
-- Use `agent="sol"` only for an explicit whole-phase triad handoff. Do not
-  routinely nest OpenCode Sol beneath Codex/Sol. In a whole-phase handoff, do
-  not also call Luna or Terra; verify the returned evidence once.
-
-Fail closed when agent selection is missing from the MCP schema, unavailable,
-or not proven by live evidence. Never silently substitute the configured
-default or a raw model for a requested named agent. Stop and report the
-missing or unproven route unless an approved fallback is selected explicitly.
-
-## How to write the prompt
-
-Include everything OpenCode needs to work cold:
+## Prompt template
 
 ```text
-Context: <1-2 sentences on the project and task>
-
-Task: <exact steps to perform>
-
-Files to read first: <key files if needed>
-
-Success criteria:
-- <what done looks like>
-- <outputs or checks to run>
-
-Routing:
-- requested agent: <luna | terra | sol | none>
-- routing mode: <role-bound | mechanical/economy | review | whole-phase | user override | model fallback>
-- model/variant: <omitted for named agents; otherwise explicit override>
-
+Context: <project + phase>
+Task: <exact edit/run loop>
+Files/scope: <approved paths or globs>
+Red gate: <check + expected failure>
+Success criteria: <checks/metrics>
+Safety risk: <L1-L4>
+Implementation difficulty: <mechanical/economy | standard | difficult>
+Routing: <configured default | luna | sol-expert | terra | sol>
+Elapsed-time checkpoint / maximum wait: <phase-defined values>
 Constraints:
-- Working dir: <absolute caller working directory>
-- Never commit unless explicitly told
-- Match existing code style
-- Do not edit outside the stated scope
-
-Final response: changed files, decisions, commands, metrics, blockers,
-requested agent, session ID, bound/reported model, and routing mode
+- one bounded phase/subphase; no commit or edits outside scope
+- stop after two same-blocker failures; revise materially before a third attempt
+Final response: changed files, decisions, commands, blockers, session count,
+retries, requested agent, job ID, session ID, bound/reported model, and route
 ```
 
-## Session management
+## Async workflow and elapsed-time policy
 
-- Start a new task without `session_id`.
-- Keep one session lineage per role. Never reuse or convert a Luna session for
-  Terra review, or a Terra session for implementation.
-- Continue the same role with its returned `session_id` and repeat the same
-  named `agent` on every run or fork:
+1. Keep one session lineage per role. Repeat the same named agent on every
+   continuation or fork, and pass a stable workflow ID.
+2. Poll job status and fetch the terminal result. Query normalized usage after
+   terminal state.
+3. At each phase-defined elapsed-time checkpoint, recover status and inspect
+   material progress. Never duplicate a running job because it is slow.
+4. After two no-progress checkpoints or the maximum wait, stop and report.
+   Do not silently retry, extend, or cancel; cancellation requires an explicit
+   stop decision.
+5. Use job list to recover recorded jobs. Record session count, retries,
+   elapsed time, checkpoints, route evidence, and reviewer trigger reason.
 
-```text
-mcp__opencode__opencode_run_async(
-    session_id="ses_xxx",
-    agent="luna",
-    message="Continue the Luna implementation with <next task>"
-)
-```
-
-- Fork a role lineage with the same agent:
-
-```text
-mcp__opencode__opencode_session_fork_async(
-    session_id="ses_xxx",
-    agent="luna",
-    message="Summarize the work and continue the Luna implementation"
-)
-```
-
-Do not pass `model` or `variant` on named-agent calls. Capture the returned
-session ID and the bound/reported model; requested agent text alone is not
-identity evidence.
-
-## Async workflow
-
-1. Start with `mcp__opencode__opencode_run_async`, or fork with
-   `mcp__opencode__opencode_session_fork_async` when resetting context.
-2. Poll with `mcp__opencode__opencode_job_status`.
-3. Fetch the final response with `mcp__opencode__opencode_job_result`.
-4. Use `mcp__opencode__opencode_job_list` to recover jobs, including
-   `scope="all"` for jobs recorded by other repository MCP instances.
-5. Use `mcp__opencode__opencode_job_cancel` only when the job should stop.
-
-## Focused review prompt
-
-Start Terra review in a fresh session and use:
-
-```text
-Read-only focused review. Do not edit.
-Requested agent: terra
-Context: <phase and changed files>
-Validation: <red gate, passing checks, and metrics>
-Review scope: <diff summary and key hunks>
-Question: any blocking scope, test-validity, acceptance, or bug issue?
-Return findings first or "no blocker".
-Report session ID and bound/reported model.
-```
-
-## Timeout and reporting
-
-- Keep known-short blocking calls small and explicit.
-- Use async first for uncertain work instead of retrying after a client timeout.
-- Report the job ID immediately and the session ID once returned.
-- Summarize the request and relay findings concisely.
-- Surface blockers or questions before continuing.
+Usage is observational evidence only. Do not add fixed token, price, or
+provider-private-path limits.
