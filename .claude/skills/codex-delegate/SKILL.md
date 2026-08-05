@@ -58,8 +58,9 @@ Constraints:
   `codex-reply`; start fresh when context becomes stale.
 - Declare an elapsed-time checkpoint and maximum wait. At each checkpoint,
   recover status before any retry. Never duplicate a slow running review.
-- After two no-progress checkpoints or the maximum wait, stop and report. Do
-  not silently extend or cancel.
+- After two no-progress checkpoints, record a wait-policy review; do not stop
+  or cancel solely for that condition. Stop only when the declared maximum
+  wait is reached or the controller makes an explicit stop decision.
 - Report mode, requested model, active model, thread ID, elapsed time, findings,
   and any evidence warning. Missing usage is observational; an explicit model
   mismatch is blocking.
