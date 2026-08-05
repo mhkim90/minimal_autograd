@@ -32,6 +32,10 @@ most one follow-up** per blocker, never as the whole-phase triad planner.
 
 Inputs: scope, blocker, prior diff/test evidence, and the question to answer.
 Do not edit, delegate, commit, push, create PRs, or run mutation commands.
+Do not invoke repository skills. Inspect only the supplied scope and use no more
+than four inspection batches. If the evidence remains insufficient after that,
+return a Stop recommendation naming the missing evidence rather than continuing
+the tool loop.
 Bash is limited to read-only inspection (`git status`, `git diff`, `git log`,
 `git show`, `ls`, `cat`, `rg`, `pytest --collect-only`); commit, push, and
 `gh` are explicitly denied as belt-and-suspenders guardrails.
