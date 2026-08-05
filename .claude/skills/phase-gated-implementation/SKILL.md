@@ -82,9 +82,14 @@ push, and update a PR only as publication duties.
   material progress. For OpenCode jobs, an advancing completed-step or event
   count is material progress even when no partial text exists; never launch a
   duplicate because a job is slow.
-- After two consecutive checkpoints with no material progress, or at the
-  phase-defined maximum wait, stop and report. Do not silently extend, retry,
-  or cancel; cancellation requires an explicit stop decision.
+- After two consecutive checkpoints with no material progress, record a
+  wait-policy review; do not stop, abandon, or cancel solely for that condition.
+  Cancel only on terminal error, the phase-defined maximum wait, or an explicit
+  controller/owner stop decision.
+- For a full `sol-expert` consultation that has completed inspection work and
+  then reports `step_start`, treat the state as final synthesis pending. Declare
+  a final-synthesis grace of at least 10 minutes; its phase-defined maximum wait
+  must be no shorter than that grace. Keep the same job through the grace.
 
 ## Plan preflight and standard loop
 
@@ -121,7 +126,7 @@ push, and update a PR only as publication duties.
 Stop and report on stale, missing, or blocked preflight; an invalid or
 wrong-reason gate; failed acceptance; plan-intent change; unverifiable
 correctness; unavailable required tool, named agent, or reviewer evidence;
-explicit route contradiction; two no-progress elapsed-time checkpoints; scope
+explicit route contradiction; phase-defined maximum wait reached; scope
 expansion; blocking unrelated changes; or attempt-cap exhaustion.
 
 ## Delegation prompts
@@ -137,7 +142,7 @@ Success criteria: <checks/metrics>
 Safety risk: <L1-L4>
 Implementation difficulty: <mechanical/economy | standard | difficult>
 Implementation route: <configured default | agent="luna" | sol-expert then Luna>
-Elapsed-time checkpoint / maximum wait: <phase-defined values>
+Elapsed-time checkpoint / final-synthesis grace (full Sol only) / maximum wait: <phase-defined values>
 Constraints:
 - one bounded phase/subphase; do not commit or edit outside scope
 - max attempts: <approved cap>; stop after two same-blocker failures
@@ -187,7 +192,7 @@ Implementation difficulty: <mechanical/economy | standard | difficult>
 Implementation route: <configured default | agent="luna" | sol-expert then Luna | agent="sol">
 Implementation sessions / retries: <count> / <count>
 Route evidence: <requested agent, job/session IDs, bound/reported model, warnings>
-Elapsed time: <per role>; checkpoints: <count>; wait deviations: <none or list>
+Elapsed time: <per role>; checkpoints: <count>; wait-policy reviews / final-synthesis grace: <none or list>
 Reviewer trigger reason: <reason or none>
 Independent reviewer: <Codex Terra | optional OpenCode Terra | none>
 Independent verdict: <no blocker | blocker>
