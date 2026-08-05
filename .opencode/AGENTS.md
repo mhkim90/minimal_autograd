@@ -58,18 +58,23 @@ See [.codex/skills/karpathy/SKILL.md](../.codex/skills/karpathy/SKILL.md), [.cod
 
 ## OpenCode Triad
 
-- **Sol** (`agents/sol.md`): primary L1-L4 planner, gatekeeper, and publisher;
-  it cannot edit.
-- **Terra** (`agents/terra.md`): read-only L3 preflight and non-trivial
-  post-review; it cannot edit or delegate.
-- **Luna** (`agents/luna.md`): C++/CUDA implementer for source, tests, CMake,
-  CTest, and focused GPU checks; it cannot publish or broaden scope.
+- **Sol** (`agents/sol.md`): explicit whole-phase triad planner. When invoked
+  beneath an external controller, it returns evidence and never publishes.
+- **Sol-expert** (`agents/sol-expert.md`): bounded, read-only difficult-task
+  preflight or breakthrough consultation; it cannot edit or delegate.
+- **Terra** (`agents/terra.md`): read-only, explicit fresh-context review;
+  mandatory only inside whole-phase Sol mode.
+- **Luna** (`agents/luna.md`): C++/CUDA implementer for one bounded phase or
+  subphase; it cannot publish or broaden scope.
 
-Sol chooses the gate: L1-L2 may proceed directly, L3 requires Terra preflight,
-and L4 stops before implementation. Luna reports **red -> implement -> green
--> GPU**, with at most 3 implement/fix loops. Terra has at most 2 Sol
-round-trips per task. After a passing phase, Sol stages only intended files
-and publishes unless the user explicitly prohibits publication.
+Keep L1-L4 for safety and approval; independently classify implementation as
+mechanical/economy, standard, or difficult. Use the configured default for
+mechanical work, Luna for standard work, and Sol-expert only for a justified
+difficult preflight or repeated blocker before Luna implements. Do not add
+routine Terra review to an external Terra controller. After two same-blocker
+Luna failures, stop blind retries; a third attempt requires a materially
+revised approach. Record named-agent route evidence and stop on contradiction
+or silent fallback.
 
 Permissions are guardrails, not a complete trust boundary. Role prompts,
 repository boundaries, managed sandboxing, and Sol's diff gate remain
