@@ -68,10 +68,15 @@ final stop/go decision; do not implement by default.
 - Give Sol-expert only that capsule, prior diff/test evidence, and one focused
   question. Allow one initial consultation and at most one follow-up. Require,
   in order: findings, proposed approach, acceptance gate, and stop/go.
-  Sol-expert never implements, edits, publishes, or delegates.
+  Sol-expert never implements, edits, publishes, delegates, or invokes
+  repository skills. Limit it to four inspection batches; if evidence remains
+  insufficient, it returns Stop with the missing evidence instead of continuing
+  the tool loop.
 - Declare an expected elapsed-time checkpoint and maximum wait policy for each
   async delegate/reviewer. At every checkpoint, recover job status and inspect
-  material progress; never launch a duplicate because a job is slow.
+  material progress. For OpenCode jobs, an advancing completed-step or event
+  count is material progress even when no partial text exists; never launch a
+  duplicate because a job is slow.
 - After two consecutive checkpoints with no material progress, or when the
   phase-defined maximum wait is reached, stop and report. Do not silently
   extend, retry, or cancel; cancellation requires an explicit stop decision.
@@ -143,6 +148,8 @@ Bounded read-only consultation; do not implement, edit, publish, or delegate.
 Scope: <approved scope>
 Question: <difficult preflight question or repeated blocker>
 Evidence: <compact diff/test evidence>
+Do not invoke repository skills. Use at most four inspection batches; if the
+evidence remains insufficient, return Stop and name the missing evidence.
 Return: findings; proposed approach; acceptance gate; stop/go.
 ```
 

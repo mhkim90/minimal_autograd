@@ -49,7 +49,10 @@ not ambiguous design decisions or single-step commands.
 Give Sol-expert one initial consultation and at most one follow-up. The capsule
 contains approved scope, one focused question or blocker, and compact
 diff/test evidence. Require: findings, proposed approach, acceptance gate,
-stop/go. Sol-expert never implements, edits, publishes, or delegates.
+stop/go. Sol-expert never implements, edits, publishes, delegates, or invokes
+repository skills. Limit it to four inspection batches; if evidence remains
+insufficient, it returns Stop with the missing evidence instead of continuing
+the tool loop.
 
 ## Prompt template
 
@@ -77,7 +80,9 @@ retries, requested agent, job ID, session ID, bound/reported model, and route
 2. Poll job status and fetch the terminal result. Query normalized usage after
    terminal state.
 3. At each phase-defined elapsed-time checkpoint, recover status and inspect
-   material progress. Never duplicate a running job because it is slow.
+   material progress. For OpenCode jobs, an advancing completed-step or event
+   count is material progress even when no partial text exists. Never duplicate
+   a running job because it is slow.
 4. After two no-progress checkpoints or the maximum wait, stop and report.
    Do not silently retry, extend, or cancel; cancellation requires an explicit
    stop decision.
