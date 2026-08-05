@@ -40,12 +40,16 @@ not ambiguous design decisions or single-step commands.
 - Allow at most three implementation/fix attempts. After two failures on the
   same blocker, request one bounded Sol-expert consultation. Permit a third
   attempt only after a materially revised approach is agreed.
-- Give Sol-expert approved scope, one focused question or blocker, and compact
-  diff/test evidence. Allow one consultation and at most one follow-up.
+- Give Sol-expert approved scope, one focused question or blocker, and selected
+  compact diff/test evidence. Allow one consultation and at most one follow-up.
   Require: findings, proposed approach, acceptance gate, stop/go. Sol-expert
   never implements, edits, publishes, delegates, or invokes repository skills.
-  Limit it to four inspection batches; if evidence remains insufficient, it
-  returns Stop with the missing evidence instead of continuing the tool loop.
+  Answer from the capsule when possible. If inspection is needed, each batch
+  resolves one named decision using a relevant file range or narrow symbol;
+  never use repository-wide enumeration/search or whole-file reads when a
+  range will do. Limit it to four inspection batches; if evidence remains
+  insufficient, it returns Stop with the missing evidence. A follow-up uses a
+  new session and refreshed compact capsule rather than accumulated tool history.
 
 ## Prompt template
 

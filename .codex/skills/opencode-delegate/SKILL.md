@@ -47,12 +47,16 @@ not ambiguous design decisions or single-step commands.
 ## Sol-expert contract
 
 Give Sol-expert one initial consultation and at most one follow-up. The capsule
-contains approved scope, one focused question or blocker, and compact
+contains approved scope, one focused question or blocker, and selected compact
 diff/test evidence. Require: findings, proposed approach, acceptance gate,
 stop/go. Sol-expert never implements, edits, publishes, delegates, or invokes
-repository skills. Limit it to four inspection batches; if evidence remains
-insufficient, it returns Stop with the missing evidence instead of continuing
-the tool loop.
+repository skills. Answer from the capsule when possible. If inspection is
+needed, each batch resolves one named decision using a relevant file range or
+narrow symbol; never use repository-wide enumeration/search or whole-file
+reads when a range will do. Limit it to four inspection batches; if evidence
+remains insufficient, it returns Stop with the missing evidence. A follow-up
+uses a new session and refreshed compact capsule rather than accumulated tool
+history.
 
 ## Prompt template
 

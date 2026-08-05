@@ -67,12 +67,16 @@ push, and update a PR only as publication duties.
   approach is agreed.
 - Give Luna a compact capsule: task, approved scope, relevant files, red gate,
   success criteria, commands, and stop rules.
-- Give Sol-expert only that capsule, prior diff/test evidence, and one focused
-  question. Allow one consultation and at most one follow-up. Require:
-  findings, proposed approach, acceptance gate, stop/go. Sol-expert never
-  implements, edits, publishes, delegates, or invokes repository skills. Limit
-  it to four inspection batches; if evidence remains insufficient, it returns
-  Stop with the missing evidence instead of continuing the tool loop.
+- Give Sol-expert only that selected compact capsule, prior diff/test evidence,
+  and one focused question. Allow one consultation and at most one follow-up.
+  Require: findings, proposed approach, acceptance gate, stop/go. Sol-expert
+  never implements, edits, publishes, delegates, or invokes repository skills.
+  Answer from the capsule when possible. If inspection is needed, each batch
+  resolves one named decision using a relevant file range or narrow symbol;
+  never use repository-wide enumeration/search or whole-file reads when a
+  range will do. Limit it to four inspection batches; if evidence remains
+  insufficient, it returns Stop with the missing evidence. A follow-up uses a
+  new session and refreshed compact capsule rather than accumulated tool history.
 - Declare an expected elapsed-time checkpoint and maximum wait policy for each
   async delegate/reviewer. At each checkpoint, recover status and inspect
   material progress. For OpenCode jobs, an advancing completed-step or event
@@ -149,8 +153,12 @@ Bounded read-only consultation; do not implement, edit, publish, or delegate.
 Scope: <approved scope>
 Question: <difficult preflight question or repeated blocker>
 Evidence: <compact diff/test evidence>
-Do not invoke repository skills. Use at most four inspection batches; if the
-evidence remains insufficient, return Stop and name the missing evidence.
+Answer from this capsule when possible. If inspection is needed, each batch
+must resolve one named decision using a relevant file range or narrow symbol;
+never use repository-wide enumeration/search or whole-file reads when a range
+will do. Use at most four inspection batches; if the evidence remains
+insufficient, return Stop and name the missing evidence. A follow-up starts a
+new session with a refreshed compact capsule.
 Return: findings; proposed approach; acceptance gate; stop/go.
 ```
 
