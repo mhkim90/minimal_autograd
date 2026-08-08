@@ -90,6 +90,21 @@ final stop/go decision; do not implement by default.
   a final-synthesis grace of at least 10 minutes; its phase-defined maximum wait
   must be no shorter than that grace. Keep the same job through the grace.
 
+## Local command lifecycle
+
+- Any `exec_command` result with a `session_id` is an active phase resource.
+  Record it in the current phase's explicit active-local-session list.
+- Poll every active local session with `write_stdin` at least every 60 seconds
+  until it exits. Do not duplicate a slow-running local command.
+- Do not send a final response, evaluate or pass the phase gate, commit,
+  publish, change phase, or claim a validation result while any active local
+  session exists.
+- Before every phase gate and final response, verify that the active
+  local-session list is empty. If a session cannot be recovered or polled,
+  treat its state as unknown and block the gate.
+- If user input interrupts the turn, report each active session and its last
+  known status, then resume polling unless the user explicitly asks to stop.
+
 ## Plan preflight and standard loop
 
 1. Read the plan and confirm its current audit or `grilled-me` preflight. Record
@@ -107,7 +122,8 @@ final stop/go decision; do not implement by default.
    identity, and bound/reported model.
 5. Inspect the diff, red/green evidence, tests, formatting, lint, and scope.
    Run only the triggered independent review and record its reason.
-6. Evaluate the gate before any commit. Use `Phase-gate: auto (L1)` or
+6. Confirm active local sessions are none, then evaluate the gate before any
+   commit. Use `Phase-gate: auto (L1)` or
    `Phase-gate: manual` as the commit trailer. Stage only explicit intended
    paths; never use broad staging. Publish only as repository policy permits.
    Keep publication and continuation separate; if commit, push, or PR
@@ -192,6 +208,7 @@ Implementation route: <configured default | agent="luna" | sol-expert then Luna 
 Implementation sessions / retries: <count> / <count>
 Route evidence: <requested agent, job/session IDs, bound/reported model, warnings>
 Elapsed time: <per role>; checkpoints: <count>; wait-policy reviews / final-synthesis grace: <none or list>
+Active local sessions at gate: <none or blocked: IDs/status>
 Reviewer trigger reason: <reason or none>
 Reviewer: <Claude | optional Terra | none>; verdict: <no blocker | blocker>
 Red gate: <right failure then pass>; attempts: <used>/<cap>
