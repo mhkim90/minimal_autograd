@@ -105,10 +105,35 @@ final stop/go decision; do not implement by default.
 - If user input interrupts the turn, report each active session and its last
   known status, then resume polling unless the user explicitly asks to stop.
 
+## Plan-first PR workflow
+
+- For phased or non-trivial work with an exact plan, create a plan-only draft
+  PR before implementation when commits, pushes, and PRs are allowed. Do not
+  require this workflow for a standalone L1 task with no plan, or when the
+  owner prohibits publication.
+- Put the exact plan in a committed, reviewable artifact. It must identify
+  scope globs, phases and dependencies, risk and difficulty, routes, red and
+  green gates, acceptance criteria, manual gates, wait policy, and publication
+  policy. Record the plan path and commit SHA in the PR description.
+- Wait for explicit owner approval tied to that plan commit SHA before
+  implementation. Record the approval as a PR comment; plan approval is not
+  merge approval.
+- Keep the PR draft through implementation, validation, and independent review.
+  Push implementation commits to the same branch. Mark it ready only after the
+  final phase gate passes, then obtain separate owner approval to merge.
+- A material change to scope, phase order, risk, route, acceptance gate, or
+  publication policy invalidates plan approval. Update the plan artifact,
+  record its new SHA, and wait for renewed owner approval before affected work.
+- When publication is prohibited, use the same exact-plan and owner-approval
+  gates locally; report that no plan PR was created because publication was
+  disallowed.
+
 ## Plan preflight and standard loop
 
 1. Read the plan and confirm its current audit or `grilled-me` preflight. Record
-   dependencies, consumers, manual gates, and stop rules.
+   dependencies, consumers, manual gates, and stop rules. When the plan-first
+   PR workflow applies, create or identify the plan-only draft PR and wait for
+   owner approval of its recorded plan commit before implementation.
 2. Confirm branch and dirty state. At phase start, check both
    `.codex/state/PAUSE` and `.claude/state/PAUSE`; never remove either
    automatically. Identify approved scope globs, acceptance gates, risk,
@@ -127,7 +152,9 @@ final stop/go decision; do not implement by default.
    `Phase-gate: manual` as the commit trailer. Stage only explicit intended
    paths; never use broad staging. Publish only as repository policy permits.
    Keep publication and continuation separate; if commit, push, or PR
-   publication is prohibited, stop before it and report local state.
+   publication is prohibited, stop before it and report local state. For a
+   plan-first PR, keep the PR draft until the final phase gate and triggered
+   review pass; only then mark it ready for separate owner merge approval.
 7. Inspect the contiguous commit suffix and its trailers. After two consecutive
    `Phase-gate: auto` trailers, force the current phase manual. Treat an
    unexpected interleaved commit as scope drift; use no counter state file.
@@ -200,6 +227,7 @@ bound/reported model, and routing mode.
 Phase <N> complete: <commit or uncommitted state>
 Publication: <published or stopped before prohibited action>
 Plan preflight: <artifact/revision, audit, freshness, manual gates>
+Plan PR: <draft URL or none: publication prohibited>; plan: <path@SHA>; owner approval: <evidence or pending/invalidated>; readiness: <draft | ready | merged | none>
 Scope: <approved globs>; changed files: <list>
 Controller: Codex; intended default: Terra; active model: <runtime evidence>
 Safety risk level: <L1-L4>
