@@ -86,6 +86,9 @@ push, and update a PR only as publication duties.
   wait-policy review; do not stop, abandon, or cancel solely for that condition.
   Cancel only on terminal error, the phase-defined maximum wait, or an explicit
   controller/owner stop decision.
+- For a delegated OpenCode job that triggers a no-progress review, use the
+  `opencode-delegate` no-progress recovery procedure, including exactly one
+  terminal-result query before any controller stop decision.
 - For a full `sol-expert` consultation that has completed inspection work and
   then reports `step_start`, treat the state as final synthesis pending. Declare
   a final-synthesis grace of at least 10 minutes; its phase-defined maximum wait
@@ -152,10 +155,14 @@ push, and update a PR only as publication duties.
    commit. Use `Phase-gate: auto (L1)` or
    `Phase-gate: manual` as the commit trailer. Stage only explicit intended
    paths; never use broad staging. Publish only as repository policy permits.
-   Keep publication and continuation separate; if commit, push, or PR is
-   prohibited, stop before it and report local state. For a plan-first PR,
-   keep the PR draft until the final phase gate and triggered review pass; only
-   then mark it ready for separate owner merge approval.
+   When the user has authorized the current phase and its required gate
+   evidence is complete, commit, push, and update the PR before any manual
+   next-phase wait. A manual gate blocks only automatic entry into the next
+   phase; it does not block publication of the completed current phase. If
+   commit, push, or PR publication is prohibited, or another stop rule applies,
+   stop before publication and report local state. For a plan-first PR, keep
+   the PR draft until the final phase gate and triggered review pass; only then
+   mark it ready for separate owner merge approval.
 7. Inspect the contiguous commit suffix and its trailers. After two consecutive
    `Phase-gate: auto` trailers, force the current phase manual. Treat an
    unexpected interleaved commit as scope drift; use no counter state file.
@@ -163,13 +170,16 @@ push, and update a PR only as publication duties.
    Otherwise continue automatically only for final L1, in-scope changes, the
    right red failure followed by a pass within the cap, no plan deviation, and
    no review blocker. Apply a manual gate otherwise.
+   After step 6 publishes the completed current phase, report it and wait for
+   explicit approval before starting that next phase.
 
 ## Stop rules
 
 Stop and report on stale, missing, or blocked preflight; an invalid or
 wrong-reason gate; failed acceptance; plan-intent change; unverifiable
 correctness; unavailable required tool, named agent, or reviewer evidence;
-explicit route contradiction; phase-defined maximum wait reached; scope
+unresolved review blocker; explicit route contradiction; phase-defined maximum
+wait reached; scope
 expansion; blocking unrelated changes; or attempt-cap exhaustion.
 
 ## Delegation prompts
@@ -245,7 +255,7 @@ Red gate: <right failure then pass>; attempts: <used>/<cap>
 Validation: <commands/results>; metrics: <values>
 Usage: <workflow/model accounting and completeness warnings, if available>
 Plan deviations: <none or rationale>
-Gate: <auto-proceeding | waiting-for-approval>
+Gate: <current phase published; auto-proceeding | current phase published; waiting-for-next-phase-approval | blocked>
 ```
 
 Usage is observational evidence only. Do not introduce fixed token, price, or
