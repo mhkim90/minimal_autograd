@@ -78,14 +78,24 @@ push, and update a PR only as publication duties.
   insufficient, it returns Stop with the missing evidence. A follow-up uses a
   new session and refreshed compact capsule rather than accumulated tool history.
 - Declare an expected elapsed-time checkpoint and maximum wait policy for each
-  async delegate/reviewer. At each checkpoint, recover status and inspect
-  material progress. For OpenCode jobs, an advancing completed-step or event
-  count is material progress even when no partial text exists; never launch a
-  duplicate because a job is slow.
-- After two consecutive checkpoints with no material progress, record a
-  wait-policy review; do not stop, abandon, or cancel solely for that condition.
-  Cancel only on terminal error, the phase-defined maximum wait, or an explicit
-  controller/owner stop decision.
+  async delegate/reviewer. At every checkpoint, recover job status and classify
+  the evidence as measurable activity or liveness only. For OpenCode jobs, an
+  advancing completed-step or event count is material progress even when no
+  partial text exists; never launch a duplicate because a job is slow.
+- For a Claude reviewer whose status exposes only `running`, treat that state as
+  live but not measurable progress. Missing partial text does not increment a
+  no-progress counter: report `review pending`, retain the same job through its
+  declared maximum wait, and never launch a duplicate on that evidence alone.
+  Use a no-progress counter for Claude only when the MCP exposes unchanged
+  activity evidence or an explicit stalled state.
+- After two consecutive checkpoints with unchanged measurable activity evidence,
+  record a wait-policy review; do not stop, abandon, or cancel solely for that
+  condition. At a reviewer terminal `done` status, fetch its terminal result
+  before reporting a verdict. At maximum wait, stop the affected phase as
+  `review pending at maximum wait` and request controller/owner direction; do
+  not automatically cancel or call a live reviewer unavailable.
+- Classify reviewer evidence as unavailable only for a missing route/tool,
+  terminal error or cancellation, or failed terminal-result retrieval.
 - For a delegated OpenCode job that triggers a no-progress review, use the
   `opencode-delegate` no-progress recovery procedure, including exactly one
   terminal-result query before any controller stop decision.
@@ -111,10 +121,22 @@ push, and update a PR only as publication duties.
 
 ## Plan-first PR workflow
 
-- For phased or non-trivial work with an exact plan, create a plan-only draft
-  PR before implementation when commits, pushes, and PRs are allowed. Do not
-  require this workflow for a standalone L1 task with no plan, or when the
-  owner prohibits publication.
+- Use the plan-only draft-PR workflow for phased, non-trivial, or L2-L4 work
+  when commits, pushes, and PRs are allowed. An exact plan remains required
+  when the task changes behavior, policy, architecture, public/API contracts,
+  security, data, model routing, permissions, configuration, or phase order.
+- **L1 mechanical fast path:** a clearly bounded mechanical/economy task may
+  skip the plan artifact and plan-approval wait only when its authorized task
+  or PR description states exact paths/scope, acceptance checks, and
+  publication intent; it has no design decision or behavior/policy/configuration
+  change; and it does not expand into a cross-repository rollout unless that
+  rollout uses an already-merged source revision and exact manifest. Use one
+  normal PR after validation. This fast path never waives explicit staging,
+  diff inspection, acceptance evidence, stop rules, or separate owner merge
+  approval.
+- An owner may explicitly waive the plan-only gate for one named bounded task.
+  Record the waiver and retain the same validation and merge-approval controls;
+  do not generalize it to later work.
 - Put the exact plan in a committed, reviewable artifact. It must identify
   scope globs, phases and dependencies, risk and difficulty, routes, red and
   green gates, acceptance criteria, manual gates, wait policy, and publication
@@ -128,16 +150,18 @@ push, and update a PR only as publication duties.
 - A material change to scope, phase order, risk, route, acceptance gate, or
   publication policy invalidates plan approval. Update the plan artifact,
   record its new SHA, and wait for renewed owner approval before affected work.
-- When publication is prohibited, use the same exact-plan and owner-approval
-  gates locally; report that no plan PR was created because publication was
-  disallowed.
+- When publication is prohibited, use the same scope and acceptance gates
+  locally; report that no PR was created because publication was disallowed.
 
 ## Plan preflight and standard loop
 
-1. Read the plan and confirm its current audit or `grilled-me` preflight. Record
-   dependencies, consumers, manual gates, and stop rules. When the plan-first
-   PR workflow applies, create or identify the plan-only draft PR and wait for
-   owner approval of its recorded plan commit before implementation.
+1. Read the plan and confirm its current audit or `grilled-me` preflight when a
+   plan is required. Record dependencies, consumers, manual gates, and stop
+   rules. When the plan-first workflow applies, create or identify the
+   plan-only draft PR and wait for owner approval of its recorded plan commit
+   before implementation. For an L1 mechanical fast path, record its exact
+   scope, acceptance checks, qualification, and any explicit owner waiver in
+   the normal PR description and phase report before implementation.
 2. Confirm branch and dirty state. At phase start, check both
    `.claude/state/PAUSE` and `.codex/state/PAUSE`; never remove either
    automatically. Identify approved scope globs, acceptance gates, risk,
@@ -162,7 +186,9 @@ push, and update a PR only as publication duties.
    commit, push, or PR publication is prohibited, or another stop rule applies,
    stop before publication and report local state. For a plan-first PR, keep
    the PR draft until the final phase gate and triggered review pass; only then
-   mark it ready for separate owner merge approval.
+   mark it ready for separate owner merge approval. For an L1 mechanical fast
+   path, use the normal PR only after the exact scope and acceptance evidence
+   are recorded; it still waits for separate owner merge approval.
 7. Inspect the contiguous commit suffix and its trailers. After two consecutive
    `Phase-gate: auto` trailers, force the current phase manual. Treat an
    unexpected interleaved commit as scope drift; use no counter state file.
@@ -237,8 +263,8 @@ identity, bound/reported model, and routing mode.
 ```text
 Phase <N> complete: <commit or uncommitted state>
 Publication: <published or stopped before prohibited action>
-Plan preflight: <artifact/revision, audit, freshness, manual gates>
-Plan PR: <draft URL or none: publication prohibited>; plan: <path@SHA>; owner approval: <evidence or pending/invalidated>; readiness: <draft | ready | merged | none>
+Plan preflight: <artifact/revision, audit, freshness, manual gates | L1 fast path: qualification and waiver>
+Plan PR: <draft URL | normal L1 PR | none: publication prohibited>; plan: <path@SHA | none: L1 fast path>; owner approval: <plan evidence | L1 waiver | pending/invalidated>; readiness: <draft | ready | merged | none>
 Scope: <approved globs>; changed files: <list>
 Controller: Claude Code; active model: <runtime evidence>
 Safety risk level: <L1-L4>
@@ -249,8 +275,8 @@ Route evidence: <requested agent, job/session IDs, bound/reported model, warning
 Elapsed time: <per role>; checkpoints: <count>; wait-policy reviews / final-synthesis grace: <none or list>
 Active local sessions at gate: <none or blocked: IDs/status>
 Reviewer trigger reason: <reason or none>
-Independent reviewer: <Codex Terra | optional OpenCode Terra | none>
-Independent verdict: <no blocker | blocker>
+Independent reviewer: <Codex Terra | optional OpenCode Terra | none>; state: <pending | go | blocker | unavailable>
+Independent verdict: <details or pending>
 Red gate: <right failure then pass>; attempts: <used>/<cap>
 Validation: <commands/results>; metrics: <values>
 Usage: <workflow/model accounting and completeness warnings, if available>
