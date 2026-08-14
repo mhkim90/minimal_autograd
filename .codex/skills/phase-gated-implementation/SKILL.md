@@ -1,286 +1,74 @@
 ---
 name: phase-gated-implementation
-description: Use for phased work from a plan, issue, design, or approved checklist. Keep Codex as controller and final gate, prefer the configured Terra controller, route implementation by difficulty, and record the active model.
+description: Control approved phased work from a plan, issue, design, or checklist. Keep Codex as final gate, route implementation by difficulty, and load policy references at their transitions.
 ---
 
 # Phase-Gated Implementation
 
-Use this skill for work with phases, acceptance gates, review reports, or
-explicit approval points. Codex controls scope, gates, publication, and the
-final stop/go decision; do not implement by default.
+Codex controls scope, gates, publication, and stop/go; do not implement by
+default. Record the active controller model from invocation or runtime
+metadata—Terra is intended, not evidence about this session.
 
-## Controller and routes
+Keep safety risk (L1–L4) separate from implementation difficulty. Use the
+configured OpenCode default for mechanical/economy work, `agent="luna"` for
+standard work, and a bounded `agent="sol-expert"` preflight or breakthrough
+only for difficult work before Luna implements. Preserve an explicitly approved
+whole-phase `agent="sol"` route without separately calling Luna or Terra.
+Never silently replace a selected route or raw-model override.
 
-- Codex is the controller and final gate. Terra is the intended Codex
-  controller default, not a fact about the current session. Record the active
-  controller model from invocation or runtime metadata in every phase report.
-  Do not treat a generic model self-label as stronger evidence.
-- Keep L1-L4 as safety and approval risk. Select implementation difficulty
-  independently:
-  - **Mechanical/economy**: repetitive, known edits or routine commands ->
-    omit `agent`, `model`, and `variant` and use the configured OpenCode
-    default.
-  - **Standard**: locally understood non-trivial work -> `agent="luna"`.
-  - **Difficult**: architecture-sensitive, unclear, numerical/CUDA, or
-    repeated-blocker work -> use a bounded `agent="sol-expert"` preflight or
-    breakthrough only when warranted, then `agent="luna"` implements.
-- Risk selects review and approval. Difficulty selects implementer reasoning.
-- Preserve `agent="sol"` as an explicit whole-phase triad compatibility route.
-  In that route, do not call Luna or Terra separately.
-- Keep user-selected models as explicit overrides. Use a raw model only for an
-  explicit override or approved degraded fallback; report the fallback.
+## Invariants
 
-## Route evidence
+- Use an exact approved plan and plan-only draft PR for phased, non-trivial, or
+  L2–L4 work. The plan declares scope, gates, risk/difficulty/routes, wait
+  policy, dependencies, and manual boundaries. Approval names its SHA;
+  it is never merge approval. Material changes invalidate it.
+- An L1 fast path needs exact authorized scope, checks, and publication intent;
+  it never waives explicit staging, diff/acceptance evidence, stop rules, or
+  separate merge approval. An initiative bundle may continue only inside its
+  approved envelope and stops at declared manual boundaries.
+- Before every phase, check dirty state and both pause files, obtain minimum
+  scope/gate/current evidence, run the smallest right-reason red gate, and set
+  a three-attempt cap unless the plan says otherwise.
+- Validate the in-scope diff and green evidence before publication. Publish a
+  green phase only with its trailer and explicit-path staging. Keep a plan PR
+  draft until final validation and triggered review pass. A manual next-phase
+  gate does not prevent publication of the completed phase.
+- Stop and report on stale/missing preflight, wrong/failed gates, scope or
+  intent expansion, unverifiable correctness, route contradiction, unavailable
+  evidence, review blocker, maximum wait, unrelated blocking changes, or
+  attempt-cap exhaustion. Do not weaken a gate to continue.
+- Memory is discovery-only: read the applicable continuity record before
+  resuming or crossing repositories, validate it against live source, then
+  save decisions, blockers, and handoff evidence. It never supplies approval.
 
-- Record requested agent, job ID, session ID, and bound/reported model.
-- Treat an accepted named-agent selector plus a terminal role response as the
-  minimum route evidence. Query normalized provider usage when available.
-- Treat missing normalized model resolution or partial usage as an
-  observability warning, not a correctness blocker, when the named selector
-  was accepted and no evidence contradicts the returned role/model.
-- Stop on a rejected selector, unavailable named agent, mismatched continuation,
-  explicit model contradiction, or silent fallback. Never substitute a
-  configured default or raw model without approval.
+## Router and lazy policy loading
 
-## Review triggers
+Load the named reference immediately before its transition, never merely on
+phase entry. References explain *how* and return evidence; this core alone
+decides whether to route, pass a gate, publish, or start another phase.
 
-- Do not automatically launch OpenCode Terra for Codex-controlled L2 or L3
-  work. Use `agent="terra"` only as a fresh-context, read-only review when a
-  specific concern and reviewer trigger reason are recorded.
-- Trigger one independent Claude read-only review for architecture/API
-  compatibility, security, memory/concurrency, CUDA or numerical correctness,
-  release behavior, weak tests, disagreement, suspicious red gates, or an
-  explicit request. One triggered review replaces a review stack.
-- Codex remains the gate after review; review evidence is not publication
-  authority.
+| Trigger | Codex destination | Claude destination |
+| --- | --- | --- |
+| Active agent drafted substantive plan | `grilled-me` | `grilled-me` |
+| User/repo/issue/external substantive author | `plan-audit` | `plan-audit` |
+| Implementation delegation | `opencode-delegate` + [`references/delegation.md`](references/delegation.md) | `opencode-delegate` + `references/delegation.md` |
+| Triggered independent read-only review | `claude-delegate` + [`references/review-and-wait-policy.md`](references/review-and-wait-policy.md) | `codex-delegate` + `references/review-and-wait-policy.md` |
+| Resume/cross-repository work | `memory-continuity` | `memory-continuity` |
+| Transfer to a fresh session | `handoff` | `handoff` |
 
-## Session, retry, and elapsed-time controls
+Editing or summarizing externally authored material does not change its origin.
+Read [`references/publication-and-reporting.md`](references/publication-and-reporting.md)
+before any plan/approval decision, commit, push, PR action, or report; read
+[`references/templates.md`](references/templates.md) immediately before using
+a prompt, capsule, or phase report.
 
-- Use one bounded phase or subphase per Luna session and end the session after
-  green/completion. Start or fork a new session when scope, the red gate,
-  strategy, or blocker changes materially.
-- Allow at most three implementation/fix attempts. After two failures on the
-  same blocker, stop blind retries and request one bounded `sol-expert`
-  consultation. Permit a third attempt only after a materially revised
-  approach is agreed.
-- Give Luna a compact capsule: task, approved scope, relevant files, red gate,
-  success criteria, commands, and stop rules.
-- Give Sol-expert only that selected compact capsule, prior diff/test evidence,
-  and one focused question. Allow one initial consultation and at most one
-  follow-up. Require, in order: findings, proposed approach, acceptance gate,
-  and stop/go. Sol-expert never implements, edits, publishes, delegates, or
-  invokes repository skills. Answer from the capsule when possible. If
-  inspection is needed, each batch resolves one named decision using a relevant
-  file range or narrow symbol; never use repository-wide enumeration/search or
-  whole-file reads when a range will do. Limit it to four inspection batches;
-  if evidence remains insufficient, it returns Stop with the missing evidence.
-  A follow-up uses a new session and refreshed compact capsule rather than
-  accumulated tool history.
-- Declare an expected elapsed-time checkpoint and maximum wait policy for each
-  async delegate/reviewer. At every checkpoint, recover job status and classify
-  the evidence as measurable activity or liveness only. For OpenCode jobs, an
-  advancing completed-step or event count is material progress even when no
-  partial text exists; never launch a duplicate because a job is slow.
-- For a Claude reviewer whose status exposes only `running`, treat that state as
-  live but not measurable progress. Missing partial text does not increment a
-  no-progress counter: report `review pending`, retain the same job through its
-  declared maximum wait, and never launch a duplicate on that evidence alone.
-  Use a no-progress counter for Claude only when the MCP exposes unchanged
-  activity evidence or an explicit stalled state.
-- After two consecutive checkpoints with unchanged measurable activity evidence,
-  record a wait-policy review; do not stop, abandon, or cancel solely for that
-  condition. At a reviewer terminal `done` status, fetch its terminal result
-  before reporting a verdict. At maximum wait, stop the affected phase as
-  `review pending at maximum wait` and request controller/owner direction; do
-  not automatically cancel or call a live reviewer unavailable.
-- Classify reviewer evidence as unavailable only for a missing route/tool,
-  terminal error or cancellation, or failed terminal-result retrieval.
-- For a delegated OpenCode job that triggers a no-progress review, use the
-  `opencode-delegate` no-progress recovery procedure, including exactly one
-  terminal-result query before any controller stop decision.
-- For a full `sol-expert` consultation that has completed inspection work and
-  then reports `step_start`, treat the state as final synthesis pending. Declare
-  a final-synthesis grace of at least 10 minutes; its phase-defined maximum wait
-  must be no shorter than that grace. Keep the same job through the grace.
+## Gate
 
-## Local command lifecycle
-
-- Any `exec_command` result with a `session_id` is an active phase resource.
-  Record it in the current phase's explicit active-local-session list.
-- Poll every active local session with `write_stdin` at least every 60 seconds
-  until it exits. Do not duplicate a slow-running local command.
-- Do not send a final response, evaluate or pass the phase gate, commit,
-  publish, change phase, or claim a validation result while any active local
-  session exists.
-- Before every phase gate and final response, verify that the active
-  local-session list is empty. If a session cannot be recovered or polled,
-  treat its state as unknown and block the gate.
-- If user input interrupts the turn, report each active session and its last
-  known status, then resume polling unless the user explicitly asks to stop.
-
-## Plan-first PR workflow
-
-- Use the plan-only draft-PR workflow for phased, non-trivial, or L2-L4 work
-  when commits, pushes, and PRs are allowed. An exact plan remains required
-  when the task changes behavior, policy, architecture, public/API contracts,
-  security, data, model routing, permissions, configuration, or phase order.
-- **L1 mechanical fast path:** a clearly bounded mechanical/economy task may
-  skip the plan artifact and plan-approval wait only when its authorized task
-  or PR description states exact paths/scope, acceptance checks, and
-  publication intent; it has no design decision or behavior/policy/configuration
-  change; and it does not expand into a cross-repository rollout unless that
-  rollout uses an already-merged source revision and exact manifest. Use one
-  normal PR after validation. This fast path never waives explicit staging,
-  diff inspection, acceptance evidence, stop rules, or separate owner merge
-  approval.
-- An owner may explicitly waive the plan-only gate for one named bounded task.
-  Record the waiver and retain the same validation and merge-approval controls;
-  do not generalize it to later work.
-- Put the exact plan in a committed, reviewable artifact. It must identify
-  scope globs, phases and dependencies, risk and difficulty, routes, red and
-  green gates, acceptance criteria, manual gates, wait policy, and publication
-  policy. Record the plan path and commit SHA in the PR description.
-- Wait for explicit owner approval tied to that plan commit SHA before
-  implementation. Record the approval as a PR comment; plan approval is not
-  merge approval.
-- Keep the PR draft through implementation, validation, and independent review.
-  Push implementation commits to the same branch. Mark it ready only after the
-  final phase gate passes, then obtain separate owner approval to merge.
-- A material change to scope, phase order, risk, route, acceptance gate, or
-  publication policy invalidates plan approval. Update the plan artifact,
-  record its new SHA, and wait for renewed owner approval before affected work.
-- When publication is prohibited, use the same scope and acceptance gates
-  locally; report that no PR was created because publication was disallowed.
-
-## Plan preflight and standard loop
-
-1. Read the plan and confirm its current audit or `grilled-me` preflight when a
-   plan is required. Record dependencies, consumers, manual gates, and stop
-   rules. When the plan-first workflow applies, create or identify the
-   plan-only draft PR and wait for owner approval of its recorded plan commit
-   before implementation. For an L1 mechanical fast path, record its exact
-   scope, acceptance checks, qualification, and any explicit owner waiver in
-   the normal PR description and phase report before implementation.
-2. Confirm branch and dirty state. At phase start, check both
-   `.codex/state/PAUSE` and `.claude/state/PAUSE`; never remove either
-   automatically. Identify approved scope globs, acceptance gates, risk,
-   implementation difficulty, attempt cap, and wait policy.
-3. Run the smallest structural, lint, artifact, behavioral, or manual red
-   gate. Use no more than three red-gate attempts unless the approved phase
-   raises the cap.
-4. Delegate implementation using the difficulty route above. Repeat the same
-   named agent on continuations and forks; omit model and variant for named
-   agents. Require changed files, decisions, commands, blockers, session
-   identity, and bound/reported model.
-5. Inspect the diff, red/green evidence, tests, formatting, lint, and scope.
-   Run only the triggered independent review and record its reason.
-6. Confirm active local sessions are none, then evaluate the gate before any
-   commit. Use `Phase-gate: auto (L1)` or
-   `Phase-gate: manual` as the commit trailer. Stage only explicit intended
-   paths; never use broad staging. Publish only as repository policy permits.
-   When the user has authorized the current phase and its required gate
-   evidence is complete, commit, push, and update the PR before any manual
-   next-phase wait. A manual gate blocks only automatic entry into the next
-   phase; it does not block publication of the completed current phase. If
-   commit, push, or PR publication is prohibited, or another stop rule applies,
-   stop before publication and report local state. For a plan-first PR, keep
-   the PR draft until the final phase gate and triggered review pass; only then
-   mark it ready for separate owner merge approval. For an L1 mechanical fast
-   path, use the normal PR only after the exact scope and acceptance evidence
-   are recorded; it still waits for separate owner merge approval.
-7. Inspect the contiguous commit suffix and its trailers. After two consecutive
-   `Phase-gate: auto` trailers, force the current phase manual. Treat an
-   unexpected interleaved commit as scope drift; use no counter state file.
-8. If approved per-phase scope globs are missing, disable auto-continuation
-   and wait for approval. Otherwise continue automatically only for final L1,
-   in-scope changes, the right red failure followed by a pass within the cap,
-   no plan deviation, and no review blocker. Apply a manual gate otherwise.
-   After step 6 publishes the completed current phase, report it and wait for
-   explicit approval before starting that next phase.
-
-## Stop rules
-
-Stop and report on stale, missing, or blocked preflight; an invalid or
-wrong-reason gate; failed acceptance; plan-intent change; unverifiable
-correctness; unavailable required tool, named agent, or reviewer evidence;
-unresolved review blocker; explicit route contradiction; phase-defined maximum
-wait reached; scope
-expansion; blocking unrelated changes; or attempt-cap exhaustion.
-
-## Delegation prompts
-
-Implementation prompt:
-
-```text
-Context: <project + phase>
-Task: <exact edit/run loop>
-Files/scope: <approved paths or globs>
-Red gate: <command/check + expected failure>
-Success criteria: <checks/metrics>
-Safety risk: <L1-L4>
-Implementation difficulty: <mechanical/economy | standard | difficult>
-Implementation route: <configured default | agent="luna" | sol-expert then Luna>
-Elapsed-time checkpoint / final-synthesis grace (full Sol only) / maximum wait: <phase-defined values>
-Constraints:
-- one bounded phase/subphase; do not commit or edit outside scope
-- max attempts: <approved cap>; stop after two same-blocker failures
-- use a materially revised approach before any third attempt
-Final response: changed files, decisions, commands, blockers, session count,
-retries, requested agent, job ID, session ID, bound/reported model, and route
-```
-
-Sol-expert capsule:
-
-```text
-Bounded read-only consultation; do not implement, edit, publish, or delegate.
-Scope: <approved scope>
-Question: <difficult preflight question or repeated blocker>
-Evidence: <compact diff/test evidence>
-Answer from this capsule when possible. If inspection is needed, each batch
-must resolve one named decision using a relevant file range or narrow symbol;
-never use repository-wide enumeration/search or whole-file reads when a range
-will do. Use at most four inspection batches; if the evidence remains
-insufficient, return Stop and name the missing evidence. A follow-up starts a
-new session with a refreshed compact capsule.
-Return: findings; proposed approach; acceptance gate; stop/go.
-```
-
-Whole-phase compatibility exception:
-
-```text
-Use agent="sol" for this whole phase only because <explicit approval>.
-The outer Codex controller retains final stop/go and publication authority;
-Sol returns its diff and evidence without committing, pushing, or creating a
-PR. Do not call Luna or Terra separately. Only if Sol returns a repeated
-blocker may the outer controller invoke one bounded sol-expert consultation.
-Report the active controller model, requested agent, job/session identity,
-bound/reported model, and routing mode.
-```
-
-## Phase report
-
-```text
-Phase <N> complete: <commit or uncommitted state>
-Publication: <published or stopped before prohibited action>
-Plan preflight: <artifact/revision, audit, freshness, manual gates | L1 fast path: qualification and waiver>
-Plan PR: <draft URL | normal L1 PR | none: publication prohibited>; plan: <path@SHA | none: L1 fast path>; owner approval: <plan evidence | L1 waiver | pending/invalidated>; readiness: <draft | ready | merged | none>
-Scope: <approved globs>; changed files: <list>
-Controller: Codex; intended default: Terra; active model: <runtime evidence>
-Safety risk level: <L1-L4>
-Implementation difficulty: <mechanical/economy | standard | difficult>
-Implementation route: <configured default | agent="luna" | sol-expert then Luna | agent="sol">
-Implementation sessions / retries: <count> / <count>
-Route evidence: <requested agent, job/session IDs, bound/reported model, warnings>
-Elapsed time: <per role>; checkpoints: <count>; wait-policy reviews / final-synthesis grace: <none or list>
-Active local sessions at gate: <none or blocked: IDs/status>
-Reviewer trigger reason: <reason or none>
-Reviewer: <Claude | optional Terra | none>; state: <pending | go | blocker | unavailable>; verdict: <details or pending>
-Red gate: <right failure then pass>; attempts: <used>/<cap>
-Validation: <commands/results>; metrics: <values>
-Usage: <workflow/model accounting and completeness warnings, if available>
-Plan deviations: <none or rationale>
-Gate: <current phase published; auto-proceeding | current phase published; waiting-for-next-phase-approval | blocked>
-```
-
-Usage is observational evidence only. Do not introduce fixed token, price, or
-provider-private-path budgets or semantics.
+Inspect active local sessions, the contiguous commit suffix, and evidence
+before the gate. Two consecutive `Phase-gate: auto` trailers force the next
+L1 phase manual; bundle trailers do not count, and unexpected interleaving is
+scope drift. Missing approved per-phase scope disables automatic continuation.
+An L1 phase proceeds only when final L1, in scope, right red failure then pass
+within cap, no deviation, and no review blocker. A bundle phase proceeds only
+when declared, green, and free of a manual boundary or stop condition. Report
+the current phase and whether the next one proceeds or waits.
