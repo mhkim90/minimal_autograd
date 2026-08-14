@@ -1,0 +1,4 @@
+interface:
+  display_name: "Karpathy Best Practices"
+  short_description: "Surgical, simple coding workflow"
+  default_prompt: "Use -best-practices to keep the code change simple and goal-driven."

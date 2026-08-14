@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memory Continuity"
+  short_description: "Safely resume work with local memory records"
+  default_prompt: "Use $memory-continuity to safely resume this task from local continuity records."
