@@ -1,4 +1,0 @@
-interface:
-  display_name: "Skill Sync"
-  short_description: "Safely sync approved shared skills"
-  default_prompt: "Use $skill-sync to prepare and deliver an approved shared-skill sync across named repositories."
