@@ -27,8 +27,10 @@ searching parent directories or reuse a target list from an earlier task.
 1. Confirm every source path exists at the named revision and derive the
    manifest from those exact paths.
 2. Fetch each named target and confirm its named remote base branch exists.
-3. Compare the manifest against each target. Classify a difference as missing,
-   approved drift, or unexpected drift; stop on unexpected drift.
+3. Compare the manifest against each target. Also enumerate target-only files
+   inside every approved source-skill folder; do not treat repository-local
+   skills outside those folders as manifest extras. Classify a difference as
+   missing, approved drift, or unexpected drift; stop on unexpected drift.
 4. Inspect target active-worktree state only to preserve it. Use isolated
    worktrees for all target changes, even when an active worktree is clean.
 5. State the expected changed-file list and validation commands before edits.
@@ -36,6 +38,12 @@ searching parent directories or reuse a target list from an earlier task.
 Never widen the manifest to make a target pass. Never synchronize `AGENTS.md`,
 `CLAUDE.md`, `.opencode/`, application files, or repository-specific skills
 unless the owner named those paths in the approved manifest.
+
+A target-only file inside an approved source-skill folder is unexpected drift
+by default. Do not copy it into the source or retain it as an undocumented
+variant. Delete it only when the owner-approved plan names the exact path and
+explicitly requires exact source parity; record that removal in the expected
+changed-file list and post-copy comparison.
 
 ## Source change workflow
 
