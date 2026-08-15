@@ -40,7 +40,7 @@ experiments. Use these instructions for all code work in this repo.
 
 ## Coding Standards
 
-Load these skills at the start of relevant Codex tasks:
+Use these skills only when their named trigger applies:
 
 - **karpathy**: When building, modifying, reviewing, or debugging code; keep changes simple, surgical, and goal-driven.
 - **grilled-me**: When drafting or reviewing plans; stress-test assumptions, risks, scope creep, and failure modes before presenting.
@@ -49,8 +49,9 @@ Load these skills at the start of relevant Codex tasks:
   per material revision; its proposed boundaries and gates remain drafts until
   the owner approves them.
 - **handoff**: When ending a session, switching context, or preserving progress for another agent.
-- **caveman**: When token efficiency is requested; use `full` for English and `korean-full` for Korean unless the user requests another level.
-- **phase-gated-implementation**: When implementing multi-phase work from a plan, PR description, issue, design doc, or approved checklist. Codex is the controller and final gate; Terra is the intended default, verified from runtime evidence. Keep L1-L4 safety risk separate from mechanical/economy, standard, and difficult implementation routing. Use the configured OpenCode default for mechanical work, Luna for standard work, and bounded Sol-expert preflight or breakthrough before Luna for difficult work. Trigger one Claude read-only review only for a recorded concern; use OpenCode Terra only as an explicit fresh-context review. Record route, session, elapsed-time, and usage-completeness evidence; stop on a selector contradiction or silent fallback.
+- **memory-continuity**: When resuming or crossing repositories; current Git, plan, handoff, and test evidence remain authoritative.
+- Response style: use Caveman `full` / `korean-full` unless the user asks otherwise; load `caveman` only to change mode or apply its ambiguity safeguards.
+- **phase-gated-implementation**: Use for approved multi-phase work; the skill owns controller, routing, evidence, approval, and lazy policy loading.
 - **opencode-delegate**: When tedious, mechanical, or long-running work can be delegated; keep final verification local.
 - **claude-delegate**: When an independent read-only second opinion is useful
   for a plan, risk review, or reasoning check. Use async for meaningful work;

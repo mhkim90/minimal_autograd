@@ -31,7 +31,7 @@ This repository is a minimal reverse-mode automatic differentiation library in C
 
 ## Coding Standards
 
-Always load these skills at the start of relevant tasks:
+Use these skills only when their named trigger applies:
 
 - **karpathy**: When building/writing code — Karpathy's LLM coding best practices (simplicity, surgical changes, goal-driven execution)
 - **grilled-me**: When planning or reviewing plans — adversarial self-review to stress-test a plan before presenting
@@ -40,11 +40,11 @@ Always load these skills at the start of relevant tasks:
   material revision; proposed boundaries and gates remain drafts until owner
   approval.
 - **handoff**: When ending a session or switching context — write a HANDOFF.md so the next agent can continue seamlessly
-- **caveman**: When token efficiency is needed — ultra-compressed output (~75% fewer tokens) while keeping full technical accuracy; trigger with `/caveman` or "talk like caveman"
-- Language-aware caveman default: use `full` for English responses and `korean-full` for Korean responses unless the user explicitly requests another level.
+- **memory-continuity**: When resuming or crossing repositories; current Git, plan, handoff, and test evidence remain authoritative.
+- Response style: use Caveman `full` / `korean-full` unless the user asks otherwise; load `caveman` only to change mode or apply its ambiguity safeguards.
 - **opencode-delegate**: Delegate **tedious / mechanical / long-running** work — applying precise edits, sweeps, run→inspect→tweak loops, test runs. Via `mcp__opencode__opencode_run_async` / `mcp__opencode__opencode_session_fork_async` plus job/session tools.
 - **codex-delegate**: Delegate **independent high-risk reasoning and final blocker gates** to the current Codex default (Sol-class). Use DISCUSS/read-only by default; EXECUTE is an explicit user-requested or approved fallback.
-- **phase-gated-implementation**: Use for phased work from a plan, PR/issue/design doc, or approved checklist. Claude Code orchestrates and controls publication; OpenCode's configured default implements bulk work, Luna handles evidence-based implementation escalation, Terra performs focused review, and Codex/Sol supplies the independent high-risk read-only gate. Do not use fixed token percentages.
+- **phase-gated-implementation**: Use for approved multi-phase work; the skill owns controller, routing, evidence, approval, and lazy policy loading.
 
 For phased work, use `plan-audit` for an external artifact and `grilled-me`
 for a plan drafted by the active agent. Resolve blocking findings and obtain
