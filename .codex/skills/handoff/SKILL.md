@@ -1,27 +1,18 @@
 ---
 name: handoff
-description: Write or update a project handoff document so another Codex agent can continue with fresh context. Use when ending a session, switching context, preserving progress, or when the user asks for a handoff, continuation notes, or HANDOFF.md.
+description: Write or update a handoff document so the next agent with fresh context can continue this work.
 ---
 
-# Handoff
+Write or update a handoff document so the next agent with fresh context can continue this work.
 
-Write or update a handoff document so the next agent can continue without reconstructing context.
+Steps:
+1. Check if HANDOFF.md already exists in the project
+2. If it exists, read it first to understand prior context before updating
+3. Create or update the document with:
+   - **Goal**: What we're trying to accomplish
+   - **Current Progress**: What's been done so far
+   - **What Worked**: Approaches that succeeded
+   - **What Didn't Work**: Approaches that failed (so they're not repeated)
+   - **Next Steps**: Clear action items for continuing
 
-## Steps
-
-1. Check whether `HANDOFF.md` exists in the project root.
-2. If it exists, read it before updating.
-3. Create or update `HANDOFF.md` with:
-   - `Goal`: what the work is trying to accomplish.
-   - `Current Progress`: what has been done so far.
-   - `What Worked`: approaches or commands that succeeded.
-   - `What Didn't Work`: failed approaches so they are not repeated.
-   - `Next Steps`: clear action items for continuation.
-4. Tell the user the `HANDOFF.md` path.
-
-## Style
-
-- Keep the handoff factual and concise.
-- Include exact file paths and commands when they matter.
-- Distinguish completed work from guesses or pending validation.
-- Do not include unrelated conversation history.
+Save as HANDOFF.md in the project root and tell the user the file path so they can start a fresh conversation with just that path.

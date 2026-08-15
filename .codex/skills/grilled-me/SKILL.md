@@ -1,60 +1,70 @@
 ---
 name: grilled-me
-description: Use when Codex is drafting, reviewing, or presenting a plan and should perform adversarial self-review first. Stress-test assumptions, scope creep, risks, failure modes, simplicity, blind spots, irreversible actions, and whether every step traces to the user's request.
+description: When planning or reviewing plans — adversarial self-review to stress-test a plan before presenting
 ---
 
-# Grilled-Me
+# Grilled-Me: Adversarial Plan Self-Review
 
-Use this as an adversarial self-review before presenting or acting on a plan.
+A self-interrogation technique to stress-test a plan before presenting it to the user or delegating to subagents.
 
-## Workflow
+**When to use:** After drafting a plan, before presenting it for user approval.
 
-1. Draft the plan.
-2. Review the plan as a skeptical senior engineer.
-3. Revise the plan or explicitly flag surviving risks.
-4. Present only the improved plan unless the user asks for the review details.
+---
 
-## Checklist
+## How It Works
 
-### Assumptions
+Play devil's advocate against your own plan. Ask hard questions as if a skeptical senior engineer is reviewing it.
 
-- What am I assuming that I have not verified?
-- What changes if the assumption is wrong?
-- Did I silently pick an interpretation that should be surfaced?
+---
 
-### Scope
+## The Grilling Checklist
 
-- Am I solving more than the user asked?
-- Did I add nice-to-haves that are not required?
-- Does every planned step trace to the request?
+### 1. Assumption Check
+- What am I assuming to be true that I haven't verified?
+- What if those assumptions are wrong?
+- Did I silently pick an interpretation without surfacing it?
 
-### Risk
+### 2. Scope Creep Check
+- Am I solving more than what was asked?
+- Did I add "nice-to-haves" that weren't requested?
+- Is every step in the plan traceable to the user's request?
 
-- What is the most likely way the plan fails?
+### 3. Risk & Failure Check
+- What is the most likely way this plan fails?
 - What is the worst-case impact of each step?
-- Are any steps irreversible or destructive?
+- Are there irreversible actions in the plan? (If yes, flag them explicitly.)
 
-### Simplicity
+### 4. Simplicity Check
+- Is there a simpler plan that achieves the same goal?
+- Am I over-engineering? Would 50% of this plan still solve the problem?
+- Can any steps be merged or eliminated?
 
-- Is there a simpler plan with the same outcome?
-- Can any steps be merged or removed?
-- Is the plan over-engineered for the request?
+### 5. Blind Spot Check
+- What am I NOT looking at that could be relevant?
+- Are there side effects on other files, modules, or systems?
+- Is there existing code that already does part of what I'm planning?
 
-### Blind Spots
+---
 
-- What relevant file, system, or side effect am I not considering?
-- Is there existing code or documentation that already solves part of this?
+## Output Format
 
-## Output
+After grilling, revise the plan or explicitly document surviving risks:
 
-If showing the review explicitly, use:
-
-```text
+```
 [Grilled-Me Review]
 Assumptions confirmed: ...
 Risks identified: ...
 Simplification applied: ...
-Surviving concerns: ...
+Surviving concerns (flagged to user): ...
 ```
 
-If the review finds no material issue, state `[Grilled-Me: No issues found]`.
+If the plan passes all checks with no changes, state: `[Grilled-Me: No issues found]`
+
+---
+
+## Anti-Patterns to Catch
+
+- ❌ "I'll also refactor X while I'm at it..."
+- ❌ Silently assuming a file exists / a function behaves a certain way
+- ❌ A plan step that could delete or overwrite without a rollback
+- ❌ Steps that are vague ("fix the issue") instead of concrete
