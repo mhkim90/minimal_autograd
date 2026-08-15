@@ -5,7 +5,7 @@ description: When planning or reviewing plans — adversarial self-review to str
 
 # Grilled-Me: Adversarial Plan Self-Review
 
-A self-interrogation technique to stress-test a plan before presenting it to the user or delegating to agents.
+A self-interrogation technique to stress-test a plan before presenting it to the user or delegating to subagents.
 
 **When to use:** After drafting a plan, before presenting it for user approval.
 
