@@ -17,9 +17,20 @@ reviewer disagreement, suspicious red gates, or explicit request. Record the
 reviewer trigger reason and the active Claude model; do not infer identity from
 the route label.
 
-Use async for meaningful reviews, poll status, fetch the result, and cancel only
-when irrelevant. Blocking calls are for known-short reviews. If tools are
-unavailable, report the missing route rather than silently substituting it.
+Use async for meaningful reviews; use blocking calls only for known-short
+reviews. At launch, record the job ID, requested/bound model evidence,
+phase-declared checkpoint interval, and maximum wait. Poll the same job at each
+checkpoint; a `running` status with no activity telemetry is live and must be
+reported as `review pending`, not unavailable. Missing partial text alone never
+permits a duplicate, cancellation, or no-progress inference.
+
+When a terminal `done` status arrives, fetch `claude_job_result` before
+reporting the verdict. Report `review unavailable` only for a missing
+route/tool, terminal error/cancellation, or failed terminal-result retrieval.
+If a job remains live at its declared maximum wait, stop the affected phase as
+`review pending at maximum wait` and request controller/owner direction; do
+not cancel automatically. If tools are unavailable, report the missing route
+rather than silently substituting it.
 
 ## Prompt template
 
@@ -28,11 +39,14 @@ Context: <project + phase and relevant files>
 Question: <specific claim, failure mode, or design fork>
 Current evidence: <compact red/green/diff evidence>
 Reviewer trigger reason: <reason>
+Checkpoint / maximum wait: <phase-declared values>
 Constraints:
 - DISCUSS/read-only; no shell, edits, publication, network, or credentials
 - be concise; cite inspected paths when relevant
 Return: findings, acceptance concern, and stop/go.
 ```
 
-Report the job/thread identity, active/bound model, trigger reason, and verdict.
-Keep usage observational; do not add fixed token or price semantics.
+Report the job/thread identity, active/bound model, trigger reason, checkpoint
+history, maximum-wait outcome, and one state: `review pending`, `go`,
+`blocker`, or `unavailable`. Keep usage observational; do not add fixed token
+or price semantics.
