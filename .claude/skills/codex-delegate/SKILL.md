@@ -1,6 +1,6 @@
 ---
 name: codex-delegate
-description: Delegate independent high-risk reasoning, adversarial review, and blocker gates from Claude Code to Codex Terra. Use DISCUSS/read-only by default. Use EXECUTE only when the user explicitly requests Codex implementation or approves it as a fallback.
+description: Delegate independent high-risk reasoning, adversarial review, and blocker gates from Claude Code to Codex Terra. Use it only for DISCUSS/read-only review.
 ---
 
 # Codex Delegate
@@ -15,12 +15,12 @@ Terra. Record the requested model, thread ID, and active model. Stop on an
 explicit mismatch; do not trust a generic self-label over invocation/runtime
 metadata.
 
-## Modes
+## Mode
 
-| Mode | `sandbox` | `approval-policy` | Use |
-|---|---|---|---|
-| **Discuss** | `read-only` | `never` | Default independent blocker gate, adversarial review, root-cause reasoning, or design fork |
-| **Execute** | `workspace-write` | `never` | Explicit user request or user-approved fallback only |
+Use `DISCUSS` with `read-only` sandbox and `never` approval policy for an
+independent blocker gate, adversarial review, root-cause reasoning, or design
+fork. Codex is reviewer-only in this workflow; implementation remains with the
+existing OpenCode routes.
 
 Claude Code orchestrates and controls publication. OpenCode's configured
 default handles mechanical work, Luna implements standard/difficult work, and
@@ -38,18 +38,6 @@ Validation: <red gate and passing checks>
 Trigger reason: <architecture/security/CUDA/etc.>
 Question: <specific correctness or blocker question>
 Return findings first or "no blocker", then stop/go.
-```
-
-## Execute prompt
-
-```text
-Context: <project and approved fallback>
-Task: <exact bounded implementation>
-Files/scope: <approved paths>
-Red gate and success criteria: <checks>
-Constraints:
-- working directory: <absolute path>
-- do not commit or edit outside scope
 ```
 
 ## Thread, timing, and evidence

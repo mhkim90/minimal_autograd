@@ -6,8 +6,9 @@ description: Control approved phased work from a plan, issue, design, or checkli
 # Phase-Gated Implementation
 
 Claude Code controls scope, gates, publication, and stop/go; do not implement
-by default. Record the active controller model from runtime. The
-`claude-delegate` contract is read-only; interactive Claude Code only publishes.
+by default. Record the active controller model from runtime—Sonnet is intended,
+not evidence about this session. The `codex-delegate` contract is read-only;
+interactive Claude Code only publishes.
 
 Keep safety risk (L1–L4) separate from implementation difficulty. Use the
 configured OpenCode default for mechanical/economy work, `agent="luna"` for
