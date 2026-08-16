@@ -45,8 +45,9 @@ Return: findings; proposed approach; acceptance gate; stop/go.
 ```text
 Phase <N> complete: <commit or uncommitted state>
 Publication: <published or stopped before prohibited action>
-Plan preflight: <artifact/revision, audit, freshness, manual gates | L1 fast path: qualification and waiver | initiative bundle: phase envelope and manual boundaries>
+Plan preflight: <artifact/revision, audit, freshness, manual gates | L1 fast path: behavior-preserving qualification and waiver | initiative bundle: phase envelope and manual boundaries>
 Plan PR: <draft URL | normal L1 PR | none: publication prohibited>; plan: <path@SHA | none: L1 fast path>; owner approval: <plan evidence | L1 waiver | pending/invalidated>; readiness: <draft | ready | merged | none>
+Delivery topology: <implementation-PR count; current PR; included phases; phase-to-PR mapping; split boundary/rationale | direct L1 PR qualification | none: publication prohibited>; topology deviation: <none or renewed-approval state>
 Scope: <approved globs>; changed files: <list>
 Controller: Claude Code; active model: <runtime evidence>
 Safety risk level: <L1-L4>; implementation difficulty: <mechanical/economy | standard | difficult>
