@@ -20,8 +20,20 @@ Never silently replace a selected route or raw-model override.
 
 - Use an exact approved plan and plan-only draft PR for phased, non-trivial, or
   L2–L4 work. The plan declares scope, gates, risk/difficulty/routes, wait
-  policy, dependencies, and manual boundaries. Approval names its SHA;
+  policy, dependencies, manual boundaries, and delivery topology. Delivery
+  topology names implementation-PR count, phase-to-PR mapping, and each split
+  boundary. Approval names its SHA;
   it is never merge approval. Material changes invalidate it.
+- Default to one implementation PR per coherent, independently releasable or
+  revertible deliverable. One PR may contain multiple phases, but never
+  replaces each phase's scope, red/green evidence, acceptance gate, owner
+  decision, or triggered review.
+- Split at a material security, API/compatibility, release, migration,
+  rollback, dependency, ownership, required-owner-decision, independent-review,
+  or validation-environment boundary. Bundle adjacent phases only when their
+  approved scope, ownership, validation, and rollback behavior are compatible.
+  A split rationale describes that boundary; it never makes unsafe bundling
+  acceptable.
 - An L1 fast path needs exact authorized scope, checks, and publication intent;
   it never waives explicit staging, diff/acceptance evidence, stop rules, or
   separate merge approval. An initiative bundle may continue only inside its
@@ -70,5 +82,7 @@ L1 phase manual; bundle trailers do not count, and unexpected interleaving is
 scope drift. Missing approved per-phase scope disables automatic continuation.
 An L1 phase proceeds only when final L1, in scope, right red failure then pass
 within cap, no deviation, and no review blocker. A bundle phase proceeds only
-when declared, green, and free of a manual boundary or stop condition. Report
-the current phase and whether the next one proceeds or waits.
+when declared, green, topology-compatible, and free of a manual boundary or
+stop condition. A new split boundary or validation/rollback mismatch is a
+plan-topology deviation and blocks affected work pending renewed approval.
+Report the current phase and whether the next one proceeds or waits.
