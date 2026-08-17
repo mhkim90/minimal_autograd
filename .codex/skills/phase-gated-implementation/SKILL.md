@@ -9,6 +9,17 @@ Codex controls scope, gates, publication, and stop/go; do not implement by
 default. Record the active controller model from invocation or runtime
 metadata—Terra is intended, not evidence about this session.
 
++## Usage correlation
+
+When `usage_mcp` is configured, start a Codex-controlled workflow only with
+the exact `context_window.window_id`, never a root thread ID or a time-based
+fallback. Propagate its opaque `workflow_id` to every provider run,
+continuation, and fork. After each provider is terminal, fetch its normalized
+usage, bind the returned session, then finish, ingest, and report the workflow.
+Exact matches only, unrelated records stay excluded, and replay is idempotent.
+Partial or unavailable usage is visible but never changes a quality gate or
+becomes a token/price enforcement policy.
+
 Keep safety risk (L1–L4) separate from implementation difficulty. Use the
 configured OpenCode default for mechanical/economy work, `agent="luna"` for
 standard work, and a bounded `agent="sol-expert"` preflight or breakthrough
