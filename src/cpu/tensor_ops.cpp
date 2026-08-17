@@ -86,6 +86,239 @@ inline bool increment_index(std::vector<int64_t>& idx, const Shape& s) {
 
 }  // namespace
 
+Tensor tensor_ones(const Shape& shape, Device device) {
+    return Tensor::ones(shape, device);
+}
+
+Tensor tensor_softmax_nd(const Tensor& a, int axis, Tensor& saved_softmax) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = axis;
+    Tensor out = Tensor::empty(s, a.device());
+    saved_softmax = Tensor::empty(s, a.device());
+    if (a.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> av(a.elements()), ov(a.elements()), sv(a.elements());
+    a.copy_to_host(av.data(), av.size());
+
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float maxval = -std::numeric_limits<float>::infinity();
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const float v = av[base + k * inner_stride];
+            if (v > maxval) maxval = v;
+        }
+        float denom = 0.f;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            const float e = std::exp(av[off] - maxval);
+            sv[off] = e;
+            denom += e;
+        }
+        const float inv = 1.f / denom;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            ov[off] = sv[off] * inv;
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+
+    out.copy_from_host(ov.data(), ov.size());
+    saved_softmax.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+Tensor tensor_softmax_backward_nd(const Tensor& g,
+                                  const Tensor& saved_softmax,
+                                  int axis) {
+    const Shape& s = g.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = axis;
+    Tensor out = Tensor::empty(s, g.device());
+    if (g.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> gv(g.elements()), sv(g.elements()), ov(g.elements());
+    g.copy_to_host(gv.data(), gv.size());
+    saved_softmax.copy_to_host(sv.data(), sv.size());
+
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float dot = 0.f;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            dot += gv[off] * sv[off];
+        }
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            ov[off] = sv[off] * (gv[off] - dot);
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
+Tensor tensor_log_softmax_nd(const Tensor& a, int axis, Tensor& saved_lsm) {
+    const Shape& s = a.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = axis;
+    Tensor out = Tensor::empty(s, a.device());
+    saved_lsm = Tensor::empty(s, a.device());
+    if (a.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> av(a.elements()), ov(a.elements()), lv(a.elements());
+    a.copy_to_host(av.data(), av.size());
+
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float maxval = av[base];
+        for (int64_t k = 1; k < inner_dim; ++k) {
+            const float v = av[base + k * inner_stride];
+            if (v > maxval) maxval = v;
+        }
+        float denom = 0.f;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            denom += std::exp(av[base + k * inner_stride] - maxval);
+        }
+        const float log_sum = maxval + std::log(denom);
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            const float v = av[off] - log_sum;
+            lv[off] = v;
+            ov[off] = v;
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+
+    out.copy_from_host(ov.data(), ov.size());
+    saved_lsm.copy_from_host(lv.data(), lv.size());
+    return out;
+}
+
+Tensor tensor_log_softmax_backward_nd(const Tensor& g,
+                                      const Tensor& saved_lsm,
+                                      int axis) {
+    const Shape& s = g.shape();
+    const int rank = static_cast<int>(s.rank());
+    const int ax = axis;
+    Tensor out = Tensor::empty(s, g.device());
+    if (g.elements() == 0) return out;
+
+    const std::vector<int64_t> strides = contiguous_strides(s);
+    const int64_t inner_dim = s.sizes[ax];
+    const int64_t inner_stride = strides[ax];
+
+    std::vector<float> gv(g.elements()), lv(g.elements()), ov(g.elements());
+    g.copy_to_host(gv.data(), gv.size());
+    saved_lsm.copy_to_host(lv.data(), lv.size());
+
+    std::vector<int64_t> outer_shape;
+    outer_shape.reserve(rank - 1);
+    for (int i = 0; i < rank; ++i) {
+        if (i != ax) outer_shape.push_back(s.sizes[i]);
+    }
+    int64_t outer_numel = 1;
+    for (int64_t d : outer_shape) outer_numel *= d;
+
+    std::vector<int64_t> outer_idx(outer_shape.size(), 0);
+    for (int64_t o = 0; o < outer_numel; ++o) {
+        int64_t base = 0;
+        int j = 0;
+        for (int i = 0; i < rank; ++i) {
+            if (i != ax) {
+                base += outer_idx[j] * strides[i];
+                ++j;
+            }
+        }
+        float row_sum = 0.f;
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            row_sum += gv[base + k * inner_stride];
+        }
+        for (int64_t k = 0; k < inner_dim; ++k) {
+            const int64_t off = base + k * inner_stride;
+            const float sm = std::exp(lv[off]);
+            ov[off] = gv[off] - sm * row_sum;
+        }
+        for (int j = static_cast<int>(outer_idx.size()) - 1; j >= 0; --j) {
+            if (++outer_idx[j] < outer_shape[j]) break;
+            outer_idx[j] = 0;
+        }
+    }
+
+    out.copy_from_host(ov.data(), ov.size());
+    return out;
+}
+
 namespace {
 
 inline int64_t nchw_output_extent(int64_t input, int64_t kernel,
