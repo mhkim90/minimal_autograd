@@ -25,6 +25,25 @@ AUTOGRAD_USE_CUDA=ON
   CPU + CUDA   -> existing same-device rejection
 ```
 
+## Roadmap placement
+
+This provider split is the next prerequisite **before** CppResist R5e.1
+product implementation. The required order is:
+
+```text
+minimal_autograd #69 direct CUDA shape ops (merged)
+  -> this R6 provider split and dual-build qualification
+  -> CppResist R5e.1 public-API feasibility recheck
+  -> CppResist R5e.1 CUDA direct ILT training-core implementation
+  -> CppResist R5e.2 execution/state continuation
+```
+
+This plan refactors #69's direct CUDA `reshape`, `slice`, and `concat`
+support; it must preserve their public behavior, CUDA residency, VJPs, and
+existing reflect-border → reshape → CUDA `conv2d` composition. It does not
+authorize a CppResist source change or feasibility probe before this plan is
+implemented, qualified, and merged.
+
 ## Boundary and non-goals
 
 This plan covers only the direct `ag::Tensor` / direct `ag::Variable` stack
@@ -178,7 +197,10 @@ git diff --check
 Tests must demonstrate in the same CUDA-enabled executable that CPU tensors
 still use CPU behavior, CUDA tensors and gradients remain CUDA-resident, and
 mixed-device operations reject without an implicit transfer. Existing direct
-CPU/CUDA parity and unsupported-op rejection tests remain required.
+CPU/CUDA parity and unsupported-op rejection tests remain required. The merged
+direct CUDA `reshape`/`slice`/`concat` parity, VJP, empty-axis concat, and
+reflect-border → reshape → CUDA `conv2d` regression coverage must also remain
+green.
 
 ## Safety, routing, and publication
 
@@ -205,4 +227,6 @@ qualification, then request a separate merge approval.
 Stop for owner direction if scope expands, direct and legacy paths cannot stay
 separate, CPU-only linking needs CUDA, CUDA-enabled CPU tensors change
 behavior, a CUDA tensor reaches CPU code without an explicit transfer, or any
-acceptance command fails.
+acceptance command fails. After this plan merges, hand off only the recorded
+minimal_autograd artifact and qualification evidence to the CppResist R5e.1
+feasibility recheck.
