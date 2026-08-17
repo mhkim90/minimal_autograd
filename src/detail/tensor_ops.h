@@ -65,6 +65,26 @@ Tensor tensor_div_backward_b(const Tensor& g,
                              const Tensor& a,
                              const Tensor& b);
 
+Tensor tensor_conv2d_nchw_forward(const Tensor& input,
+                                  const Tensor& weight,
+                                  const Tensor& bias,
+                                  int stride, int pad,
+                                  Tensor& saved_col);
+Tensor tensor_conv2d_nchw_backward_input(
+    const Tensor& g, const Tensor& weight,
+    int N, int C, int H, int W,
+    int kH, int kW, int stride, int pad);
+Tensor tensor_conv2d_nchw_backward_weight(
+    const Tensor& g, const Tensor& col, const Shape& w_shape);
+Tensor tensor_conv2d_nchw_backward_bias(const Tensor& g);
+Tensor tensor_maxpool2d_nchw_forward(const Tensor& input,
+                                     int kH, int kW, int stride,
+                                     Tensor& saved_mask);
+Tensor tensor_maxpool2d_nchw_backward(
+    const Tensor& g, const Tensor& mask,
+    int N, int C, int H, int W,
+    int kH, int kW, int stride);
+
 }  // namespace cpu_ops
 
 Tensor tensor_add(const Tensor& a, const Tensor& b);
@@ -122,6 +142,26 @@ Tensor tensor_broadcast_add_backward_nd(const Tensor& g,
 Tensor tensor_matmul_nd(const Tensor& a, const Tensor& b);
 Tensor tensor_matmul_backward_a_nd(const Tensor& g, const Tensor& b);
 Tensor tensor_matmul_backward_b_nd(const Tensor& a, const Tensor& g);
+
+Tensor tensor_conv2d_nchw_forward(const Tensor& input,
+                                  const Tensor& weight,
+                                  const Tensor& bias,
+                                  int stride, int pad,
+                                  Tensor& saved_col);
+Tensor tensor_conv2d_nchw_backward_input(
+    const Tensor& g, const Tensor& weight,
+    int N, int C, int H, int W,
+    int kH, int kW, int stride, int pad);
+Tensor tensor_conv2d_nchw_backward_weight(
+    const Tensor& g, const Tensor& col, const Shape& w_shape);
+Tensor tensor_conv2d_nchw_backward_bias(const Tensor& g);
+Tensor tensor_maxpool2d_nchw_forward(const Tensor& input,
+                                     int kH, int kW, int stride,
+                                     Tensor& saved_mask);
+Tensor tensor_maxpool2d_nchw_backward(
+    const Tensor& g, const Tensor& mask,
+    int N, int C, int H, int W,
+    int kH, int kW, int stride);
 
 }  // namespace detail
 }  // namespace ag
