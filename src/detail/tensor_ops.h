@@ -6,7 +6,15 @@
 #include <vector>
 
 namespace ag {
+
+class Variable;
+
 namespace detail {
+
+struct TensorDFT2Result {
+    Tensor real;
+    Tensor imag;
+};
 
 namespace cpu_ops {
 
@@ -36,6 +44,10 @@ Tensor tensor_broadcast_add_backward_nd(const Tensor& g,
 Tensor tensor_matmul_nd(const Tensor& a, const Tensor& b);
 Tensor tensor_matmul_backward_a_nd(const Tensor& g, const Tensor& b);
 Tensor tensor_matmul_backward_b_nd(const Tensor& a, const Tensor& g);
+
+TensorDFT2Result tensor_dft2_last2(const Tensor& real_in,
+                                   const Tensor& imag_in,
+                                   bool inverse, bool scale_output);
 
 Tensor tensor_relu(const Tensor& a);
 Tensor tensor_relu_backward(const Tensor& g, const Tensor& saved);
@@ -162,6 +174,16 @@ Tensor tensor_maxpool2d_nchw_backward(
     const Tensor& g, const Tensor& mask,
     int N, int C, int H, int W,
     int kH, int kW, int stride);
+
+Tensor tensor_zeros(const Shape& shape, Device device);
+TensorDFT2Result tensor_dft2_last2(const Tensor& real_in,
+                                   const Tensor& imag_in,
+                                   bool inverse, bool scale_output);
+
+void optimizer_sgd_step(Variable& parameter, float lr);
+void optimizer_adam_step(Variable& parameter, Tensor& m, Tensor& v,
+                         float lr, float beta1, float beta2, float eps,
+                         float bias_correction1, float bias_correction2);
 
 }  // namespace detail
 }  // namespace ag

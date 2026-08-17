@@ -1,28 +1,19 @@
 // src/core/optim.cpp — optimizer implementation on the Tensor/Variable API.
 //
-// SGD applies p <- p - lr * grad in place. On CPU, mutation goes
-// through detail::VariableAccess::apply_to_storage. On CUDA, it
-// goes through detail::VariableAccess::apply_to_storage_cuda which
-// hands the device pointers to cuda_sgd_step so the hot path does
-// not round-trip through host memory. Either way, the Tensor
-// storage identity is preserved; a Tensor alias taken before step()
-// observes the post-step values.
+// SGD applies p <- p - lr * grad in place. The selected tensor dispatcher
+// owns the backend-specific storage update, preserving Tensor storage
+// identity on both CPU and CUDA.
 //
 // Adam prevalidates every eligible parameter before mutation, then
 // computes all new moments and parameter values. CPU parameters use
 // a host temporary buffer so a failure cannot leave any state
-// partially updated; CUDA parameters launch cuda_adam_step, which
-// updates the moments and parameter in place on the device. Moment
-// storage lives on the parameter's device (CUDA moments for CUDA
-// parameters, CPU moments otherwise); AdamState snapshots use
-// Tensor::clone() so they never alias the live optimizer's storage.
+// partially updated; the selected tensor dispatcher owns the CUDA in-place
+// update. Moment storage lives on the parameter's device; AdamState snapshots
+// use Tensor::clone() so they never alias the live optimizer's storage.
 
 #include "autograd/core/optim.h"
+#include "detail/tensor_ops.h"
 #include "detail/variable_internal.h"
-
-#ifdef AUTOGRAD_USE_CUDA
-#include "detail/tensor_cuda_ops.h"
-#endif
 
 #include <cmath>
 #include <cstdint>
@@ -103,25 +94,7 @@ void SGD::step() {
         const Tensor& grad = p.grad();
         if (grad.empty()) continue;
 
-#ifdef AUTOGRAD_USE_CUDA
-        if (p.device().is_cuda()) {
-            // Direct device kernel; no host round-trip in the hot path.
-            const float lr = lr_;
-            detail::VariableAccess::apply_to_storage_cuda(
-                p, [lr](float* p_data, const float* g_data,
-                        int device, std::size_t n) {
-                    detail::cuda_sgd_step(p_data, g_data, lr, n, device);
-                });
-            continue;
-        }
-#endif  // AUTOGRAD_USE_CUDA
-        std::vector<float> grad_data(grad.elements());
-        grad.copy_to_host(grad_data.empty() ? nullptr : grad_data.data(),
-                          grad_data.size());
-        detail::VariableAccess::apply_to_storage(
-            p, [lr = lr_, &grad_data](float& element, std::size_t i) {
-                element -= lr * grad_data[i];
-            });
+        detail::optimizer_sgd_step(p, lr_);
     }
 }
 
@@ -147,9 +120,9 @@ Adam::Adam(std::vector<Variable> params,
     second_moments_.reserve(params_.size());
     for (const auto& p : params_) {
         first_moments_.push_back(
-            Tensor::zeros(p.value().shape(), p.device()));
+            detail::tensor_zeros(p.value().shape(), p.device()));
         second_moments_.push_back(
-            Tensor::zeros(p.value().shape(), p.device()));
+            detail::tensor_zeros(p.value().shape(), p.device()));
     }
 }
 
@@ -181,9 +154,7 @@ void Adam::step() {
     for (std::size_t i = 0; i < params_.size(); ++i) {
         const auto& p = params_[i];
         if (!p.requires_grad() || !p.has_grad()) continue;
-#ifdef AUTOGRAD_USE_CUDA
         if (p.device().is_cuda()) continue;
-#endif
         eligible[i] = true;
         any_eligible = true;
 
@@ -215,13 +186,11 @@ void Adam::step() {
         }
     }
 
-#ifdef AUTOGRAD_USE_CUDA
     // Phase 2b: update CUDA eligible parameters in place via the
-    // device kernel. Each launch reads the gradient from device
-    // memory, advances the live moments, and writes the new
-    // parameter value directly to the existing parameter storage.
-    // We precompute the eligible+CUDA indices so phase 3 knows
-    // which CPU rows need committing.
+    // selected provider. CUDA updates read the gradient from device memory,
+    // advance the live moments, and write the parameter directly to its
+    // existing storage. We precompute the eligible+CUDA indices so phase 3
+    // knows which CPU rows need committing.
     for (std::size_t i = 0; i < params_.size(); ++i) {
         if (!params_[i].requires_grad() || !params_[i].has_grad()) continue;
         if (!params_[i].device().is_cuda()) continue;
@@ -229,20 +198,10 @@ void Adam::step() {
         any_eligible = true;
         const std::size_t n = params_[i].grad().elements();
         if (n == 0) continue;
-        detail::VariableAccess::apply_to_storage_cuda(
-            params_[i],
-            [this, i, bc1, bc2](float* p_data, const float* g_data,
-                                int device, std::size_t nn) {
-                float* m_data = detail::CudaTensorAccess::cuda_data_mutable(
-                    first_moments_[i]);
-                float* v_data = detail::CudaTensorAccess::cuda_data_mutable(
-                    second_moments_[i]);
-                detail::cuda_adam_step(p_data, m_data, v_data, g_data,
-                                       lr_, beta1_, beta2_, eps_,
-                                       bc1, bc2, nn, device);
-            });
+        detail::optimizer_adam_step(
+            params_[i], first_moments_[i], second_moments_[i],
+            lr_, beta1_, beta2_, eps_, bc1, bc2);
     }
-#endif
 
     // Phase 3: commit. t_ advances only when at least one parameter
     // is eligible, so empty/no-grad step() calls leave t_ unchanged.
@@ -255,12 +214,10 @@ void Adam::step() {
         const Tensor& g = params_[i].grad();
         const std::size_t n = g.elements();
         if (n == 0) continue;
-#ifdef AUTOGRAD_USE_CUDA
         if (params_[i].device().is_cuda()) {
             // CUDA path committed in Phase 2b.
             continue;
         }
-#endif
         first_moments_[i].copy_from_host(new_m_buf[i].data(),
                                          new_m_buf[i].size());
         second_moments_[i].copy_from_host(new_v_buf[i].data(),

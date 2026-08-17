@@ -2,7 +2,7 @@
 //
 // Implements ag::fft2 / ag::ifft2 declared in autograd/core/fft.h.
 // Forward and adjoint use the same private detail::tensor_dft2_last2
-// kernel in src/detail/tensor_kernels.h, with inverse and scale_output
+// kernel in src/detail/tensor_ops.h, with inverse and scale_output
 // swapped for the adjoint. Each output component (real, imag) is a
 // custom-op node built through the public ag::make_custom_variable
 // boundary, so no new OpKind or speculative graph fields are
@@ -30,7 +30,7 @@
 #include "autograd/extension/custom_op.h"
 #include "autograd/tensor.h"
 
-#include "detail/tensor_kernels.h"
+#include "detail/tensor_ops.h"
 
 #include <sstream>
 #include <stdexcept>
@@ -71,15 +71,8 @@ std::pair<Variable, Variable> fft_impl_variables(
     // separate adjoint implementation.
     auto real_backward =
         [forward_was_inverse, dev](
-            const Tensor& upstream) -> std::vector<Tensor> {
-        Tensor zero;
-#ifdef AUTOGRAD_USE_CUDA
-        zero = dev.is_cuda()
-            ? detail::cuda_tensor_zeros(upstream.shape(), dev)
-            : Tensor::zeros(upstream.shape(), dev);
-#else
-        zero = Tensor::zeros(upstream.shape(), dev);
-#endif
+        const Tensor& upstream) -> std::vector<Tensor> {
+        Tensor zero = detail::tensor_zeros(upstream.shape(), dev);
         auto adj = detail::tensor_dft2_last2(
             upstream, zero,
             /*inverse=*/!forward_was_inverse,
@@ -88,15 +81,8 @@ std::pair<Variable, Variable> fft_impl_variables(
     };
     auto imag_backward =
         [forward_was_inverse, dev](
-            const Tensor& upstream) -> std::vector<Tensor> {
-        Tensor zero;
-#ifdef AUTOGRAD_USE_CUDA
-        zero = dev.is_cuda()
-            ? detail::cuda_tensor_zeros(upstream.shape(), dev)
-            : Tensor::zeros(upstream.shape(), dev);
-#else
-        zero = Tensor::zeros(upstream.shape(), dev);
-#endif
+        const Tensor& upstream) -> std::vector<Tensor> {
+        Tensor zero = detail::tensor_zeros(upstream.shape(), dev);
         auto adj = detail::tensor_dft2_last2(
             zero, upstream,
             /*inverse=*/!forward_was_inverse,
