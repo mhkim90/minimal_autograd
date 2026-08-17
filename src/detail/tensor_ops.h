@@ -18,6 +18,7 @@ struct TensorDFT2Result {
 
 namespace cpu_ops {
 
+Tensor tensor_ones(const Shape& shape, Device device);
 Tensor tensor_add(const Tensor& a, const Tensor& b);
 Tensor tensor_mul(const Tensor& a, const Tensor& b);
 Tensor tensor_scale(const Tensor& a, float scalar);
@@ -67,6 +68,14 @@ Tensor tensor_silu_backward(const Tensor& g,
                             const Tensor& sig);
 Tensor tensor_softplus(const Tensor& a);
 Tensor tensor_softplus_backward(const Tensor& g, const Tensor& x);
+Tensor tensor_softmax_nd(const Tensor& a, int axis, Tensor& saved_softmax);
+Tensor tensor_softmax_backward_nd(const Tensor& g,
+                                  const Tensor& saved_softmax,
+                                  int axis);
+Tensor tensor_log_softmax_nd(const Tensor& a, int axis, Tensor& saved_lsm);
+Tensor tensor_log_softmax_backward_nd(const Tensor& g,
+                                      const Tensor& saved_lsm,
+                                      int axis);
 
 Tensor tensor_sub(const Tensor& a, const Tensor& b);
 Tensor tensor_sub_backward_a(const Tensor& g);
@@ -99,6 +108,7 @@ Tensor tensor_maxpool2d_nchw_backward(
 
 }  // namespace cpu_ops
 
+Tensor tensor_ones(const Shape& shape, Device device);
 Tensor tensor_add(const Tensor& a, const Tensor& b);
 Tensor tensor_mul(const Tensor& a, const Tensor& b);
 Tensor tensor_scale(const Tensor& a, float scalar);
@@ -121,6 +131,14 @@ Tensor tensor_silu_backward(const Tensor& g,
                             const Tensor& sig);
 Tensor tensor_softplus(const Tensor& a);
 Tensor tensor_softplus_backward(const Tensor& g, const Tensor& x);
+Tensor tensor_softmax_nd(const Tensor& a, int axis, Tensor& saved_softmax);
+Tensor tensor_softmax_backward_nd(const Tensor& g,
+                                  const Tensor& saved_softmax,
+                                  int axis);
+Tensor tensor_log_softmax_nd(const Tensor& a, int axis, Tensor& saved_lsm);
+Tensor tensor_log_softmax_backward_nd(const Tensor& g,
+                                      const Tensor& saved_lsm,
+                                      int axis);
 
 Tensor tensor_sub(const Tensor& a, const Tensor& b);
 Tensor tensor_sub_backward_a(const Tensor& g);

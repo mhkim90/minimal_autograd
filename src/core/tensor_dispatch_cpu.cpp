@@ -165,6 +165,10 @@ Tensor tensor_zeros(const Shape& shape, Device device) {
     return Tensor::zeros(shape, device);
 }
 
+Tensor tensor_ones(const Shape& shape, Device device) {
+    return cpu_ops::tensor_ones(shape, device);
+}
+
 TensorDFT2Result tensor_dft2_last2(const Tensor& real_in,
                                    const Tensor& imag_in,
                                    bool inverse, bool scale_output) {
@@ -225,6 +229,39 @@ Tensor tensor_mul(const Tensor& a, const Tensor& b) {
 
 Tensor tensor_scale(const Tensor& a, float scalar) {
     return cpu_ops::tensor_scale(a, scalar);
+}
+
+Tensor tensor_softmax_nd(const Tensor& a, int axis,
+                         Tensor& saved_softmax) {
+    const int ax = normalize_axis(
+        axis, static_cast<int>(a.shape().rank()), "softmax");
+    return cpu_ops::tensor_softmax_nd(a, ax, saved_softmax);
+}
+
+Tensor tensor_softmax_backward_nd(const Tensor& g,
+                                  const Tensor& saved_softmax,
+                                  int axis) {
+    require_same_shape("softmax_backward", g, saved_softmax);
+    require_same_device("softmax_backward", g, saved_softmax);
+    const int ax = normalize_axis(
+        axis, static_cast<int>(g.shape().rank()), "softmax_backward");
+    return cpu_ops::tensor_softmax_backward_nd(g, saved_softmax, ax);
+}
+
+Tensor tensor_log_softmax_nd(const Tensor& a, int axis, Tensor& saved_lsm) {
+    const int ax = normalize_axis(
+        axis, static_cast<int>(a.shape().rank()), "log_softmax");
+    return cpu_ops::tensor_log_softmax_nd(a, ax, saved_lsm);
+}
+
+Tensor tensor_log_softmax_backward_nd(const Tensor& g,
+                                      const Tensor& saved_lsm,
+                                      int axis) {
+    require_same_shape("log_softmax_backward", g, saved_lsm);
+    require_same_device("log_softmax_backward", g, saved_lsm);
+    const int ax = normalize_axis(
+        axis, static_cast<int>(g.shape().rank()), "log_softmax_backward");
+    return cpu_ops::tensor_log_softmax_backward_nd(g, saved_lsm, ax);
 }
 
 Tensor tensor_relu(const Tensor& a) {
