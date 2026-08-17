@@ -1194,6 +1194,11 @@ inline Tensor tensor_concat_nd(const std::vector<Tensor>& inputs, int axis) {
     }
     out_sizes[ax] = total;
     Shape out_shape(out_sizes);
+#ifdef AUTOGRAD_USE_CUDA
+    if (inputs[0].device().is_cuda()) {
+        return cuda_tensor_concat(inputs, ax);
+    }
+#endif
     Tensor out = Tensor::empty(out_shape, inputs[0].device());
     if (out.elements() == 0) return out;
 
@@ -1257,6 +1262,11 @@ inline Tensor tensor_slice_nd(const Tensor& a, int axis,
     Dims out_sizes(s.sizes.begin(), s.sizes.end());
     out_sizes[ax] = len;
     Shape out_shape(out_sizes);
+#ifdef AUTOGRAD_USE_CUDA
+    if (a.device().is_cuda()) {
+        return cuda_tensor_slice(a, ax, start, len);
+    }
+#endif
     Tensor out = Tensor::empty(out_shape, a.device());
     if (out.elements() == 0) return out;
 
@@ -1306,6 +1316,12 @@ inline Tensor tensor_slice_backward_nd(const Tensor& g,
                                        int64_t len) {
     const int rank = static_cast<int>(input_shape.rank());
     const int ax = normalize_axis(axis, rank, "slice_backward");
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_slice_backward(
+            g, input_shape, ax, start, len);
+    }
+#endif
     Tensor out = Tensor::zeros(input_shape, g.device());
     if (out.elements() == 0) return out;
 
@@ -1364,6 +1380,12 @@ inline std::vector<Tensor> tensor_concat_backward_nd(
         throw std::invalid_argument(
             "concat_backward: along/size count mismatch");
     }
+#ifdef AUTOGRAD_USE_CUDA
+    if (g.device().is_cuda()) {
+        return cuda_tensor_concat_backward(
+            g, along_per_input, input_shapes, ax);
+    }
+#endif
     std::vector<Tensor> out;
     out.reserve(input_shapes.size());
     const std::vector<int64_t> g_strides = contiguous_strides(g.shape());

@@ -84,6 +84,57 @@ __global__ void fill_kernel(float* out, float value, std::size_t n) {
     if (i < n) out[i] = value;
 }
 
+__global__ void slice_copy_kernel(const float* input, float* output,
+                                  std::size_t total, int64_t axis_dim,
+                                  int64_t output_axis, int64_t inner,
+                                  int64_t start) {
+    const std::size_t flat = blockIdx.x * blockDim.x + threadIdx.x;
+    if (flat >= total) return;
+    const int64_t inner_index = static_cast<int64_t>(flat) % inner;
+    const int64_t axis_index =
+        (static_cast<int64_t>(flat) / inner) % output_axis;
+    const int64_t outer_index =
+        static_cast<int64_t>(flat) / (output_axis * inner);
+    const int64_t input_offset =
+        outer_index * axis_dim * inner
+        + (start + axis_index) * inner + inner_index;
+    output[flat] = input[input_offset];
+}
+
+__global__ void slice_scatter_kernel(const float* gradient, float* output,
+                                     std::size_t total, int64_t axis_dim,
+                                     int64_t gradient_axis, int64_t inner,
+                                     int64_t start) {
+    const std::size_t flat = blockIdx.x * blockDim.x + threadIdx.x;
+    if (flat >= total) return;
+    const int64_t inner_index = static_cast<int64_t>(flat) % inner;
+    const int64_t axis_index =
+        (static_cast<int64_t>(flat) / inner) % gradient_axis;
+    const int64_t outer_index =
+        static_cast<int64_t>(flat) / (gradient_axis * inner);
+    const int64_t output_offset =
+        outer_index * axis_dim * inner
+        + (start + axis_index) * inner + inner_index;
+    output[output_offset] = gradient[flat];
+}
+
+__global__ void concat_copy_kernel(const float* input, float* output,
+                                   std::size_t total, int64_t input_axis,
+                                   int64_t output_axis, int64_t inner,
+                                   int64_t axis_offset) {
+    const std::size_t flat = blockIdx.x * blockDim.x + threadIdx.x;
+    if (flat >= total) return;
+    const int64_t inner_index = static_cast<int64_t>(flat) % inner;
+    const int64_t axis_index =
+        (static_cast<int64_t>(flat) / inner) % input_axis;
+    const int64_t outer_index =
+        static_cast<int64_t>(flat) / (input_axis * inner);
+    const int64_t output_offset =
+        outer_index * output_axis * inner
+        + (axis_offset + axis_index) * inner + inner_index;
+    output[output_offset] = input[flat];
+}
+
 __global__ void unary_forward_kernel(const float* a, float* out,
                                          std::size_t n, int op) {
     const std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1103,6 +1154,92 @@ Tensor cuda_tensor_zeros(const Shape& shape, Device device) {
     set_device(out, "cuda_tensor_zeros");
     check(cudaMemset(tensor_data(out), 0, out.elements() * sizeof(float)),
           "cuda_tensor_zeros");
+    return out;
+}
+
+Tensor cuda_tensor_slice(const Tensor& a, int axis,
+                         int64_t start, int64_t len) {
+    Dims out_sizes(a.shape().sizes.begin(), a.shape().sizes.end());
+    out_sizes[axis] = len;
+    Tensor out = Tensor::empty(Shape(out_sizes), a.device());
+    if (out.elements() == 0) return out;
+
+    int64_t inner = 1;
+    for (std::size_t d = static_cast<std::size_t>(axis + 1);
+         d < a.shape().rank(); ++d) {
+        inner *= a.shape()[d];
+    }
+    set_device(a, "cuda_tensor_slice");
+    slice_copy_kernel<<<blocks(out.elements()), 256>>>(
+        tensor_data(a), tensor_data(out), out.elements(),
+        a.shape()[axis], len, inner, start);
+    finish_kernel("cuda_tensor_slice");
+    return out;
+}
+
+Tensor cuda_tensor_slice_backward(const Tensor& g,
+                                  const Shape& input_shape,
+                                  int axis, int64_t start, int64_t len) {
+    Tensor out = cuda_tensor_zeros(input_shape, g.device());
+    if (out.elements() == 0) return out;
+
+    int64_t inner = 1;
+    for (std::size_t d = static_cast<std::size_t>(axis + 1);
+         d < input_shape.rank(); ++d) {
+        inner *= input_shape[d];
+    }
+    set_device(g, "cuda_tensor_slice_backward");
+    slice_scatter_kernel<<<blocks(g.elements()), 256>>>(
+        tensor_data(g), tensor_data(out), g.elements(),
+        input_shape[axis], len, inner, start);
+    finish_kernel("cuda_tensor_slice_backward");
+    return out;
+}
+
+Tensor cuda_tensor_concat(const std::vector<Tensor>& inputs, int axis) {
+    Dims out_sizes(inputs[0].shape().sizes.begin(),
+                   inputs[0].shape().sizes.end());
+    int64_t total_axis = 0;
+    for (const auto& input : inputs) total_axis += input.shape()[axis];
+    out_sizes[axis] = total_axis;
+    Tensor out = Tensor::empty(Shape(out_sizes), inputs[0].device());
+    if (out.elements() == 0) return out;
+
+    int64_t inner = 1;
+    for (std::size_t d = static_cast<std::size_t>(axis + 1);
+         d < out.shape().rank(); ++d) {
+        inner *= out.shape()[d];
+    }
+    set_device(out, "cuda_tensor_concat");
+    int64_t axis_offset = 0;
+    for (const auto& input : inputs) {
+        const int64_t input_axis = input.shape()[axis];
+        if (input.elements() != 0) {
+            concat_copy_kernel<<<blocks(input.elements()), 256>>>(
+                tensor_data(input), tensor_data(out), input.elements(),
+                input_axis, total_axis, inner, axis_offset);
+            finish_kernel("cuda_tensor_concat");
+        }
+        axis_offset += input_axis;
+    }
+    return out;
+}
+
+std::vector<Tensor> cuda_tensor_concat_backward(
+        const Tensor& g, const std::vector<int64_t>& along_per_input,
+        const std::vector<Shape>& input_shapes, int axis) {
+    std::vector<Tensor> out;
+    out.reserve(input_shapes.size());
+    int64_t axis_offset = 0;
+    for (std::size_t i = 0; i < input_shapes.size(); ++i) {
+        const int64_t along = along_per_input[i];
+        Tensor piece = Tensor::empty(input_shapes[i], g.device());
+        if (along != 0 && piece.elements() != 0) {
+            piece = cuda_tensor_slice(g, axis, axis_offset, along);
+        }
+        out.push_back(std::move(piece));
+        axis_offset += along;
+    }
     return out;
 }
 

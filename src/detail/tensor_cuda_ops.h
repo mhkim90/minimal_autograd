@@ -96,6 +96,15 @@ Tensor cuda_tensor_maxpool2d_nchw_backward(const Tensor& g,
                                            int kH, int kW, int stride);
 
 Tensor cuda_tensor_zeros(const Shape& shape, Device device);
+Tensor cuda_tensor_slice(const Tensor& a, int axis,
+                         int64_t start, int64_t len);
+Tensor cuda_tensor_slice_backward(const Tensor& g,
+                                  const Shape& input_shape,
+                                  int axis, int64_t start, int64_t len);
+Tensor cuda_tensor_concat(const std::vector<Tensor>& inputs, int axis);
+std::vector<Tensor> cuda_tensor_concat_backward(
+    const Tensor& g, const std::vector<int64_t>& along_per_input,
+    const std::vector<Shape>& input_shapes, int axis);
 
 struct CudaTensorDFT2Result {
     Tensor real;
