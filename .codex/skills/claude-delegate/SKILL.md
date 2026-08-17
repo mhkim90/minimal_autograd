@@ -32,6 +32,14 @@ If a job remains live at its declared maximum wait, stop the affected phase as
 not cancel automatically. If tools are unavailable, report the missing route
 rather than silently substituting it.
 
++## Usage correlation
+
+When `usage_mcp` is configured, pass the controller's opaque `workflow_id` to
+every Claude run. After its terminal result is fetched, query
+`claude_usage_get`, bind the returned provider session to that workflow, and
+retain partial or unavailable usage as a warning. Never use usage to infer a
+budget, cancel the review, or weaken the phase gate.
+
 ## Prompt template
 
 ```text
