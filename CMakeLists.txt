@@ -79,8 +79,8 @@ set(_AUTOGRAD_LIB_SOURCES
     src/conv.cpp
     src/norm.cpp
     src/fft.cpp
+    src/cpu/tensor_ops.cpp
     src/core/tensor.cpp
-    src/core/cuda_runtime_stubs.cpp
     src/core/cuda_view.cpp
     src/core/variable.cpp
     src/core/ops.cpp
@@ -118,6 +118,7 @@ endif()
 if(AUTOGRAD_USE_CUDA)
     target_compile_definitions(autograd PUBLIC AUTOGRAD_USE_CUDA)
     target_sources(autograd PRIVATE
+        src/core/tensor_dispatch_cuda.cpp
         src/cuda_core.cu
         src/cuda_fft.cu
         src/cuda/tensor_ops.cu
@@ -126,6 +127,10 @@ if(AUTOGRAD_USE_CUDA)
     set_target_properties(autograd PROPERTIES
         CUDA_STANDARD ${_AUTOGRAD_CXX_STD}
         CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}")
+else()
+    target_sources(autograd PRIVATE
+        src/core/tensor_dispatch_cpu.cpp
+        src/core/cuda_runtime_stubs.cpp)
 endif()
 
 # ----------------------------------------------------------------------------
