@@ -643,14 +643,183 @@ void test_legacy_extension_eigen_aliases_still_available() {
     report("Tensor CUDA: Device descriptor remains intact on a CUDA-enabled build");
 }
 
-// The OOP math/optim/conv path supports a CUDA Variable for
-// matmul, mse_loss, cross_entropy, optim::SGD, optim::Adam, and the
-// replacement conv2d. The remaining rejections cover ops whose CUDA
-// kernels are not yet implemented (transpose / reshape / cumsum /
-// sin_op / concat). These tests build a CUDA Variable explicitly and assert
-// that those unsupported calls surface a runtime_error rather than
-// silently falling through copy_to_host / copy_from_host into the
-// CPU kernels.
+void check_close(const std::vector<float>& actual,
+                 const std::vector<float>& expected,
+                 float tolerance = 1e-5f);
+
+void test_oop_direct_shape_ops_cuda() {
+    const Shape shape{2, 3, 4};
+    std::vector<float> values(shape.numel());
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        values[i] = static_cast<float>(i) * 0.25f - 1.f;
+    }
+
+    Variable cpu_x(Tensor::from_host(values.data(), shape), true);
+    Variable cuda_x(Tensor::from_host(values.data(), shape, Device::cuda(0)), true);
+    Variable cpu_slice = ag::slice(cpu_x, -2, 1, 2);
+    Variable cuda_slice = ag::slice(cuda_x, -2, 1, 2);
+    CHECK(cuda_slice.value().device().is_cuda());
+    std::vector<float> cpu_value(cpu_slice.value().elements());
+    std::vector<float> cuda_value(cuda_slice.value().elements());
+    read_host(cpu_slice.value(), cpu_value.data());
+    read_host(cuda_slice.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value);
+
+    std::vector<float> slice_up(cpu_slice.value().elements());
+    for (std::size_t i = 0; i < slice_up.size(); ++i) {
+        slice_up[i] = static_cast<float>(i + 1);
+    }
+    cpu_slice.backward(Tensor::from_host(slice_up.data(), cpu_slice.value().shape()));
+    cuda_slice.backward(Tensor::from_host(
+        slice_up.data(), cuda_slice.value().shape(), Device::cuda(0)));
+    std::vector<float> cpu_grad(values.size()), cuda_grad(values.size());
+    read_host(cpu_x.grad(), cpu_grad.data());
+    read_host(cuda_x.grad(), cuda_grad.data());
+    check_close(cuda_grad, cpu_grad);
+    CHECK(cuda_x.grad().device().is_cuda());
+    cuda_slice.backward(Tensor::from_host(
+        slice_up.data(), cuda_slice.value().shape(), Device::cuda(0)));
+    read_host(cuda_x.grad(), cuda_grad.data());
+    for (std::size_t i = 0; i < cuda_grad.size(); ++i) {
+        CHECK(std::fabs(cuda_grad[i] - 2.f * cpu_grad[i]) <= 1e-5f);
+    }
+    cuda_x.zero_grad();
+    cuda_slice.backward(Tensor::from_host(
+        slice_up.data(), cuda_slice.value().shape(), Device::cuda(0)));
+    read_host(cuda_x.grad(), cuda_grad.data());
+    check_close(cuda_grad, cpu_grad);
+
+    const Shape a_shape{2, 1, 4};
+    const Shape b_shape{2, 2, 4};
+    std::vector<float> a_values(a_shape.numel()), b_values(b_shape.numel());
+    for (std::size_t i = 0; i < a_values.size(); ++i) {
+        a_values[i] = static_cast<float>(i + 1);
+    }
+    for (std::size_t i = 0; i < b_values.size(); ++i) {
+        b_values[i] = static_cast<float>(i + 11);
+    }
+    Variable cpu_a(Tensor::from_host(a_values.data(), a_shape), true);
+    Variable cpu_b(Tensor::from_host(b_values.data(), b_shape), true);
+    Variable cuda_a(Tensor::from_host(a_values.data(), a_shape, Device::cuda(0)), true);
+    Variable cuda_b(Tensor::from_host(b_values.data(), b_shape, Device::cuda(0)), true);
+    Variable cpu_cat = ag::concat({cpu_a, cpu_b}, -2);
+    Variable cuda_cat = ag::concat({cuda_a, cuda_b}, -2);
+    CHECK(cuda_cat.value().shape() == (Shape{2, 3, 4}));
+    CHECK(cuda_cat.value().device().is_cuda());
+    cpu_value.resize(cpu_cat.value().elements());
+    cuda_value.resize(cuda_cat.value().elements());
+    read_host(cpu_cat.value(), cpu_value.data());
+    read_host(cuda_cat.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value);
+
+    std::vector<float> cat_up(cuda_cat.value().elements());
+    for (std::size_t i = 0; i < cat_up.size(); ++i) {
+        cat_up[i] = static_cast<float>(i) * 0.1f - 0.2f;
+    }
+    cpu_cat.backward(Tensor::from_host(cat_up.data(), cpu_cat.value().shape()));
+    cuda_cat.backward(Tensor::from_host(
+        cat_up.data(), cuda_cat.value().shape(), Device::cuda(0)));
+    std::vector<float> cpu_a_grad(a_values.size()), cuda_a_grad(a_values.size());
+    std::vector<float> cpu_b_grad(b_values.size()), cuda_b_grad(b_values.size());
+    read_host(cpu_a.grad(), cpu_a_grad.data());
+    read_host(cuda_a.grad(), cuda_a_grad.data());
+    read_host(cpu_b.grad(), cpu_b_grad.data());
+    read_host(cuda_b.grad(), cuda_b_grad.data());
+    check_close(cuda_a_grad, cpu_a_grad);
+    check_close(cuda_b_grad, cpu_b_grad);
+    cuda_cat.backward(Tensor::from_host(
+        cat_up.data(), cuda_cat.value().shape(), Device::cuda(0)));
+    read_host(cuda_a.grad(), cuda_a_grad.data());
+    for (std::size_t i = 0; i < cuda_a_grad.size(); ++i) {
+        CHECK(std::fabs(cuda_a_grad[i] - 2.f * cpu_a_grad[i]) <= 1e-5f);
+    }
+    cuda_a.zero_grad();
+    cuda_b.zero_grad();
+    cuda_cat.backward(Tensor::from_host(
+        cat_up.data(), cuda_cat.value().shape(), Device::cuda(0)));
+    read_host(cuda_a.grad(), cuda_a_grad.data());
+    read_host(cuda_b.grad(), cuda_b_grad.data());
+    check_close(cuda_a_grad, cpu_a_grad);
+    check_close(cuda_b_grad, cpu_b_grad);
+
+    const Shape empty_shape{2, 0, 4};
+    Variable cpu_empty(Tensor::empty(empty_shape), true);
+    Variable cuda_empty(Tensor::empty(empty_shape, Device::cuda(0)), true);
+    Variable cpu_cat_empty = ag::concat({cpu_a, cpu_empty, cpu_b}, 1);
+    Variable cuda_cat_empty = ag::concat({cuda_a, cuda_empty, cuda_b}, 1);
+    CHECK(cuda_cat_empty.value().shape() == (Shape{2, 3, 4}));
+    cpu_cat_empty.backward(Tensor::ones(cpu_cat_empty.value().shape()));
+    cuda_cat_empty.backward(
+        Tensor::ones(cuda_cat_empty.value().shape(), Device::cuda(0)));
+    CHECK(cpu_empty.grad().elements() == 0);
+    CHECK(cuda_empty.grad().elements() == 0);
+    CHECK(cuda_empty.grad().device().is_cuda());
+
+    const std::vector<float> image_values{1.f, 2.f, 3.f, 4.f};
+    Variable cpu_image(Tensor::from_host(image_values.data(), Shape{1, 4}), true);
+    Variable cuda_image(Tensor::from_host(image_values.data(), Shape{1, 4}, Device::cuda(0)), true);
+    Variable cpu_reshaped = ag::reshape(cpu_image, Shape{1, 1, 2, 2});
+    Variable cuda_reshaped = ag::reshape(cuda_image, Shape{1, 1, 2, 2});
+    CHECK(ag::cuda_view(cuda_image.value()).data ==
+          ag::cuda_view(cuda_reshaped.value()).data);
+    std::vector<float> reshape_up(4, 1.f);
+    cpu_reshaped.backward(Tensor::from_host(reshape_up.data(), Shape{1, 1, 2, 2}));
+    cuda_reshaped.backward(Tensor::from_host(
+        reshape_up.data(), Shape{1, 1, 2, 2}, Device::cuda(0)));
+    std::vector<float> cpu_image_grad(4), cuda_image_grad(4);
+    read_host(cpu_image.grad(), cpu_image_grad.data());
+    read_host(cuda_image.grad(), cuda_image_grad.data());
+    check_close(cuda_image_grad, cpu_image_grad);
+
+    auto reflect_conv = [](Variable x) {
+        Variable row0 = ag::row_slice(x, 0, 1);
+        Variable row1 = ag::row_slice(x, 1, 1);
+        auto padded_row = [](const Variable& row) {
+            return ag::hcat({ag::col_slice(row, 1, 1), row,
+                             ag::col_slice(row, 0, 1)});
+        };
+        Variable top = padded_row(row1);
+        Variable middle0 = padded_row(row0);
+        Variable middle1 = padded_row(row1);
+        Variable bottom = padded_row(row0);
+        Variable padded = ag::concat({top, middle0, middle1, bottom}, 0);
+        Variable nchw = ag::reshape(padded, Shape{1, 1, 4, 4});
+        Variable weight(Tensor::ones(Shape{1, 1, 3, 3}, x.device()), false);
+        Variable bias(Tensor::zeros(Shape{1}, x.device()), false);
+        return ag::conv2d(nchw, weight, bias, 1, 0);
+    };
+    Variable cpu_reflect(Tensor::from_host(image_values.data(), Shape{2, 2}), true);
+    Variable cuda_reflect(Tensor::from_host(
+        image_values.data(), Shape{2, 2}, Device::cuda(0)), true);
+    Variable cpu_conv = reflect_conv(cpu_reflect);
+    Variable cuda_conv = reflect_conv(cuda_reflect);
+    cpu_value.resize(cpu_conv.value().elements());
+    cuda_value.resize(cuda_conv.value().elements());
+    read_host(cpu_conv.value(), cpu_value.data());
+    read_host(cuda_conv.value(), cuda_value.data());
+    check_close(cuda_value, cpu_value);
+    cpu_conv.backward(Tensor::ones(cpu_conv.value().shape()));
+    cuda_conv.backward(Tensor::ones(cuda_conv.value().shape(), Device::cuda(0)));
+    std::vector<float> cpu_reflect_grad(4), cuda_reflect_grad(4);
+    read_host(cpu_reflect.grad(), cpu_reflect_grad.data());
+    read_host(cuda_reflect.grad(), cuda_reflect_grad.data());
+    check_close(cuda_reflect_grad, cpu_reflect_grad);
+    CHECK(cuda_reflect.grad().device().is_cuda());
+
+    CHECK_THROWS_AS(std::invalid_argument, ag::slice(cuda_x, 0, -1, 1));
+    CHECK_THROWS_AS(std::invalid_argument, ag::slice(cuda_x, 3, 0, 1));
+    CHECK_THROWS_AS(std::invalid_argument, ag::reshape(cuda_x, Shape{5, 5}));
+    Variable bad_shape(Tensor::ones(Shape{3, 2, 4}, Device::cuda(0)), false);
+    CHECK_THROWS_AS(std::invalid_argument, ag::concat({cuda_a, bad_shape}, 1));
+    Variable cpu_only(Tensor::ones(a_shape), false);
+    CHECK_THROWS_AS(std::invalid_argument, ag::concat({cuda_a, cpu_only}, 1));
+
+    report("Tensor CUDA: direct reshape/slice/concat rank-generic parity, VJPs, and reflect-conv composition");
+}
+
+// The OOP math/optim/conv path keeps explicit rejection for CUDA operations
+// without direct kernels. Shape operations are covered by the direct CUDA
+// test above; this test preserves the rejection boundary for the siblings.
 void test_oop_math_rejects_cuda_variable() {
     auto cuda_var_of = [](const Tensor& t) {
         return ag::Variable(t, /*requires_grad=*/true);
@@ -659,7 +828,6 @@ void test_oop_math_rejects_cuda_variable() {
     // unary operations outside this gate remain rejected.
     {
         Variable x = cuda_var_of(Tensor::ones(Shape{4}, Device::cuda(0)));
-        CHECK_THROWS_AS(std::runtime_error, ag::reshape(x, Shape{2, 2}));
         CHECK_THROWS_AS(std::runtime_error, ag::transpose(x));
         CHECK_THROWS_AS(std::runtime_error, ag::cumsum(x));
         CHECK_THROWS_AS(std::runtime_error, ag::sin_op(x));
@@ -670,7 +838,7 @@ void test_oop_math_rejects_cuda_variable() {
     {
         Variable cuda_a = cuda_var_of(Tensor::ones(Shape{2}, Device::cuda(0)));
         Variable cpu_b = ag::Variable(Tensor::ones(Shape{2}), false);
-        CHECK_THROWS_AS(std::runtime_error,
+        CHECK_THROWS_AS(std::invalid_argument,
                         ag::concat({cuda_a, cpu_b}, 0));
     }
 
@@ -694,7 +862,7 @@ Variable composed_elementwise_graph(const Variable& x) {
 
 void check_close(const std::vector<float>& actual,
                  const std::vector<float>& expected,
-                 float tolerance = 1e-5f) {
+                 float tolerance) {
     CHECK(actual.size() == expected.size());
     for (std::size_t i = 0; i < actual.size(); ++i) {
         CHECK(std::fabs(actual[i] - expected[i]) <= tolerance);
@@ -1675,6 +1843,7 @@ int main() {
     test_same_device_cuda_to_cuda_transfer();
     test_header_hygiene_preprocessor();
     test_legacy_extension_eigen_aliases_still_available();
+    test_oop_direct_shape_ops_cuda();
     test_oop_math_rejects_cuda_variable();
     test_oop_elementwise_composed_graph_cuda();
     test_oop_elementwise_rank4_and_empty_cuda();

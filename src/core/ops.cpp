@@ -401,7 +401,6 @@ Variable transpose(const Variable& a, int axis0, int axis1) {
 
 Variable reshape(const Variable& a, const Shape& shape) {
     validate_unary("reshape", a);
-    validate_cpu("reshape", a);
     return make_result(
         detail::tensor_reshape_view(a.value(), shape),
         OpKind::Reshape,
@@ -417,7 +416,6 @@ Variable concat(std::vector<Variable> inputs, int axis) {
     if (inputs.empty()) {
         throw std::invalid_argument("concat: requires at least one input");
     }
-    validate_cpu("concat", inputs);
     std::vector<std::shared_ptr<detail::VariableNode>> parents;
     parents.reserve(inputs.size());
     std::vector<Tensor> values;
@@ -451,7 +449,6 @@ Variable hcat(std::vector<Variable> inputs) {
 
 Variable slice(const Variable& a, int axis, int64_t start, int64_t len) {
     validate_unary("slice", a);
-    validate_cpu("slice", a);
     return make_result(
         detail::tensor_slice_nd(a.value(), axis, start, len),
         OpKind::Slice,
