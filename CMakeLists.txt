@@ -127,7 +127,10 @@ if(AUTOGRAD_USE_CUDA)
         src/core/tensor_dispatch_cuda_spectral_optimizer.cpp
         src/cuda_core.cu
         src/cuda_fft.cu
-        src/cuda/tensor_ops.cu
+        src/cuda/tensor_ops_elementwise.cu
+        src/cuda/tensor_ops_shape.cu
+        src/cuda/tensor_ops_nn.cu
+        src/cuda/tensor_ops_spectral_optimizer.cu
         src/cuda/tensor_storage_runtime.cu)
     target_link_libraries(autograd PUBLIC CUDA::cudart)
     set_target_properties(autograd PROPERTIES
