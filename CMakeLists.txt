@@ -79,7 +79,10 @@ set(_AUTOGRAD_LIB_SOURCES
     src/conv.cpp
     src/norm.cpp
     src/fft.cpp
-    src/cpu/tensor_ops.cpp
+    src/cpu/tensor_ops_elementwise.cpp
+    src/cpu/tensor_ops_shape.cpp
+    src/cpu/tensor_ops_nn.cpp
+    src/cpu/tensor_ops_spectral_optimizer.cpp
     src/core/tensor.cpp
     src/core/cuda_view.cpp
     src/core/variable.cpp
