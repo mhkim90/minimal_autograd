@@ -79,7 +79,10 @@ set(_AUTOGRAD_LIB_SOURCES
     src/conv.cpp
     src/norm.cpp
     src/fft.cpp
-    src/cpu/tensor_ops.cpp
+    src/cpu/tensor_ops_elementwise.cpp
+    src/cpu/tensor_ops_shape.cpp
+    src/cpu/tensor_ops_nn.cpp
+    src/cpu/tensor_ops_spectral_optimizer.cpp
     src/core/tensor.cpp
     src/core/cuda_view.cpp
     src/core/variable.cpp
@@ -118,7 +121,10 @@ endif()
 if(AUTOGRAD_USE_CUDA)
     target_compile_definitions(autograd PUBLIC AUTOGRAD_USE_CUDA)
     target_sources(autograd PRIVATE
-        src/core/tensor_dispatch_cuda.cpp
+        src/core/tensor_dispatch_cuda_elementwise.cpp
+        src/core/tensor_dispatch_cuda_shape.cpp
+        src/core/tensor_dispatch_cuda_nn.cpp
+        src/core/tensor_dispatch_cuda_spectral_optimizer.cpp
         src/cuda_core.cu
         src/cuda_fft.cu
         src/cuda/tensor_ops.cu
@@ -129,7 +135,10 @@ if(AUTOGRAD_USE_CUDA)
         CUDA_ARCHITECTURES "${AUTOGRAD_CUDA_ARCHITECTURES}")
 else()
     target_sources(autograd PRIVATE
-        src/core/tensor_dispatch_cpu.cpp
+        src/core/tensor_dispatch_cpu_elementwise.cpp
+        src/core/tensor_dispatch_cpu_shape.cpp
+        src/core/tensor_dispatch_cpu_nn.cpp
+        src/core/tensor_dispatch_cpu_spectral_optimizer.cpp
         src/core/cuda_runtime_stubs.cpp)
 endif()
 
