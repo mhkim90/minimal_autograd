@@ -30,6 +30,11 @@ workflow is being started, handled at terminal state, or closed.
    failed finish is left open rather than fabricated.
 
 Never backdate a missed start: report its controller delta unavailable and
-begin a new workflow only for subsequent work. Partial, unavailable, or
-unresolved-model usage never changes a quality gate or becomes a token/price
+begin a new workflow only for subsequent work. If local Codex state is
+configured, `usage_codex_unattributed_report` may provide a read-only,
+post-hoc snapshot-observed report. Treat every result as `unattributed`: it is
+neither a workflow record nor evidence to start, bind, finish, ingest, or
+backfill a missed workflow. Its raw counters, coverage, and redacted warnings
+are observational only. Partial, unavailable, unresolved-model, or
+unattributed usage never changes a quality gate or becomes a token/price
 enforcement policy.
