@@ -1,13 +1,8 @@
 // CPU-only stub for the OOP Tensor's CUDA runtime helpers.
 //
-// This translation unit is always compiled (it carries no CUDA
-// dependencies of its own) and provides bodies for the helpers
-// declared in src/detail/tensor_cuda_runtime.h. In a CUDA-enabled
-// build the bodies are excluded because the corresponding
-// `src/cuda/tensor_storage_runtime.cu` provides the real
-// implementations; both files are part of the build to keep the
-// public surface uniform, but only one definition of each symbol is
-// compiled per build.
+// This translation unit is selected only for CPU-only builds and provides
+// bodies for the helpers declared in src/detail/tensor_cuda_runtime.h. CUDA
+// builds instead select src/cuda/tensor_storage_runtime.cu through CMake.
 //
 // All throwing helpers raise std::runtime_error with a clear,
 // build-aware message so any accidental attempt to construct or
@@ -22,8 +17,6 @@
 
 #include <sstream>
 #include <stdexcept>
-
-#ifndef AUTOGRAD_USE_CUDA
 
 namespace ag {
 namespace detail {
@@ -85,5 +78,3 @@ void cuda_runtime_copy_peer(float* dst, int dst_device,
 
 }  // namespace detail
 }  // namespace ag
-
-#endif  // !AUTOGRAD_USE_CUDA
