@@ -55,6 +55,23 @@ The old monoliths (`tensor_dispatch_cpu.cpp`, `tensor_dispatch_cuda.cpp`,
 their definitions have moved.  There must be exactly one definition of every
 public dispatcher/provider symbol in each selected build.
 
+## Delivery topology
+
+This initiative uses two implementation PRs:
+
+1. **PR #71, after plan approval:** P1 and P2 together. It moves CMake and
+   dispatcher ownership, then the CPU provider. These phases share one source
+   layout objective, ownership, rollback boundary, and dual-build validation.
+2. **A new PR after #71 merges:** P3 only. It splits CUDA providers and carries
+   the required CUDA-helper preflight, independent review, and visible-device
+   qualification.
+
+The P2→P3 split is required because P3 crosses independent-review and
+device-validation boundaries. Do not hide P3 in #71 or create its branch before
+the P2 implementation is merged. The plan-only commit in #71 remains draft;
+after owner approval it becomes the P1/P2 implementation PR. P3 needs the
+plan's declared manual owner gate before its new PR starts.
+
 ## Phases and gates
 
 ### P1 — CMake and dispatcher split
@@ -81,7 +98,7 @@ public dispatcher/provider symbol in each selected build.
 - **Green gate:** CPU build plus `test_core`, `test_nn`, `test_conv`,
   `test_tensor`, and `test_fft` pass; a CUDA build also links and passes its
   CPU-residency paths.
-- **Manual gate:** owner approval before P3.
+- **Manual gate:** owner approval to start the separate P3 PR after #71 merges.
 
 ### P3 — CUDA provider split and final qualification
 
@@ -144,13 +161,12 @@ skips.
 
 ## Publication and stop rules
 
-Create a new plan-only draft PR from this branch.  While R6 is open, that PR
-may be stacked on #70's branch solely to review this plan without duplicating
-the R6 diff; retarget it to `main` after #70 merges.  Owner approval must cite
-this plan commit SHA; approval authorizes P1 only, not merge.  Push each passed
-phase to this same draft PR and wait at every manual gate.  Stop on scope
-expansion, duplicate/unresolved symbols, changed behavior, absent CUDA route,
-or a failed final device gate.
+Keep #71 as the plan-only draft PR targeted at `main`. Owner approval must cite
+this plan commit SHA; it authorizes P1 only, not merge. After P1 and P2 pass
+their manual gates, publish them to #71 and merge only with separate owner
+approval. Create the P3 PR only from merged #71 after its declared owner gate.
+Stop on scope expansion, duplicate/unresolved symbols, changed behavior,
+absent CUDA route, topology deviation, or a failed final device gate.
 
 ## Grilled-Me preflight
 
@@ -161,4 +177,5 @@ change.  Main risk: source moves can silently break CUDA linkage or CPU
 fallbacks; exact build selection, static ownership checks, dual builds, and
 visible-device tests are mandatory.  Surviving concern: CUDA internal helpers
 are more coupled than CPU helpers, which is why P3 has a bounded CUDA
-preflight and independent review.
+preflight, independent review, and its own implementation PR rather than
+sharing #71's rollback boundary.
