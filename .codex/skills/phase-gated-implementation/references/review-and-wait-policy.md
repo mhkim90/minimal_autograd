@@ -24,6 +24,12 @@ a slow job. A Claude reviewer exposing only `running` is live but not measurable
 missing partial text does not increment no-progress. Keep its job through the
 declared maximum wait and report `review pending`.
 
+While a required async job is live, keep the controller turn active. A
+commentary checkpoint reports state and the next poll only; it is never a final
+response, implicit owner handoff, phase stop, gate, or publication action.
+Finalize only after the terminal result has been retrieved, the owner explicitly
+interrupts/stops the work, or the declared maximum wait has been reached.
+
 After two unchanged measurable checkpoints, record a wait-policy review; do
 not stop, abandon, or cancel solely for that state. On terminal `done`, fetch
 the terminal result before a verdict. At maximum wait, stop the affected phase
