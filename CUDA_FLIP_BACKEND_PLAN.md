@@ -1,7 +1,8 @@
 # CUDA Backend Completion for Direct `ag::flip`
 
-Status: draft — plan-only. No product edit is authorized until owner approval
-is recorded against this exact plan commit.
+Status: draft — revised plan-only. The prior approval is invalidated by this
+scope correction; no further product edit is authorized until owner approval
+is recorded against this exact revised plan commit.
 
 ## Goal and evidence
 
@@ -44,6 +45,7 @@ kernel.
 
 - `CUDA_FLIP_BACKEND_PLAN.md`
 - `src/core/ops.cpp`
+- `src/core/variable.cpp`
 - `src/core/tensor_dispatch_cpu_shape.cpp`
 - `src/core/tensor_dispatch_cuda_shape.cpp`
 - `src/cuda/tensor_ops_shape.cu`
@@ -53,10 +55,12 @@ kernel.
 - `test/test_cpu_ops.cpp` only if a focused CPU parity/empty-axis guard is
   missing and cannot be expressed in the existing CUDA test.
 
-Forbidden: all other source, public API headers, `src/core/variable.cpp`,
-legacy `include/autograd/ops.h`, CMake, CppResist, and unrelated cleanup.
-Stop for a revised plan if implementing the existing `OpKind::Flip` backward
-requires modifying `variable.cpp` or any public API.
+Forbidden: all other source, public API headers, legacy
+`include/autograd/ops.h`, CMake, CppResist, and unrelated cleanup.
+`src/core/variable.cpp` may change only to add the existing `OpKind::Flip` to
+the CUDA-autograd supported-operation allowlist. Its existing Flip VJP remains
+unchanged. Stop for a revised plan if any other variable/autograd contract or
+public API requires modification.
 
 ## Single implementation phase — CUDA flip dispatch and VJP
 
@@ -91,9 +95,10 @@ rejection. The probe is not committed.
 2. Add CUDA `tensor_flip_nd` dispatch and a private CUDA flip kernel in the
    existing shape provider. Reuse the selected-axis/inner-stride mapping used
    by CUDA slice and concat; launch only for non-empty tensors.
-3. Remove only the public `flip` CUDA rejection. Keep the existing `OpKind`
-   path so its backward calls the same dispatch and therefore reverses the
-   CUDA upstream gradient on the same axis.
+3. Remove only the public `flip` CUDA rejection and add existing
+   `OpKind::Flip` to `cuda_backward_supported`. Keep the existing Flip VJP
+   unchanged so backward calls the same dispatch and reverses the CUDA
+   upstream gradient on the same axis.
 4. Add focused CUDA tests for rank-2 axes `0`, `1`, and `-1`; rank-3 internal
    axis; forward CPU parity; CUDA residence; `sum(flip(x, axis)).backward()`
    gradient parity; repeated backward accumulation; and empty tensors. Extend
@@ -133,6 +138,9 @@ Acceptance requires:
 - CUDA `flip` output, input gradient, and repeated-backward accumulated
   gradient remain on the selected CUDA device until final test-only copies.
 - Backward equals a same-axis reversal and matches the CPU/reference result.
+- `Variable::backward` accepts the existing Flip node on CUDA only after its
+  dispatch/kernel support is present; no other CUDA-autograd allowlist entry
+  changes.
 - CPU behavior remains unchanged.
 - The final diff is limited to approved paths; no host materialization,
   raw/private API, or CppResist change is introduced.
