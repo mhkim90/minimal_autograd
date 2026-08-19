@@ -275,6 +275,57 @@ Tensor tensor_mul(const Tensor& a, const Tensor& b) {
     return out;
 }
 
+Tensor tensor_less_equal(const Tensor& a, const Tensor& b) {
+    Tensor out = Tensor::empty(a.shape(), a.device());
+    const std::size_t n = a.elements();
+    if (n == 0) return out;
+    std::vector<float> av(n), bv(n), ov(n);
+    a.copy_to_host(av.data(), n);
+    b.copy_to_host(bv.data(), n);
+    for (std::size_t i = 0; i < n; ++i) {
+        ov[i] = av[i] <= bv[i] ? 1.f : 0.f;
+    }
+    out.copy_from_host(ov.data(), n);
+    return out;
+}
+
+Tensor tensor_where(const Tensor& condition,
+                    const Tensor& when_true,
+                    const Tensor& when_false) {
+    Tensor out = Tensor::empty(condition.shape(), condition.device());
+    const std::size_t n = condition.elements();
+    if (n == 0) return out;
+    std::vector<float> cv(n), tv(n), fv(n), ov(n);
+    condition.copy_to_host(cv.data(), n);
+    when_true.copy_to_host(tv.data(), n);
+    when_false.copy_to_host(fv.data(), n);
+    for (std::size_t i = 0; i < n; ++i) {
+        ov[i] = cv[i] != 0.f ? tv[i] : fv[i];
+    }
+    out.copy_from_host(ov.data(), n);
+    return out;
+}
+
+bool tensor_all_true(const Tensor& a) {
+    if (a.empty()) return true;
+    std::vector<float> values(a.elements());
+    a.copy_to_host(values.data(), values.size());
+    for (float value : values) {
+        if (!std::isfinite(value) || value == 0.f) return false;
+    }
+    return true;
+}
+
+bool tensor_all_finite(const Tensor& a) {
+    if (a.empty()) return true;
+    std::vector<float> values(a.elements());
+    a.copy_to_host(values.data(), values.size());
+    for (float value : values) {
+        if (!std::isfinite(value)) return false;
+    }
+    return true;
+}
+
 Tensor tensor_scale(const Tensor& a, float scalar) {
     Tensor out = Tensor::empty(a.shape(), a.device());
     const std::size_t n = a.elements();

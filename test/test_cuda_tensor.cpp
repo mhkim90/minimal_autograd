@@ -54,10 +54,12 @@
 #include "autograd/device.h"
 #include "autograd/shape.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -1818,6 +1820,109 @@ void test_oop_adam_cuda_load_state_preserves_device() {
            "continues trajectory, deep copies moments");
 }
 
+void test_predicate_selection_and_status_cuda() {
+    const std::vector<float> lhs_values{-1.f, 0.f, 2.f,
+                                        std::numeric_limits<float>::quiet_NaN()};
+    const std::vector<float> rhs_values{-1.f, 1.f, 1.f, 4.f};
+    Variable lhs(Tensor::from_host(lhs_values.data(), Shape{4}, Device::cuda(0)), true);
+    Variable rhs(Tensor::from_host(rhs_values.data(), Shape{4}, Device::cuda(0)), true);
+    Variable mask = ag::less_equal(lhs, rhs);
+    std::vector<float> mask_values(4);
+    read_host(mask.value(), mask_values.data());
+    CHECK(mask_values == std::vector<float>({1.f, 1.f, 0.f, 0.f}));
+    CHECK(mask.device().is_cuda() && !mask.requires_grad());
+    CHECK_THROWS_AS(std::invalid_argument,
+                    ag::less_equal(lhs,
+                                   Variable(Tensor::zeros(Shape{4}, Device::cpu()))));
+    CHECK_THROWS_AS(std::invalid_argument,
+                    ag::less_equal(lhs,
+                                   Variable(Tensor::zeros(Shape{3}, Device::cuda(0)))));
+
+    const std::vector<float> true_values{10.f, 20.f, 30.f, 40.f};
+    const std::vector<float> false_values{-1.f, -2.f, -3.f, -4.f};
+    Variable condition(Tensor::from_host(mask_values.data(), Shape{4}, Device::cuda(0)), true);
+    Variable when_true(Tensor::from_host(true_values.data(), Shape{4}, Device::cuda(0)), true);
+    Variable when_false(Tensor::from_host(false_values.data(), Shape{4}, Device::cuda(0)), true);
+    CHECK_THROWS_AS(std::invalid_argument,
+                    ag::where(condition,
+                              Variable(Tensor::zeros(Shape{4}, Device::cpu())),
+                              when_false));
+    CHECK_THROWS_AS(std::invalid_argument,
+                    ag::where(condition, when_true,
+                              Variable(Tensor::zeros(Shape{3}, Device::cuda(0)))));
+    Variable selected = ag::where(condition, when_true, when_false);
+    selected.backward(Tensor::ones(Shape{4}, Device::cuda(0)));
+    std::vector<float> selected_values(4), condition_grad(4), true_grad(4), false_grad(4);
+    read_host(selected.value(), selected_values.data());
+    read_host(condition.grad(), condition_grad.data());
+    read_host(when_true.grad(), true_grad.data());
+    read_host(when_false.grad(), false_grad.data());
+    CHECK(selected_values == std::vector<float>({10.f, 20.f, -3.f, -4.f}));
+    CHECK(condition_grad == std::vector<float>(4, 0.f));
+    CHECK(true_grad == std::vector<float>({1.f, 1.f, 0.f, 0.f}));
+    CHECK(false_grad == std::vector<float>({0.f, 0.f, 1.f, 1.f}));
+    selected.backward(Tensor::ones(Shape{4}, Device::cuda(0)));
+    read_host(when_true.grad(), true_grad.data());
+    CHECK(true_grad == std::vector<float>({2.f, 2.f, 0.f, 0.f}));
+    when_true.zero_grad();
+    when_false.zero_grad();
+    condition.zero_grad();
+    CHECK(!when_true.has_grad() && !when_false.has_grad() && !condition.has_grad());
+
+    const float finite_values[] = {1.f, -2.f, 0.f};
+    Tensor finite = Tensor::from_host(finite_values, Shape{3}, Device::cuda(0));
+    CHECK(!ag::all_true(finite));
+    CHECK(ag::all_finite(finite));
+    const float nonfinite_values[] = {1.f, std::numeric_limits<float>::infinity(),
+                                      std::numeric_limits<float>::quiet_NaN()};
+    Tensor nonfinite = Tensor::from_host(nonfinite_values, Shape{3}, Device::cuda(0));
+    CHECK(!ag::all_true(nonfinite));
+    CHECK(!ag::all_finite(nonfinite));
+    CHECK(ag::all_true(Tensor::from_host(
+        std::vector<float>{1.f, -2.f}.data(), Shape{2}, Device::cuda(0))));
+    CHECK(ag::all_true(Tensor::empty(Shape{0, 2}, Device::cuda(0))));
+    CHECK(ag::all_finite(Tensor::empty(Shape{0, 2}, Device::cuda(0))));
+    CHECK(finite.device().is_cuda() && nonfinite.device().is_cuda());
+    report("Tensor CUDA ops: predicates, conditional VJPs, status flags");
+}
+
+void test_fixed_grid_support_cuda() {
+    constexpr int max_half = 4;
+    std::vector<float> offsets;
+    std::vector<float> weights;
+    for (int i = -max_half; i <= max_half; ++i) {
+        offsets.push_back(static_cast<float>(std::abs(i)));
+        weights.push_back(static_cast<float>(i + max_half + 1));
+    }
+    Variable offset(Tensor::from_host(offsets.data(), Shape{9}, Device::cuda(0)));
+    Variable weight(Tensor::from_host(weights.data(), Shape{9}, Device::cuda(0)));
+    Variable zero(Tensor::zeros(Shape{9}, Device::cuda(0)));
+    for (int support = 1; support <= max_half; ++support) {
+        for (float sigma : {(support - 0.0001f) / 4.f,
+                            static_cast<float>(support) / 4.f,
+                            (support + 0.0001f) / 4.f}) {
+            const float threshold = std::max(
+                1.f, std::min(4.f * sigma, static_cast<float>(max_half)));
+            std::vector<float> thresholds(9, threshold);
+            Variable selected = ag::where(
+                ag::less_equal(offset,
+                               Variable(Tensor::from_host(
+                                   thresholds.data(), Shape{9}, Device::cuda(0)))),
+                weight, zero);
+            std::vector<float> actual(9);
+            read_host(selected.value(), actual.data());
+            const int expected_half = std::min(
+                max_half, std::max(1, static_cast<int>(std::floor(4.f * sigma))));
+            for (int i = -max_half; i <= max_half; ++i) {
+                const float expected = std::abs(i) <= expected_half
+                    ? static_cast<float>(i + max_half + 1) : 0.f;
+                CHECK(actual[static_cast<std::size_t>(i + max_half)] == expected);
+            }
+        }
+    }
+    report("Tensor CUDA ops: fixed-grid support matches clamped floor boundaries");
+}
+
 }  // namespace
 
 int main() {
@@ -1868,6 +1973,8 @@ int main() {
     test_oop_adam_cuda_step_parity_and_moments();
     test_oop_adam_cuda_mixed_list();
     test_oop_adam_cuda_load_state_preserves_device();
+    test_predicate_selection_and_status_cuda();
+    test_fixed_grid_support_cuda();
 
     std::printf("\nALL CUDA TENSOR TESTS PASSED (%d)\n", passed);
     return 0;
