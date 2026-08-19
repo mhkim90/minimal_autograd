@@ -9,6 +9,12 @@ namespace detail {
 
 Tensor cuda_tensor_add(const Tensor& a, const Tensor& b);
 Tensor cuda_tensor_mul(const Tensor& a, const Tensor& b);
+Tensor cuda_tensor_less_equal(const Tensor& a, const Tensor& b);
+Tensor cuda_tensor_where(const Tensor& condition,
+                         const Tensor& when_true,
+                         const Tensor& when_false);
+bool cuda_tensor_all_true(const Tensor& a);
+bool cuda_tensor_all_finite(const Tensor& a);
 Tensor cuda_tensor_scale(const Tensor& a, float scalar);
 Tensor cuda_tensor_ones(const Shape& shape, Device device);
 Tensor cuda_tensor_sum(const Tensor& a);

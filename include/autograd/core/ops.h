@@ -59,6 +59,14 @@ Variable mean(const Variable& a, const std::vector<int>& axes,
 Variable broadcast_add(const Variable& a, const Variable& b);
 Variable sub(const Variable& a, const Variable& b);
 Variable div_op(const Variable& a, const Variable& b);
+Variable less_equal(const Variable& a, const Variable& b);
+Variable where(const Variable& condition,
+               const Variable& when_true,
+               const Variable& when_false);
+
+// Synchronous control-plane predicates. They do not create autograd nodes.
+bool all_true(const Tensor& a);
+bool all_finite(const Tensor& a);
 
 // --- Activations / scalar functions ---
 

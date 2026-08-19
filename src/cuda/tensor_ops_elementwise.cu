@@ -30,7 +30,7 @@ inline void finish_kernel(const char* what) {
     check(cudaGetLastError(), what);
 }
 
-enum BinaryOp { Add, Mul, Sub, Div };
+enum BinaryOp { Add, Mul, Sub, Div, LessEqual };
 enum UnaryOp {
     ReLU,
     Sigmoid,
@@ -67,6 +67,7 @@ __global__ void binary_forward_kernel(const float* a, const float* b,
         case Mul: out[i] = a[i] * b[i]; break;
         case Sub: out[i] = a[i] - b[i]; break;
         case Div: out[i] = a[i] / b[i]; break;
+        case LessEqual: out[i] = a[i] <= b[i] ? 1.f : 0.f; break;
     }
 }
 
@@ -152,6 +153,28 @@ __global__ void div_backward_b_kernel(const float* g, const float* a,
 __global__ void negate_kernel(const float* g, float* out, std::size_t n) {
     const std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) out[i] = -g[i];
+}
+
+__global__ void where_kernel(const float* condition,
+                             const float* when_true,
+                             const float* when_false,
+                             float* out, std::size_t n) {
+    const std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = condition[i] != 0.f ? when_true[i] : when_false[i];
+}
+
+__global__ void all_true_kernel(const float* input, int* status,
+                                std::size_t n) {
+    const std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const float value = input[i];
+    if (!isfinite(value) || value == 0.f) atomicAnd(status, 0);
+}
+
+__global__ void all_finite_kernel(const float* input, int* status,
+                                  std::size_t n) {
+    const std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n && !isfinite(input[i])) atomicAnd(status, 0);
 }
 
 __global__ void softmax_forward_kernel(const float* input, float* out,
@@ -286,6 +309,66 @@ Tensor cuda_tensor_add(const Tensor& a, const Tensor& b) {
 
 Tensor cuda_tensor_mul(const Tensor& a, const Tensor& b) {
     return binary(a, b, Mul, "cuda_tensor_mul");
+}
+
+Tensor cuda_tensor_less_equal(const Tensor& a, const Tensor& b) {
+    return binary(a, b, LessEqual, "cuda_tensor_less_equal");
+}
+
+Tensor cuda_tensor_where(const Tensor& condition,
+                         const Tensor& when_true,
+                         const Tensor& when_false) {
+    Tensor out = Tensor::empty(condition.shape(), condition.device());
+    const std::size_t n = condition.elements();
+    if (n == 0) return out;
+    set_device(condition, "cuda_tensor_where");
+    where_kernel<<<blocks(n), 256>>>(
+        tensor_data(condition), tensor_data(when_true),
+        tensor_data(when_false), tensor_data(out), n);
+    finish_kernel("cuda_tensor_where");
+    return out;
+}
+
+namespace {
+
+struct DeviceIntGuard {
+    int* data = nullptr;
+
+    ~DeviceIntGuard() {
+        if (data != nullptr) cudaFree(data);
+    }
+};
+
+bool cuda_all_status(const Tensor& a, bool finite_only, const char* name) {
+    if (a.empty()) return true;
+    set_device(a, name);
+    DeviceIntGuard status;
+    check(cudaMalloc(reinterpret_cast<void**>(&status.data), sizeof(int)), name);
+    int initial = 1;
+    check(cudaMemcpy(status.data, &initial, sizeof(int),
+                     cudaMemcpyHostToDevice), name);
+    if (finite_only) {
+        all_finite_kernel<<<blocks(a.elements()), 256>>>(
+            tensor_data(a), status.data, a.elements());
+    } else {
+        all_true_kernel<<<blocks(a.elements()), 256>>>(
+            tensor_data(a), status.data, a.elements());
+    }
+    finish_kernel(name);
+    int result = 0;
+    check(cudaMemcpy(&result, status.data, sizeof(int),
+                     cudaMemcpyDeviceToHost), name);
+    return result != 0;
+}
+
+}  // namespace
+
+bool cuda_tensor_all_true(const Tensor& a) {
+    return cuda_all_status(a, false, "cuda_tensor_all_true");
+}
+
+bool cuda_tensor_all_finite(const Tensor& a) {
+    return cuda_all_status(a, true, "cuda_tensor_all_finite");
 }
 
 Tensor cuda_tensor_scale(const Tensor& a, float scalar) {

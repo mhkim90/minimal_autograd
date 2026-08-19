@@ -8,6 +8,7 @@
 
 #include "autograd/core/ops.h"
 
+#include "autograd/extension/custom_op.h"
 #include "detail/tensor_kernels.h"
 #include "detail/variable_internal.h"
 
@@ -229,6 +230,41 @@ Variable div_op(const Variable& a, const Variable& b) {
         OpKind::Div,
         {detail::VariableAccess::node(a), detail::VariableAccess::node(b)},
         {a.value().clone(), b.value().clone()});
+}
+
+Variable less_equal(const Variable& a, const Variable& b) {
+    validate_binary("less_equal", a, b);
+    return Variable(detail::tensor_less_equal(a.value(), b.value()), false);
+}
+
+Variable where(const Variable& condition,
+               const Variable& when_true,
+               const Variable& when_false) {
+    validate_binary("where", condition, when_true);
+    validate_binary("where", condition, when_false);
+    Tensor condition_value = condition.value().clone();
+    Tensor output = detail::tensor_where(
+        condition_value, when_true.value(), when_false.value());
+    return make_custom_variable(
+        std::move(output), {condition, when_true, when_false},
+        [condition_value = std::move(condition_value)](
+            const Tensor& output_grad) {
+            Tensor zero = detail::tensor_zeros(
+                output_grad.shape(), output_grad.device());
+            return std::vector<Tensor>{
+                zero,
+                detail::tensor_where(condition_value, output_grad, zero),
+                detail::tensor_where(condition_value, zero, output_grad),
+            };
+        });
+}
+
+bool all_true(const Tensor& a) {
+    return detail::tensor_all_true(a);
+}
+
+bool all_finite(const Tensor& a) {
+    return detail::tensor_all_finite(a);
 }
 
 Variable relu(const Variable& a) {

@@ -21,6 +21,12 @@ namespace cpu_ops {
 Tensor tensor_ones(const Shape& shape, Device device);
 Tensor tensor_add(const Tensor& a, const Tensor& b);
 Tensor tensor_mul(const Tensor& a, const Tensor& b);
+Tensor tensor_less_equal(const Tensor& a, const Tensor& b);
+Tensor tensor_where(const Tensor& condition,
+                    const Tensor& when_true,
+                    const Tensor& when_false);
+bool tensor_all_true(const Tensor& a);
+bool tensor_all_finite(const Tensor& a);
 Tensor tensor_scale(const Tensor& a, float scalar);
 Tensor tensor_sum(const Tensor& a);
 Tensor tensor_broadcast_scalar(const Tensor& scalar, const Shape& target);
@@ -111,6 +117,12 @@ Tensor tensor_maxpool2d_nchw_backward(
 Tensor tensor_ones(const Shape& shape, Device device);
 Tensor tensor_add(const Tensor& a, const Tensor& b);
 Tensor tensor_mul(const Tensor& a, const Tensor& b);
+Tensor tensor_less_equal(const Tensor& a, const Tensor& b);
+Tensor tensor_where(const Tensor& condition,
+                    const Tensor& when_true,
+                    const Tensor& when_false);
+bool tensor_all_true(const Tensor& a);
+bool tensor_all_finite(const Tensor& a);
 Tensor tensor_scale(const Tensor& a, float scalar);
 
 Tensor tensor_relu(const Tensor& a);

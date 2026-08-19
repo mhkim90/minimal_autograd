@@ -25,6 +25,30 @@ Tensor tensor_mul(const Tensor& a, const Tensor& b) {
     return cpu_ops::tensor_mul(a, b);
 }
 
+Tensor tensor_less_equal(const Tensor& a, const Tensor& b) {
+    require_same_shape("less_equal", a, b);
+    require_same_device("less_equal", a, b);
+    return cpu_ops::tensor_less_equal(a, b);
+}
+
+Tensor tensor_where(const Tensor& condition,
+                    const Tensor& when_true,
+                    const Tensor& when_false) {
+    require_same_shape("where", condition, when_true);
+    require_same_shape("where", condition, when_false);
+    require_same_device("where", condition, when_true);
+    require_same_device("where", condition, when_false);
+    return cpu_ops::tensor_where(condition, when_true, when_false);
+}
+
+bool tensor_all_true(const Tensor& a) {
+    return cpu_ops::tensor_all_true(a);
+}
+
+bool tensor_all_finite(const Tensor& a) {
+    return cpu_ops::tensor_all_finite(a);
+}
+
 Tensor tensor_scale(const Tensor& a, float scalar) {
     return cpu_ops::tensor_scale(a, scalar);
 }
