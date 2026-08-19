@@ -24,6 +24,13 @@ Tensor tensor_reshape_view(const Tensor& a, const Shape& target_shape) {
     return cpu_ops::tensor_reshape_view(a, target_shape);
 }
 
+Tensor tensor_flip_nd(const Tensor& a, int axis) {
+    const int ax = normalize_axis(axis, static_cast<int>(a.shape().rank()),
+                                  "flip");
+    if (a.device().is_cuda()) return cuda_tensor_flip_nd(a, ax);
+    return tensor_flip_nd_cpu(a, ax);
+}
+
 Tensor tensor_concat_nd(const std::vector<Tensor>& inputs, int axis) {
     validate_concat(inputs, axis);
     const int ax = normalize_axis(axis,

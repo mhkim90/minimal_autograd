@@ -530,7 +530,6 @@ Variable cumsum(const Variable& a, int axis) {
 
 Variable flip(const Variable& a, int axis) {
     validate_unary("flip", a);
-    validate_cpu("flip", a);
     return make_result(
         detail::tensor_flip_nd(a.value(), axis),
         OpKind::Flip,

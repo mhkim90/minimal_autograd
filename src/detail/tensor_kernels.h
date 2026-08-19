@@ -323,7 +323,9 @@ inline Tensor tensor_cumsum_backward_nd(const Tensor& g, int axis) {
     return out;
 }
 
-inline Tensor tensor_flip_nd(const Tensor& a, int axis) {
+Tensor tensor_flip_nd(const Tensor& a, int axis);
+
+inline Tensor tensor_flip_nd_cpu(const Tensor& a, int axis) {
     const Shape& s = a.shape();
     const int rank = static_cast<int>(s.rank());
     const int ax = normalize_axis(axis, rank, "flip");

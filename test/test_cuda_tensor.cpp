@@ -819,6 +819,78 @@ void test_oop_direct_shape_ops_cuda() {
     report("Tensor CUDA: direct reshape/slice/concat rank-generic parity, VJPs, and reflect-conv composition");
 }
 
+void test_oop_flip_cuda() {
+    const Shape rank2_shape{2, 3};
+    const std::vector<float> rank2_values{1.f, 2.f, 3.f, 4.f, 5.f, 6.f};
+
+    for (int axis : {0, 1, -1}) {
+        Variable cpu_x(Tensor::from_host(rank2_values.data(), rank2_shape), true);
+        Variable cuda_x(Tensor::from_host(rank2_values.data(), rank2_shape,
+                                          Device::cuda(0)), true);
+        Variable cpu_flip = ag::flip(cpu_x, axis);
+        Variable cuda_flip = ag::flip(cuda_x, axis);
+        CHECK(cuda_flip.value().shape() == rank2_shape);
+        CHECK(cuda_flip.value().device().is_cuda());
+
+        Variable cpu_loss = ag::sum(cpu_flip);
+        Variable cuda_loss = ag::sum(cuda_flip);
+        cpu_loss.backward();
+        cuda_loss.backward(Tensor::ones(Shape{}, Device::cuda(0)));
+        CHECK(cuda_flip.value().device().is_cuda());
+        CHECK(cuda_x.grad().device().is_cuda());
+
+        std::vector<float> cpu_value(rank2_values.size());
+        std::vector<float> cuda_value(rank2_values.size());
+        read_host(cpu_flip.value(), cpu_value.data());
+        read_host(cuda_flip.value(), cuda_value.data());
+        check_close(cuda_value, cpu_value);
+        std::vector<float> cpu_grad(rank2_values.size());
+        std::vector<float> cuda_grad(rank2_values.size());
+        read_host(cpu_x.grad(), cpu_grad.data());
+        read_host(cuda_x.grad(), cuda_grad.data());
+        check_close(cuda_grad, cpu_grad);
+
+        cuda_loss.backward(Tensor::ones(Shape{}, Device::cuda(0)));
+        read_host(cuda_x.grad(), cuda_grad.data());
+        for (std::size_t i = 0; i < cuda_grad.size(); ++i) {
+            CHECK(std::fabs(cuda_grad[i] - 2.f * cpu_grad[i]) <= 1e-5f);
+        }
+    }
+
+    const Shape rank3_shape{2, 3, 2};
+    std::vector<float> rank3_values(rank3_shape.numel());
+    for (std::size_t i = 0; i < rank3_values.size(); ++i) {
+        rank3_values[i] = static_cast<float>(i) - 4.f;
+    }
+    Variable cpu_rank3(Tensor::from_host(rank3_values.data(), rank3_shape), true);
+    Variable cuda_rank3(Tensor::from_host(rank3_values.data(), rank3_shape,
+                                          Device::cuda(0)), true);
+    Variable cpu_rank3_flip = ag::flip(cpu_rank3, 1);
+    Variable cuda_rank3_flip = ag::flip(cuda_rank3, 1);
+    std::vector<float> cpu_rank3_value(rank3_values.size());
+    std::vector<float> cuda_rank3_value(rank3_values.size());
+    read_host(cpu_rank3_flip.value(), cpu_rank3_value.data());
+    read_host(cuda_rank3_flip.value(), cuda_rank3_value.data());
+    check_close(cuda_rank3_value, cpu_rank3_value);
+    CHECK(cuda_rank3_flip.value().device().is_cuda());
+
+    const Shape empty_shape{2, 0, 3};
+    Variable cpu_empty(Tensor::empty(empty_shape), true);
+    Variable cuda_empty(Tensor::empty(empty_shape, Device::cuda(0)), true);
+    Variable cpu_empty_flip = ag::flip(cpu_empty, -1);
+    Variable cuda_empty_flip = ag::flip(cuda_empty, -1);
+    CHECK(cpu_empty_flip.value().shape() == empty_shape);
+    CHECK(cuda_empty_flip.value().shape() == empty_shape);
+    CHECK(cpu_empty_flip.value().elements() == 0);
+    CHECK(cuda_empty_flip.value().elements() == 0);
+    CHECK(cuda_empty_flip.value().device().is_cuda());
+    ag::sum(cpu_empty_flip).backward();
+    ag::sum(cuda_empty_flip).backward(Tensor::ones(Shape{}, Device::cuda(0)));
+    CHECK(cuda_empty.grad().device().is_cuda());
+
+    report("Tensor CUDA: flip rank/axis parity, CUDA VJP residence, accumulation, and empty tensors");
+}
+
 // The OOP math/optim/conv path keeps explicit rejection for CUDA operations
 // without direct kernels. Shape operations are covered by the direct CUDA
 // test above; this test preserves the rejection boundary for the siblings.
@@ -1949,6 +2021,7 @@ int main() {
     test_header_hygiene_preprocessor();
     test_legacy_extension_eigen_aliases_still_available();
     test_oop_direct_shape_ops_cuda();
+    test_oop_flip_cuda();
     test_oop_math_rejects_cuda_variable();
     test_oop_elementwise_composed_graph_cuda();
     test_oop_elementwise_rank4_and_empty_cuda();

@@ -18,6 +18,12 @@ Tensor tensor_reshape_view(const Tensor& a, const Shape& target_shape) {
     return cpu_ops::tensor_reshape_view(a, target_shape);
 }
 
+Tensor tensor_flip_nd(const Tensor& a, int axis) {
+    const int ax = normalize_axis(axis, static_cast<int>(a.shape().rank()),
+                                  "flip");
+    return tensor_flip_nd_cpu(a, ax);
+}
+
 Tensor tensor_concat_nd(const std::vector<Tensor>& inputs, int axis) {
     validate_concat(inputs, axis);
     return cpu_ops::tensor_concat_nd(inputs, axis);

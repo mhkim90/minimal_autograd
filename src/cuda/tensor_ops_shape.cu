@@ -93,6 +93,19 @@ __global__ void concat_copy_kernel(const float* input, float* output,
     output[output_offset] = input[flat];
 }
 
+__global__ void flip_kernel(const float* input, float* output,
+                            std::size_t total, int64_t axis_dim,
+                            int64_t inner) {
+    const std::size_t flat = blockIdx.x * blockDim.x + threadIdx.x;
+    if (flat >= total) return;
+    const int64_t axis_index =
+        (static_cast<int64_t>(flat) / inner) % axis_dim;
+    const int64_t input_offset =
+        static_cast<int64_t>(flat) +
+        (axis_dim - 1 - 2 * axis_index) * inner;
+    output[flat] = input[input_offset];
+}
+
 __global__ void broadcast_forward_kernel(const float* a, const float* b,
                                          float* out, std::size_t n,
                                          const int64_t* a_dims,
@@ -533,6 +546,22 @@ Tensor cuda_tensor_sum_axes_backward(const Tensor& g,
         in_dims_d.data(), in_strides_d.data(), g_strides_d.data(),
         reduced_d.data(), static_cast<int>(in_dims.size()), keep_dims);
     finish_kernel("cuda_tensor_sum_axes_backward");
+    return out;
+}
+
+Tensor cuda_tensor_flip_nd(const Tensor& a, int axis) {
+    Tensor out = Tensor::empty(a.shape(), a.device());
+    if (out.elements() == 0) return out;
+    int64_t inner = 1;
+    for (std::size_t d = static_cast<std::size_t>(axis + 1);
+         d < a.shape().rank(); ++d) {
+        inner *= a.shape()[d];
+    }
+    set_device(a, "cuda_tensor_flip_nd");
+    flip_kernel<<<blocks(out.elements()), 256>>>(
+        tensor_data(a), tensor_data(out), out.elements(), a.shape()[axis],
+        inner);
+    finish_kernel("cuda_tensor_flip_nd");
     return out;
 }
 
