@@ -1,6 +1,6 @@
 ---
 name: opencode-delegate
-description: Delegate approved, tedious, or long-running work through async-first OpenCode MCP. Route mechanical work to the configured default, standard work to Luna, and justified difficult preflight to Sol-expert.
+description: Delegate approved, tedious, or long-running work through async-first OpenCode MCP. Route mechanical/economy and standard work to Luna, and justified difficult preflight to Sol-expert.
 ---
 
 # OpenCode Delegate
@@ -9,11 +9,26 @@ Use `mcp__opencode__opencode_run_async` by default; use blocking calls only for
 known-short work. Delegate execution, iteration, review, and long test runs,
 not ambiguous design decisions or single-step commands.
 
+## Caller-working-directory boundary
+
+OpenCode MCP execution uses the caller's working directory; its tools do not
+accept a caller-selected `cwd` parameter. This boundary is path-based, not
+repository-identity-based: external paths, including arbitrary `/tmp`
+worktrees, are denied. To delegate work in another repository, the controller
+must first create an isolated worktree for that repository under the caller's
+cwd, then give the delegate paths scoped to that worktree. Commits and PRs
+still belong to that repository's remote. Codex shell tools with an explicit
+`cwd` are a separate capability and do not widen OpenCode MCP's delegation
+boundary. This description states constraints only; it authorizes no
+cross-repository work, worktree operation, editing, publishing, or syncing.
+
 ## Routes
 
-- **Mechanical/economy**: omit `agent`, `model`, and `variant`; use the
-  configured default and report that route explicitly.
+- **Mechanical/economy**: use `agent="luna"`; omit `model` and `variant`.
 - **Standard**: use `agent="luna"`; omit `model` and `variant`.
+- **Explicit configured-default request**: only when the user requests this
+  route, omit `agent`, `model`, and `variant`, and report it as an explicit
+  user route rather than a default.
 - **Difficult**: use `agent="sol-expert"` only for a bounded preflight or
   breakthrough when warranted, then use `agent="luna"` for implementation.
 - Use `agent="terra"` only for a separate, fresh-context, read-only review
@@ -53,64 +68,24 @@ not ambiguous design decisions or single-step commands.
 
 ## Prompt template
 
-```text
-Context: <project + phase>
-Task: <exact edit/run loop>
-Files/scope: <approved paths or globs>
-Red gate: <check + expected failure>
-Success criteria: <checks/metrics>
-Safety risk: <L1-L4>
-Implementation difficulty: <mechanical/economy | standard | difficult>
-Routing: <configured default | luna | sol-expert | terra | sol>
-Elapsed-time checkpoint / final-synthesis grace (full Sol only) / maximum wait: <phase-defined values>
-Constraints:
-- one bounded phase/subphase; no commit or edits outside scope
-- stop after two same-blocker failures; revise materially before a third attempt
-Final response: changed files, decisions, commands, blockers, session count,
-retries, requested agent, job ID, session ID, bound/reported model, and route
-```
+Read [`references/prompt-template.md`](references/prompt-template.md) immediately
+before sending a delegate prompt.
+
+## Async lifecycle invariants
+
+Keep the same session lineage and stable workflow ID for each role. Poll and
+fetch the terminal result, then query normalized usage. Do not end the
+controller turn or send a final response while a required job is live. Finalize
+only after terminal-result retrieval, explicit interruption/stop, or the
+declared maximum wait. Cancellation requires terminal error, the phase-defined maximum wait, or
+an explicit controller/owner stop decision, with the reason and approved
+replacement route recorded. For a full `sol-expert` consultation that has
+completed inspection work and then reports `step_start`, keep the same job
+through a declared final-synthesis grace of at least 10 minutes, and make the
+phase-defined maximum wait no shorter than that grace. Usage is observational
+evidence only. Do not add fixed token, price, or provider-private-path limits.
 
 ## Async workflow and elapsed-time policy
 
-1. Keep one session lineage per role. Repeat the same named agent on every
-   continuation or fork, and pass a stable workflow ID.
-2. Poll job status and fetch the terminal result. Query normalized usage after
-   terminal state.
-3. At each phase-defined elapsed-time checkpoint, recover status and inspect
-   material progress. For OpenCode jobs, an advancing completed-step or event
-   count is material progress even when no partial text exists. Never duplicate
-   a running job because it is slow.
-4. After two no-progress checkpoints, record a wait-policy review and run the
-   no-progress recovery below. Do not stop, abandon, or cancel solely for that
-   condition. Cancel only on terminal error, the phase-defined maximum wait,
-   or an explicit controller/owner stop decision.
-5. For a full `sol-expert` consultation that has completed inspection work and
-   then reports `step_start`, treat the state as final synthesis pending. Keep
-   the same job through a declared final-synthesis grace of at least 10 minutes;
-   its phase-defined maximum wait must be no shorter than that grace.
-6. Use job list to recover recorded jobs. Record session count, retries,
-   elapsed time, checkpoints, route evidence, and reviewer trigger reason.
-
-## No-progress recovery
-
-1. At delegation start, record job status and completed-step/event counts. For
-   a job expected to edit, also record its scoped worktree state.
-2. After the two-checkpoint trigger, fetch the terminal result exactly once and
-   record the result query. For an editing job, record whether its scoped
-   worktree changed; absence of a change is supporting evidence only.
-3. Retain the same job when events or live process output advance, when full
-   `sol-expert` final synthesis remains within its declared grace, or when a
-   known-long task reports live output. Do not use elapsed time alone to call
-   these jobs stalled.
-4. If the result remains running and no retention condition applies, cancellation
-   requires an explicit controller stop decision. Record the reason and any
-   approved replacement route before cancelling.
-5. Continue locally or start a fresh narrower delegate only when the approved
-   phase scope and route permit it; otherwise wait for owner direction. Do not
-   use a stalled job as an unreported reason to pause an authorized phase.
-
-This recovery rule never treats two unchanged polls or a missing scoped diff as
-enough evidence to cancel a read-only review or Sol preflight.
-
-Usage is observational evidence only. Do not add fixed token, price, or
-provider-private-path limits.
+Read [`references/wait-policy.md`](references/wait-policy.md) immediately before
+polling, recovering, or cancelling an async job.
