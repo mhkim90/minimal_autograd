@@ -17,8 +17,13 @@ experiments. Use these instructions for all code work in this repo.
 
 - Prefer small, surgical changes.
 - Keep code simple and avoid speculative abstractions.
+- Write the minimum change needed: touch only required files and lines, and
+  match existing style.
 - Use the existing repository structure and conventions.
 - When multiple independent reads are needed, use parallel tool calls.
+- State assumptions explicitly and surface ambiguity before writing code.
+- Define success criteria before editing and verify with the smallest useful
+  check.
 - Before editing, inspect the relevant files first.
 - After edits, run the smallest useful validation for the touched area.
 
@@ -65,16 +70,6 @@ continuation. Re-audit only after a material revision, then run
 `phase-gated-implementation`.
 
 See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/skills/grilled-me/SKILL.md](.codex/skills/grilled-me/SKILL.md), [.codex/skills/plan-audit/SKILL.md](.codex/skills/plan-audit/SKILL.md), [.codex/skills/handoff/SKILL.md](.codex/skills/handoff/SKILL.md), [.codex/skills/caveman/SKILL.md](.codex/skills/caveman/SKILL.md), [.codex/skills/phase-gated-implementation/SKILL.md](.codex/skills/phase-gated-implementation/SKILL.md), [.codex/skills/opencode-delegate/SKILL.md](.codex/skills/opencode-delegate/SKILL.md), [.codex/skills/claude-delegate/SKILL.md](.codex/skills/claude-delegate/SKILL.md), and [.claude/skills/phase-gated-implementation/SKILL.md](.claude/skills/phase-gated-implementation/SKILL.md).
-
-### Quick Reminders
-
-- State assumptions explicitly; surface ambiguity before writing code.
-- Write the minimum code that solves the problem; no speculative abstractions.
-- Touch only the files and lines required; match existing style.
-- Define success criteria before editing; verify with the smallest useful check.
-- Before implementing an external plan, confirm a current `plan-audit` and
-  approved phase boundaries. For an agent-authored plan, confirm `grilled-me`
-  findings are resolved.
 
 ## GitHub Operations
 
