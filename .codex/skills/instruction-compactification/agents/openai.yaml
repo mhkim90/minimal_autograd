@@ -1,0 +1,4 @@
+interface:
+  display_name: "Instruction Compactification"
+  short_description: "Safely audit and compact instructions"
+  default_prompt: "Use $instruction-compactification to audit or compact approved instruction guides, skills, and references without changing policy."

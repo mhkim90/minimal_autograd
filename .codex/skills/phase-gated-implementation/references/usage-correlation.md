@@ -3,25 +3,42 @@
 Load this reference only when `usage_mcp` is configured and a prospective
 workflow is being started, handled at terminal state, or closed.
 
-1. Before the first provider execution, a Codex controller calls
-   `usage_workflow_start(controller="codex", controller_session_id=<exact
-   context_window.window_id>)`. Never substitute a root thread ID or a
-   time-based fallback. An OpenCode- or Claude-controlled workflow may use its
-   own controller value for provider-only correlation; it has no
-   controller-token boundary. Supply a non-Codex identity only when it is
-   already authoritative. Otherwise report controller attribution unavailable;
-   never impersonate Codex.
-2. Propagate the returned opaque `workflow_id` to every in-scope call that
+## Codex controller attribution
+
+1. A Codex controller discovers its exact current context in its own shell,
+   not through MCP. Read `$CODEX_THREAD_ID`, then locate exactly one matching
+   rollout JSONL below `${CODEX_HOME:-$HOME/.codex}/sessions`. Parse the latest
+   `compacted` record's `payload.window_id`; if no compaction exists, use the
+   `session_meta` record's `payload.context_window.window_id`.
+2. Fail closed if the thread is missing, no unique matching rollout exists,
+   target metadata is malformed, or the window is missing. Never substitute a
+   root or thread ID, an initial or old window, a filename alone, a time-based
+   value, or another provider's identity. Start the Codex workflow only with
+   the discovered exact window:
+   `usage_workflow_start(controller="codex", controller_session_id=<window_id>)`.
+3. If discovery is unavailable or partial, do not start with a substitute;
+   report `controller-attribution-unavailable` and preserve provider-only
+   partial evidence. Do not use an MCP context lookup as a fallback.
+
+OpenCode and Claude controllers do not run Codex rollout discovery. Their
+provider-only correlation remains as documented; never impersonate Codex.
+
+## Provider lifecycle
+
+1. Propagate the returned opaque `workflow_id` to every in-scope call that
    accepts it: OpenCode runs, continuations, and forks (including async), and
    Claude runs (including async).
-3. At every terminal success, error, cancellation, or timeout, get the
+2. At every terminal success, error, cancellation, or timeout, get the
    terminal result, then query `opencode_usage_get` or `claude_usage_get` by
    `job_id` or `workflow_id`. Bind only an exact provider `session_id` returned
-   by that result or normalized record. First inspect
-   `usage_status(workflow_id)` and skip an existing binding: duplicate
-   `usage_workflow_bind` calls conflict. Never invent a session ID. Missing or
-   unavailable usage remains a visible partial-warning outcome.
-4. Once all known provider work is terminal, call
+   by that result or normalized record. First inspect `usage_status(workflow_id)`
+   and skip an existing binding: duplicate `usage_workflow_bind` calls
+   conflict. Never invent a session ID. If the original Codex boundary is
+   unavailable or partial, do not substitute, rebind, start a rollover
+   workflow, or backfill; retain the original workflow semantics and mark
+   Codex attribution partial or unattributed. Missing or unavailable usage
+   remains a visible partial-warning outcome.
+3. Once all known provider work is terminal, call
    `usage_workflow_finish(workflow_id)`, then scoped
    `usage_ingest(workflow_id=workflow_id, sources=["codex", "opencode",
    "claude"])`, then scoped

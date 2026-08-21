@@ -17,21 +17,63 @@ When `usage_mcp` is configured, load
 immediately before starting, handling terminal provider work, or closing a
 correlated workflow. Do not infer or reconstruct a missing controller identity.
 
-Keep safety risk (L1–L4) separate from implementation difficulty. Use the
-configured OpenCode default for mechanical/economy work, `agent="luna"` for
-standard work, and a bounded `agent="sol-expert"` preflight or breakthrough
-only for difficult work before Luna implements. Preserve an explicitly approved
-whole-phase `agent="sol"` route without separately calling Luna or Terra.
-Never silently replace a selected route or raw-model override.
+Keep safety risk (L1–L4) separate from implementation difficulty. Use
+`agent="luna"` for mechanical/economy and standard work, and use OpenCode's
+configured default only when the user explicitly requests that route, omitting
+`agent`, `model`, and `variant`. Use a bounded `agent="sol-expert"` preflight or
+breakthrough only for difficult work before Luna implements. Preserve an
+explicitly approved whole-phase `agent="sol"` route without separately calling
+Luna or Terra. Never silently replace a selected route or raw-model override.
 
 ## Invariants
 
-- Use an exact approved plan and plan-only draft PR for phased, non-trivial, or
-  L2–L4 work. The plan declares scope, gates, risk/difficulty/routes, wait
-  policy, dependencies, manual boundaries, and delivery topology. Delivery
-  topology names implementation-PR count, phase-to-PR mapping, and each split
-  boundary. Approval names its SHA;
-  it is never merge approval. Material changes invalidate it.
+- Use an exact approved plan and, where an independent plan gate is required,
+  a verified plan-only PR for phased, non-trivial, or L2–L4 work. A verified
+  plan-only PR contains no source-policy implementation,
+  executable/configuration/runtime change, generated output, or downstream
+  sync. Draft is a GitHub PR state, not a separate delivery artifact. The plan
+  declares scope, gates, risk/difficulty/routes, wait policy, dependencies,
+  manual boundaries, and delivery topology. Delivery topology names
+  implementation-PR count, phase-to-PR mapping, and each split boundary.
+  Owner approval of the current verified plan-only head authorizes marking it
+  ready and merging it after required checks and reviews pass; no extra merge
+  approval is required. This does not authorize automatic merging of an
+  implementation PR merely because it is draft. Adding implementation content
+  or materially changing scope, risk, affected files or repositories,
+  acceptance criteria, rollout, or sync invalidates the plan-only authorization
+  envelope. Editorial clarification is not a material scope change, but every
+  changed PR head—including editorial-only changes—must be verified and
+  owner-approved before ready or merge. Protections, required checks, and
+  reviewer rules are never bypassed.
+- A direct owner reply containing exactly `approved` or `approve` is contextual
+  authorization for only one immediately preceding, concrete pending
+  publication action. The prompt must identify the exact repository/worktree,
+  branch and PR when applicable, verified head or exact changed-path scope,
+  and whether the action is delivery, readiness, merge, or a qualified combined
+  readiness-and-merge action. One delivery action
+  may group commit, push, and creation or update of one named draft PR only
+  when all use the same verified branch and diff. The reply expires on any
+  target, verified-head, changed-path/scope, or action change; it never
+  authorizes another repository or PR, a later phase, downstream sync, a
+  branch-protection or host-control bypass, or an unmentioned merge.
+  Owner approval of the exact current verified head of a genuine plan-only PR
+  continues to authorize readiness and merge of that same unchanged plan-only
+  PR after required checks/reviews; at execution, the controller may present
+  that unchanged PR/head and already-authorized readiness-and-merge sequence
+  without requiring a new direct reply. This exception never applies to an
+  implementation PR.
+  Plan-only authorization never merges an implementation PR; an
+  implementation merge requires its own exact pending merge action, except for
+  a qualified source-local documentation/skill PR whose final prompt explicitly
+  names both readiness and merge and meets the publication reference's gates.
+  Host,
+  repository, branch-protection, required-check, and reviewer enforcement
+  remain additional requirements.
+- Where no independent plan gate is required, a plan and implementation may
+  share one PR. Early plan approval is only a checkpoint; final approval comes
+  after the complete implementation diff is available. L3 work and any work
+  requiring an independent plan gate retain a merged plan-only PR followed by
+  a separate implementation PR.
 - Default to one implementation PR per coherent, independently releasable or
   revertible deliverable. One PR may contain multiple phases, but never
   replaces each phase's scope, red/green evidence, acceptance gate, owner
@@ -43,16 +85,23 @@ Never silently replace a selected route or raw-model override.
   A split rationale describes that boundary; it never makes unsafe bundling
   acceptable.
 - An L1 fast path needs exact authorized scope, checks, and publication intent;
-  it never waives staging, diff/acceptance evidence, stop rules, or
-  separate merge approval. An initiative bundle may continue only inside its
+  it never waives explicit staging, diff/acceptance evidence, stop rules, or
+  final merge authority. A qualifying source-local documentation/skill PR may
+  use the explicit combined final action defined in the publication reference.
+  An initiative bundle may continue only inside its
   approved envelope and stops at declared manual boundaries.
 - Before every phase, check dirty state and both pause files, obtain minimum
   scope/gate/current evidence, run the smallest right-reason red gate, and set
   a three-attempt cap unless the plan says otherwise.
 - Validate the in-scope diff and green evidence before publication. Publish a
-  green phase only with its trailer and explicit-path staging. Keep a plan PR
-  draft until final validation and triggered review pass. A manual next-phase
-  gate does not prevent publication of the completed phase.
+  green phase only with its trailer and explicit-path staging. Keep a
+  plan-only PR in GitHub draft state while verifying it; after owner approval
+  of its current verified head and required checks/reviews pass, mark it ready
+  and merge it. Keep an implementation PR draft until final validation and
+  triggered review pass, then require final owner approval and normal merge
+  authority; only a qualified source-local documentation/skill PR may request
+  readiness and merge together. A manual next-phase gate does not prevent publication of the
+  completed phase.
 - Stop and report on stale/missing preflight, wrong/failed gates, scope or
   intent expansion, unverifiable correctness, route contradiction, unavailable
   evidence, review blocker, maximum wait, unrelated blocking changes, or

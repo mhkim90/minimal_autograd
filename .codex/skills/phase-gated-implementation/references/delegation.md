@@ -6,13 +6,13 @@ new phase, pass a gate, publish, or delegate again from this reference.
 
 ## Route and evidence
 
-Select the difficulty route named by the core: omit `agent`, `model`, and
-`variant` for configured-default mechanical/economy work; use `agent="luna"`
-for standard work; or use a bounded `agent="sol-expert"` consultation before
-Luna for difficult work. Preserve an explicitly approved whole-phase
-`agent="sol"` route: do not call Luna or Terra separately. Keep user-selected
-models as explicit overrides; use a raw model only for an approved degraded
-fallback.
+Select the difficulty route named by the core: use `agent="luna"` for
+mechanical/economy and standard work; use the configured default only when the
+user explicitly requests that route, omitting `agent`, `model`, and `variant`;
+or use a bounded `agent="sol-expert"` consultation before Luna for difficult
+work. Preserve an explicitly approved whole-phase `agent="sol"` route: do not
+call Luna or Terra separately. Keep user-selected models as explicit overrides;
+use a raw model only for an approved degraded fallback.
 
 Record requested agent, job ID, session ID, and bound/reported model. An
 accepted named-agent selector plus a terminal role response is minimum route
@@ -21,6 +21,19 @@ resolution or partial usage is an observability warning, not a correctness
 blocker, when the selector was accepted and nothing contradicts its returned
 role/model. Stop on a rejected/unavailable selector, mismatched continuation,
 explicit model contradiction, or silent fallback.
+
+## OpenCode caller-working-directory boundary
+
+OpenCode MCP execution uses the caller's working directory; its tools do not
+accept a caller-selected `cwd` parameter. The boundary is path-based, not
+repository-identity-based, so external paths—including arbitrary `/tmp`
+worktrees—are denied. Another repository is reachable only when the
+controller first creates an isolated worktree for it under the caller's cwd and
+gives the delegate paths scoped to that worktree. Commits and PRs still belong
+to that repository's remote. Codex shell tools with an explicit `cwd` are a
+separate capability and do not widen OpenCode MCP's delegation boundary. This
+is descriptive constraint text; it authorizes no cross-repository work,
+worktree operation, editing, publishing, or syncing.
 
 ## Bounded sessions and retries
 
