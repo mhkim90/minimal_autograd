@@ -11,8 +11,11 @@ old branch modifies the pre-split files; `main` has replaced them with grouped
 CPU/CUDA dispatcher and CPU-provider files. A normal rebase would therefore
 delete or overwrite current provider work.
 
-This plan is pinned to current-main revision `f6def26`. A newer `main`
-revision is a stop condition, not an implicit rebase target.
+This plan is pinned to the implementation source set at current-main revision
+`f6def26`. Expected plan-only publication commits may advance `main` only in
+`R6_RECONCILIATION_PLAN.md`; before every phase, prove that no scoped source
+path differs from `f6def26`. Any scoped-source revision remains a stop
+condition, not an implicit rebase target.
 
 The first question is not how to resolve conflicts. It is whether every
 behavioral addition in `168af7d` already exists on current `main` with the
@@ -41,8 +44,10 @@ This plan permits only evidence gathering and qualification on current `main`:
 
 - `CMakeLists.txt`
 - `src/detail/tensor_ops.h`
+- `src/detail/tensor_cuda_ops.h`
 - `src/core/tensor_dispatch_{cpu,cuda}_elementwise.cpp`
 - `src/cpu/tensor_ops_elementwise.cpp`
+- `src/cuda/tensor_ops_elementwise.cu`
 - direct-stack callers needed to trace the five listed operations:
   `src/core/{ops,variable}.cpp`
 - `test/test_tensor.cpp`, `test/test_cuda_tensor.cpp`, and
@@ -127,8 +132,9 @@ owner direction.
 ### Phase 3 — independent review and disposition
 
 Trigger one independent Claude read-only review of the current-main
-elementwise provider files and direct callers. It must focus on single-provider
-CMake selection, no host fallback, VJP residency, and duplicate-symbol safety.
+elementwise CPU/CUDA provider files and direct callers. It must focus on
+single-provider CMake selection, no host fallback, VJP residency, and
+duplicate-symbol safety.
 
 If Phases 1–3 are green, present evidence and request a separate owner approval
 to close #81 as superseded. Do not merge #81. If a gap exists, stop and propose
@@ -163,3 +169,22 @@ PR. Any gap creates a new narrow plan rather than expanding this one.
 
 Surviving concern: qualification cannot prove semantic succession until the
 symbol inventory and fresh dual-build matrix both pass.
+
+## Scope revision
+
+This revision adds only `src/detail/tensor_cuda_ops.h` and
+`src/cuda/tensor_ops_elementwise.cu`. The Phase 1 inventory requires the
+private CUDA declarations and implementation to prove that dispatched CUDA
+softmax/log-softmax operations do not fall back through host storage. The
+source-baseline clarification permits this plan's own plan-only merge while
+still stopping on any implementation-source movement. No behavior, source
+edit, test matrix, routing, disposition, or CppResist scope changes.
+
+### Scope-revision Grilled-Me review
+
+Assumptions confirmed: both added paths declare or define exactly the five
+functions under reconciliation. Risks identified: treating any later main
+commit as harmless could conceal implementation drift. Simplification applied:
+only an unchanged scoped-source set is permitted; no additional provider,
+caller, or test path is added. Surviving concern: a later scoped-source change
+still requires another revision and owner approval.
