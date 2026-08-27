@@ -3,7 +3,7 @@ description: High-effort implementer for C++ source, tests, CMake, and CUDA chec
 mode: all
 model: openai/gpt-5.6-luna
 reasoningEffort: high
-steps: 50
+steps: 60
 permission:
   external_directory: deny
   task: deny

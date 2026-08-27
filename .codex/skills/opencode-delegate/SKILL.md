@@ -94,5 +94,7 @@ evidence only. Do not add fixed token, price, or provider-private-path limits.
 
 ## Async workflow and elapsed-time policy
 
-Read [`references/wait-policy.md`](references/wait-policy.md) immediately before
-polling, recovering, or cancelling an async job.
+At implementation-job launch, create the active-job ledger. Read
+[`references/wait-policy.md`](references/wait-policy.md) immediately before
+polling, recovering, or cancelling; it governs ledger fields, polling,
+terminal handling, step-cap continuations, and ledger removal.
