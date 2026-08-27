@@ -3,7 +3,7 @@ description: Bounded Sol expert for difficult preflight and breakthrough analysi
 mode: all
 model: openai/gpt-5.6-sol
 reasoningEffort: high
-steps: 12
+steps: 20
 permission:
   external_directory: deny
   task: deny

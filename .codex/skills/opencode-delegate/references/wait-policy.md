@@ -4,13 +4,15 @@
 
 1. Keep one session lineage per role. Repeat the same named agent on every
    continuation or fork, and pass a stable workflow ID.
-2. Poll job status and fetch the terminal result. Query normalized usage after
-   terminal state.
-3. While a required job is live, keep the controller turn active. A commentary
-   checkpoint may report status and its next poll, but it never becomes a final
-   response, implicit owner handoff, phase stop, gate, or publication action.
-   Finalize only after terminal-result retrieval, explicit interruption/stop,
-   or the declared maximum wait.
+2. At launch, record an active-job ledger: job ID, session ID, role, phase,
+   start time, most recent completed-step or event count, and next polling
+   deadline. Poll every active implementation job at least every 60 seconds;
+   update its progress and deadline. Retrieve terminal output and normalized
+   usage before removing a terminal entry.
+3. While the ledger has a running implementation job, keep the controller turn
+   active. A user-requested status response is a non-final checkpoint: report
+   the ledger snapshot and resume polling next. Do not finalize, pass a gate,
+   commit, publish, change phase, or claim completion until the ledger is empty.
 4. At each phase-defined elapsed-time checkpoint, recover status and inspect
    material progress. For OpenCode jobs, an advancing completed-step or event
    count is material progress even when no partial text exists. Never duplicate
@@ -19,17 +21,20 @@
    no-progress recovery below. Do not stop, abandon, or cancel solely for that
    condition. Cancel only on terminal error, the phase-defined maximum wait,
    or an explicit controller/owner stop decision.
-6. For a full `sol-expert` consultation that has completed inspection work and
+6. On a tool-step-cap exit, fetch the terminal result, inspect the scoped
+   worktree independently, and start the planned same-session continuation when
+   work remains. A cap exit alone is not successful implementation evidence.
+7. For a full `sol-expert` consultation that has completed inspection work and
    then reports `step_start`, treat the state as final synthesis pending. Keep
    the same job through a declared final-synthesis grace of at least 10 minutes;
    its phase-defined maximum wait must be no shorter than that grace.
-7. Use job list to recover recorded jobs. Record session count, retries,
+8. Use job list to recover recorded jobs. Record session count, retries,
    elapsed time, checkpoints, route evidence, and reviewer trigger reason.
 
 ## No-progress recovery
 
-1. At delegation start, record job status and completed-step/event counts. For
-   a job expected to edit, also record its scoped worktree state.
+1. At delegation start, record the ledger's job status and completed-step/event
+   counts. For a job expected to edit, also record its scoped worktree state.
 2. After the two-checkpoint trigger, fetch the terminal result exactly once and
    record the result query. For an editing job, record whether its scoped
    worktree changed; absence of a change is supporting evidence only.

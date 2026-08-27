@@ -3,7 +3,7 @@ description: Read-only reviewer for concise preflight and post-review findings.
 mode: all
 model: openai/gpt-5.6-terra
 reasoningEffort: high
-steps: 12
+steps: 20
 permission:
   external_directory: deny
   edit: deny

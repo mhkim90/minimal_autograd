@@ -30,6 +30,13 @@ response, implicit owner handoff, phase stop, gate, or publication action.
 Finalize only after the terminal result has been retrieved, the owner explicitly
 interrupts/stops the work, or the declared maximum wait has been reached.
 
+## Active OpenCode implementation jobs
+
+Operational polling is defined in
+[`opencode-delegate`'s wait policy](../../opencode-delegate/references/wait-policy.md).
+Before every phase gate and final response, the implementation-job ledger must
+be empty; an unrecoverable job state blocks the gate.
+
 After two unchanged measurable checkpoints, record a wait-policy review; do
 not stop, abandon, or cancel solely for that state. On terminal `done`, fetch
 the terminal result before a verdict. At maximum wait, stop the affected phase
