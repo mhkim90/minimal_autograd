@@ -33,27 +33,35 @@ This repository is a minimal reverse-mode automatic differentiation library in C
 
 The external controller owns shared-skill routing, approvals, and publication.
 OpenCode follows the local triad role contract, approved scope, and repository
-validation below; it does not load or duplicate Codex/Claude shared-skill maps.
+validation below; the applicable checked-in plan remains authoritative for scope
+and phase gates. It does not load or duplicate Codex/Claude shared-skill maps.
 
 ## OpenCode Triad
 
-- **Sol** (`agents/sol.md`): explicit whole-phase triad planner. When invoked
-  beneath an external controller, it returns evidence and never publishes.
+- **Sol** (`agents/sol.md`): explicit whole-phase triad planner
+  (`agent="sol"`). When invoked beneath an external controller, it returns
+  evidence and never publishes.
 - **Sol-expert** (`agents/sol-expert.md`): bounded, read-only difficult-task
   preflight or breakthrough consultation; it cannot edit or delegate.
-- **Terra** (`agents/terra.md`): read-only, explicit fresh-context review;
-  mandatory only inside whole-phase Sol mode.
-- **Luna** (`agents/luna.md`): C++/CUDA implementer for one bounded phase or
-  subphase; it cannot publish or broaden scope.
+- **Terra** (`agents/terra.md`): explicit (`agent="terra"`) fresh-context,
+  read-only review with a recorded reason; mandatory only inside whole-phase
+  Sol mode.
+- **Luna** (`agents/luna.md`): normal implementation route
+  (`agent="luna"`) for mechanical/economy and standard work. It is the
+  C++/CUDA implementer for one bounded phase or subphase; it cannot publish or
+  broaden scope.
 
 Keep L1-L4 for safety and approval; independently classify implementation as
-mechanical/economy, standard, or difficult. Use the configured default for
-mechanical work, Luna for standard work, and Sol-expert only for a justified
-difficult preflight or repeated blocker before Luna implements. Do not add
-routine Terra review to an external Terra controller. After two same-blocker
-Luna failures, stop blind retries; a third attempt requires a materially
-revised approach. Record named-agent route evidence and stop on contradiction
-or silent fallback.
+mechanical/economy, standard, or difficult. Use Luna for mechanical/economy and
+standard work. Use the configured default only when the user explicitly
+requests that route, omitting `agent`, `model`, and `variant`. Use
+Sol-expert only for a justified difficult preflight or repeated blocker before
+Luna implements. Use Terra only when explicitly requested, except that
+whole-phase Sol mode makes its review mandatory. Do not call Luna or Terra
+separately in an explicit whole-phase Sol route. After two same-blocker Luna
+failures, stop blind retries; a third attempt requires a materially revised
+approach. Record named-agent route evidence and stop on contradiction or silent
+fallback.
 
 Permissions are guardrails, not a complete trust boundary. Role prompts,
 repository boundaries, managed sandboxing, and Sol's diff gate remain
