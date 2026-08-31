@@ -32,6 +32,7 @@ option(AUTOGRAD_BUILD_TESTS "Build the in-tree test suite" ${_AUTOGRAD_IS_TOP_LE
 option(AUTOGRAD_BUILD_ADVANCED_OPS "Build advanced/extended ops and tests" OFF)
 option(AUTOGRAD_BUILD_EXAMPLES "Build README/example executables" OFF)
 option(AUTOGRAD_USE_CUDA "Build the optional CUDA backend" OFF)
+option(AUTOGRAD_BUILD_SHARED "Build autograd as a shared library" OFF)
 
 # ----------------------------------------------------------------------------
 # Required and optional dependencies
@@ -96,7 +97,12 @@ set(_AUTOGRAD_LIB_SOURCES
     src/core/fft.cpp
 )
 
-add_library(autograd STATIC ${_AUTOGRAD_LIB_SOURCES})
+set(_AUTOGRAD_LIBRARY_TYPE STATIC)
+if(AUTOGRAD_BUILD_SHARED)
+    set(_AUTOGRAD_LIBRARY_TYPE SHARED)
+endif()
+
+add_library(autograd ${_AUTOGRAD_LIBRARY_TYPE} ${_AUTOGRAD_LIB_SOURCES})
 add_library(autograd::autograd ALIAS autograd)
 
 set_target_properties(autograd PROPERTIES
