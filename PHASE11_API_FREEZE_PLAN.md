@@ -92,6 +92,10 @@ Green gate:
   `autograd::autograd`, and compiles without Eigen or CUDA headers/macros;
 - an explicit Eigen/CUDA extension consumer links the named extension target
   and receives only the dependency it actually uses;
+- a legacy-shaped `Mat`/`VarPtr` fixture representing the unmigrated
+  CppResist expert boundary compiles and links through the explicit expert
+  target after only its CMake link line changes; this temporary proof retains
+  no dependency on the normal target and adds no source-level legacy bridge;
 - CPU and CUDA configured target graphs have one `autograd` provider, no
   dependency cycle, and no public ABI-changing backend macro;
 - source-tree and installed consumer tests pass in their applicable CPU/CUDA
