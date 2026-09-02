@@ -26,8 +26,11 @@ Current delivery state:
   through PR #43;
 - the OOP CUDA spatial and FFT replacement bundle (`conv2d`, `max_pool2d`,
   `fft2`, and `ifft2`) is merged through PR #47;
-- the in-repository extension and consumer qualification slice is implemented
-  in the current branch, pending review.
+- the in-repository extension and consumer qualification slice is merged;
+- the R6 shared-library build boundary is merged; and
+- CppResist R7 has retired its local compatibility umbrella, but it still
+  consumes the legacy `Mat` / `VarPtr` facade through its expert headers.
+  The downstream migration required before Phase 11 deletion remains open.
 
 ## 2. Purpose
 
