@@ -27,8 +27,11 @@ expert consumer -> explicit extension target(s) -> only required dependency
 ```
 
 - The normal `autograd::autograd` shared/static target must not propagate
-  `Eigen3::Eigen`, `CUDAToolkit`, `AUTOGRAD_USE_CUDA`, raw CUDA types, or
-  legacy graph/storage fields.
+  `Eigen3::Eigen`, `AUTOGRAD_USE_CUDA`, raw CUDA types, or legacy
+  graph/storage fields.  A CUDA-built **static** archive may propagate only
+  the technically required `CUDA::cudart` link dependency; it must not expose
+  CUDA headers, a CUDA language requirement, or an ABI-changing macro.  A
+  CUDA-built shared library must self-resolve that runtime dependency.
 - The final expert-target spelling is proposed as
   `autograd::autograd_expert`.  It is an explicit opt-in boundary, not a
   compatibility umbrella.  Its exact composition is a Phase 11a owner gate:
