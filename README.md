@@ -58,6 +58,9 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
+The default artifact is static. Use CMake's standard
+`-DBUILD_SHARED_LIBS=ON` to build a shared library instead.
+
 This produces the static library `libautograd.a` and the core test binaries:
 
 ```bash
@@ -233,9 +236,25 @@ find_package(autograd CONFIG REQUIRED)
 target_link_libraries(my_app PRIVATE autograd::autograd)
 ```
 
-The installed package re-exports the same target and sets up its
-transitive dependencies (`Eigen3`, optional `OpenMP` and `CUDAToolkit`,
-recorded via `INTERFACE_LINK_LIBRARIES` in the exported targets file).
+The installed normal target intentionally does not propagate Eigen,
+`AUTOGRAD_USE_CUDA`, CUDA headers, or raw CUDA types. Its CPU configuration can
+therefore be used with `CMAKE_DISABLE_FIND_PACKAGE_Eigen3=TRUE`. OpenMP remains
+a recorded optional dependency when it was enabled at library build time. A
+CUDA-built static normal target records only the link-time `CUDA::cudart`
+requirement; a shared CUDA library resolves that runtime itself.
+
+Legacy or custom Eigen/CUDA consumers must opt in explicitly:
+
+```cmake
+find_package(autograd CONFIG REQUIRED COMPONENTS expert)
+target_link_libraries(my_app PRIVATE autograd::autograd_expert)
+```
+
+The `expert` component loads a separate `autograd::autograd_expert` export,
+provides Eigen, and on CUDA builds provides the legacy `AUTOGRAD_USE_CUDA`
+definition and CUDA runtime dependency needed by that consumer. A component-free
+package does not create the expert target; unknown required components fail.
+
 The package records `cxx_std_17` via `INTERFACE_COMPILE_FEATURES`; PIC
 is applied to the installed library artifact at build time and does not
 need to be propagated through `INTERFACE_*` properties (consumer
@@ -249,11 +268,11 @@ time on the autograd side. To consume CUDA-enabled autograd via
 `find_package`, build a CUDA-enabled autograd with
 `-DAUTOGRAD_USE_CUDA=ON` on the autograd side and install it to a
 separate prefix (or any prefix the consumer passes via
-`-DCMAKE_PREFIX_PATH=...`); the installed `autogradConfig.cmake`
-includes `find_dependency(CUDAToolkit REQUIRED)` for that prefix. The
-consumer cannot enable CUDA by passing `-DAUTOGRAD_USE_CUDA=ON` to its
-own configure step under `find_package` — that flag belongs only to the
-autograd build itself. The `add_subdirectory(...)` mode is different:
+`-DCMAKE_PREFIX_PATH=...`). The normal shared package does not discover
+`CUDAToolkit`; the static package and explicit CUDA expert consumers do when
+needed. The consumer cannot enable CUDA by passing
+`-DAUTOGRAD_USE_CUDA=ON` to its own configure step under `find_package` — that
+flag belongs only to the autograd build itself. The `add_subdirectory(...)` mode is different:
 because the consumer's configure step builds autograd itself, passing
 `-DAUTOGRAD_USE_CUDA=ON` to the parent project does enable CUDA on the
 embedded autograd build.
@@ -267,6 +286,11 @@ registered parameter traversal, Adam, and AdamState snapshot/load_state. The
 `add_subdirectory` smoke project's own `CMakeLists.txt` enforces the
 no-inheritance contract at configure time by failing if any known autograd
 test/example target is visible to the consumer.
+
+The installed `tests/consumer/eigen_custom/`, `cuda_custom/`, and
+`legacy_expert/` fixtures request `COMPONENTS expert` and link only
+`autograd::autograd_expert`. The latter deliberately retains the legacy
+`autograd.h`/`Mat`/`VarPtr` source shape for the separate migration spike.
 
 For CPU interoperation, include the opt-in `autograd/extension/eigen.h` header.
 Its `tensor_from_eigen` and `tensor_to_eigen` helpers copy values between
@@ -286,9 +310,9 @@ autograd side at install time; install a CUDA-enabled autograd into a
 prefix and point the consumer at that prefix via `CMAKE_PREFIX_PATH`.
 The CPU default build is unaffected when CUDA is left off.
 
-Hosted CPU automation covers installation plus the `find_package`, Eigen
-custom-operation, and `add_subdirectory` consumers. The standalone CUDA custom
-consumer is a manual gate because hosted CI does not provide a CUDA device.
+Hosted CPU automation covers installation plus the normal `find_package`,
+explicit Eigen/legacy expert, and `add_subdirectory` consumers. The standalone
+CUDA custom consumer is a manual gate because hosted CI does not provide a CUDA device.
 Its exact build and run commands, including the CUDA-enabled install prefix,
 are documented in `tests/consumer/README.md`.
 

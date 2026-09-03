@@ -13,6 +13,9 @@
     defined(CUDA_VERSION) || defined(__CUDA_RUNTIME_H__)
 #error "OOP consumer headers must not include CUDA runtime headers"
 #endif
+#if defined(AUTOGRAD_USE_CUDA)
+#error "normal OOP consumer must not receive AUTOGRAD_USE_CUDA"
+#endif
 
 #include <cmath>
 #include <cstdio>
