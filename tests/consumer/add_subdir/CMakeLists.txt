@@ -21,6 +21,16 @@ add_subdirectory("${AUTOGRAD_SRC_DIR}" autograd_build)
 add_executable(autograd_smoke main.cpp)
 target_link_libraries(autograd_smoke PRIVATE autograd::autograd)
 
+enable_testing()
+add_test(NAME autograd_add_subdir_smoke COMMAND autograd_smoke)
+
+get_target_property(_autograd_normal_definitions
+    autograd::autograd INTERFACE_COMPILE_DEFINITIONS)
+if(_autograd_normal_definitions MATCHES "AUTOGRAD_USE_CUDA")
+    message(FATAL_ERROR
+        "embedded normal autograd target leaks AUTOGRAD_USE_CUDA")
+endif()
+
 # --- Inheritance self-check -------------------------------------------------
 # The package boundary contract is "embedded add_subdirectory
 # consumers do not inherit autograd's in-tree tests/examples". The check

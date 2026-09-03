@@ -5,9 +5,14 @@ boundaries of `minimal_autograd`:
 
 - `find_package/` uses an installed CONFIG package.
 - `add_subdir/` embeds the source tree with `add_subdirectory(...)`.
-- `eigen_custom/` uses the installed package and the opt-in Eigen extension
-  header for a copied custom operation.
-- `cuda_custom/` uses the installed CUDA package and an external CUDA kernel.
+- `eigen_custom/` explicitly requests the `expert` component and uses the
+  opt-in Eigen extension header for a copied custom operation.
+- `cuda_custom/` explicitly requests the `expert` component and uses the
+  installed CUDA package with an external CUDA kernel.
+- `legacy_expert/` is a source-preserving `autograd.h`/`Mat`/`VarPtr` fixture;
+  it requests the expert target and uses the existing CUDA runtime helper only
+  for a CUDA-enabled install.
+- `find_package/unknown_component/` is expected to fail at configure time.
 
 The `find_package` and `add_subdir` smoke programs are identical. They use the
 replacement Tensor/Variable API, `nn::Module` modules, canonical free
@@ -33,19 +38,38 @@ cmake --build build --parallel
 cmake --install build --prefix .scratch/install
 ```
 
-Run the installed `find_package` smoke check and the installed Eigen custom
-consumer:
+Run the installed normal `find_package` smoke check with Eigen discovery
+disabled. This proves the normal package does not require or export Eigen:
 
 ```sh
 cmake -S tests/consumer/find_package -B .scratch/findpkg_build \
-    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install"
+    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install" \
+    -DCMAKE_DISABLE_FIND_PACKAGE_Eigen3=TRUE
 cmake --build .scratch/findpkg_build
 .scratch/findpkg_build/autograd_smoke
+```
+
+Run the explicit expert consumers:
+
+```sh
 
 cmake -S tests/consumer/eigen_custom -B .scratch/eigen_custom_build \
     -DCMAKE_PREFIX_PATH="$PWD/.scratch/install"
 cmake --build .scratch/eigen_custom_build
 .scratch/eigen_custom_build/autograd_eigen_custom
+
+cmake -S tests/consumer/legacy_expert -B .scratch/legacy_expert_build \
+    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install"
+cmake --build .scratch/legacy_expert_build
+.scratch/legacy_expert_build/autograd_legacy_expert
+```
+
+The unknown required component must reject configuration:
+
+```sh
+cmake -S tests/consumer/find_package/unknown_component \
+    -B .scratch/unknown_component_build \
+    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install"  # expected to fail
 ```
 
 Run the source-tree consumer from a copy outside the source tree so the
@@ -62,9 +86,9 @@ cmake --build .scratch/addsub_build
 The add-subdirectory project also fails at configure time if known in-tree test
 or example targets leak into the consumer.
 
-Hosted CI runs the CPU build, install, installed `find_package` consumer,
-installed Eigen custom consumer, and source-tree consumer. It does not claim to
-run CUDA without a CUDA runner and device.
+Hosted CI runs the CPU build, install, normal and expert installed consumers,
+and source-tree consumer. It does not claim to run CUDA without a CUDA runner
+and device.
 
 ## Manual CUDA Check
 
@@ -93,3 +117,5 @@ PATH=/usr/local/cuda/bin:$PATH \
 The CUDA custom consumer keeps ownership in `Tensor`, obtains only borrowed
 device views from `autograd/extension/cuda.h`, launches and synchronizes its
 own kernels, and checks forward and backward results through host copies.
+The CUDA-enabled `legacy_expert` fixture can be run with the same installed
+prefix; it prints `SKIP` when no device is visible.
