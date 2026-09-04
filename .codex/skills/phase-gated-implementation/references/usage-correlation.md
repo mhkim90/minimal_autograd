@@ -3,25 +3,28 @@
 Load this reference only when `usage_mcp` is configured and a prospective
 workflow is being started, handled at terminal state, or closed.
 
-## Codex controller attribution
+## Controller attribution
 
-1. A Codex controller discovers its exact current context in its own shell,
-   not through MCP. Read `$CODEX_THREAD_ID`, then locate exactly one matching
-   rollout JSONL below `${CODEX_HOME:-$HOME/.codex}/sessions`. Parse the latest
-   `compacted` record's `payload.window_id`; if no compaction exists, use the
-   `session_meta` record's `payload.context_window.window_id`.
-2. Fail closed if the thread is missing, no unique matching rollout exists,
-   target metadata is malformed, or the window is missing. Never substitute a
-   root or thread ID, an initial or old window, a filename alone, a time-based
-   value, or another provider's identity. Start the Codex workflow only with
-   the discovered exact window:
-   `usage_workflow_start(controller="codex", controller_session_id=<window_id>)`.
-3. If discovery is unavailable or partial, do not start with a substitute;
-   report `controller-attribution-unavailable` and preserve provider-only
-   partial evidence. Do not use an MCP context lookup as a fallback.
-
-OpenCode and Claude controllers do not run Codex rollout discovery. Their
-provider-only correlation remains as documented; never impersonate Codex.
+1. Codex attribution uses only the exact current
+   `context_window.window_id`. Codex may use its own local state to locate that
+   value, but never substitute a thread ID, session ID, timestamp, filename,
+   old window, or provider identity. An exact Codex workflow starts with
+   `usage_workflow_start(controller="codex",
+   controller_session_id=<exact current context_window.window_id>)`.
+2. If exact Codex context is unavailable, start
+   `usage_workflow_start(controller="provider_only", repo_id=<opaque value
+   only if already authoritative>)` with `controller_session_id` omitted/empty.
+   This is not Codex attribution; never backfill or rebind it later. Report
+   `controller-attribution-unavailable` and preserve the provider-only
+   evidence.
+3. OpenCode and Claude controllers do not perform Codex discovery. Their normal
+   fallback is the same sessionless `provider_only` workflow, never a guessed
+   non-Codex controller identity.
+4. `repo_id` is optional opaque metadata only. Do not derive or store raw cwd,
+   repository URL/name, remote, or path. It enriches only newly ingested
+   records that explicitly carry the workflow ID or match an exact trusted
+   `(surface, session_id)`; never heuristically correlate, backfill, or rewrite
+   conflicting metadata.
 
 ## Provider lifecycle
 
@@ -38,13 +41,15 @@ provider-only correlation remains as documented; never impersonate Codex.
    workflow, or backfill; retain the original workflow semantics and mark
    Codex attribution partial or unattributed. Missing or unavailable usage
    remains a visible partial-warning outcome.
-3. Once all known provider work is terminal, call
+3. At terminal state, attempt
    `usage_workflow_finish(workflow_id)`, then scoped
    `usage_ingest(workflow_id=workflow_id, sources=["codex", "opencode",
    "claude"])`, then scoped
    `usage_report(workflow_id=workflow_id, group_by=["surface", "model"],
-   format="json")`. Finish and scoped ingestion can be replayed safely; a
-   failed finish is left open rather than fabricated.
+   format="json")` regardless of partial or unavailable measurement. Do not
+   block implementation or prompt on these attempts. Finish and scoped
+   ingestion can be replayed safely; a failed finish is left open rather than
+   fabricated.
 
 Never backdate a missed start: report its controller delta unavailable and
 begin a new workflow only for subsequent work. If local Codex state is
@@ -52,6 +57,10 @@ configured, `usage_codex_unattributed_report` may provide a read-only,
 post-hoc snapshot-observed report. Treat every result as `unattributed`: it is
 neither a workflow record nor evidence to start, bind, finish, ingest, or
 backfill a missed workflow. Its raw counters, coverage, and redacted warnings
-are observational only. Partial, unavailable, unresolved-model, or
-unattributed usage never changes a quality gate or becomes a token/price
-enforcement policy.
+are observational only. Provider-only reports retain top-level `complete` for
+provider/report completeness and add
+`controller_attribution.status="unattributed"` with the
+`controller-attribution-unavailable` warning. Report both dimensions. Partial,
+unavailable, unresolved-model, or unattributed usage never changes a quality
+gate or becomes a token/price enforcement policy. Exact Codex workflow reports
+and legacy behavior remain unchanged.
