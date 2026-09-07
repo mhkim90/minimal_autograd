@@ -8,11 +8,23 @@ the core; this reference does not decide publication or continuation.
 
 Do not automatically launch OpenCode Terra for Codex-controlled L2/L3 work.
 Use `agent="terra"` only for a recorded fresh-context, read-only concern.
-Trigger one independent Claude read-only review for architecture/API
+Before any Astra delegation, read [delegation.md](delegation.md) immediately;
+the optional Astra escalation is exactly a fresh `agent="terra",
+model="openai/gpt-6-astra", variant="high"` read-only session under its
+bounded triggers; it may replace an optional
+isolated Terra review of the same concern, but never a required cross-provider
+Claude/Codex review. Trigger one independent Claude read-only review for architecture/API
 compatibility, security, memory/concurrency, CUDA or numerical correctness,
 release behavior, weak tests, disagreement, suspicious red gates, or an
 explicit request. One triggered review replaces a review stack. Codex remains
 the gate; review evidence is not publication authority.
+
+When Luna uses a documented `xhigh` or `max` exception, trigger exactly one
+existing runtime-appropriate independent review: Claude for Codex-controlled
+work. The review checks the named bottleneck evidence, fixed acceptance gate,
+route/model/role/session lineage, retry accounting, and observability warnings.
+Whole-phase Sol retains its mandatory Terra review. Do not add a review stack
+or allow the preflight author to review its own recommendation.
 
 ## Async checkpoints
 

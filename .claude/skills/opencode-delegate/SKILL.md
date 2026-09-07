@@ -31,21 +31,59 @@ cross-repository work, worktree operation, editing, publishing, or syncing.
   user route rather than a default.
 - **Difficult**: use `agent="sol-expert"` only for a bounded preflight or
   breakthrough when warranted, then use `agent="luna"` for implementation.
+- **Named effort exception**: normal Luna routes omit `model` and `variant`.
+  Only a named complex code phase may request Luna `variant="xhigh"`, with a
+  documented reasoning bottleneck, why clarification/decomposition is
+  insufficient, and a fixed acceptance gate. Luna `variant="max"` additionally
+  requires relevant failure evidence or a bounded Sol-expert recommendation.
+  Tool unavailability, missing requirements, infrastructure failure, and slow
+  execution alone do not qualify. Keep `agent="luna"`, model/default, role,
+  and session lineage unchanged; never escalate automatically.
+- Sol, Sol-expert, and Terra remain `high` by default; their `xhigh` is only
+  for named difficult analysis/review and their `max` is explicit-owner only.
+  Astra retains its existing fresh read-only high route and bounded,
+  evidence-supported max exception. Claude remains configured high with no
+  automatic override.
 - Use `agent="terra"` only for a separate, fresh-context, read-only review
-  with a recorded reason; never use Terra as implementer.
+  with a recorded reason; never use Terra as implementer. The optional Astra
+  escalation is exactly `agent="terra", model="openai/gpt-6-astra",
+  variant="high"`, and is allowed only for a named unresolved material
+  correctness/safety question after bounded Sol consultation, multiple coupled
+  boundaries with severe/irreversible consequence requiring integrated
+  analysis, or an explicit owner request. Record why the cheaper route is
+  insufficient, expected evidence, stop condition, role, effort,
+  requested/resolved model, and job/session. Permit one initial consultation
+  plus one follow-up maximum; `max` requires a separately named question and
+  sufficient evidence. Astra is read-only and cannot implement, publish,
+  delegate, waive L4 owner direction, reset retries, or upgrade later phases.
+  Astra may replace an optional isolated Terra review, never a required
+  cross-provider Claude/Codex review; a preflight author cannot review its own
+  recommendation.
 - Use `agent="sol"` only for explicit whole-phase triad compatibility. Do not
   call Luna or Terra separately in that route.
-- Use a raw model only for an explicit user override or approved fallback.
+- Use a raw model only for an explicit user override, approved degraded
+  fallback, or the approved Astra escalation. An unavailable selector or
+  selected model, failed execution, explicit model contradiction, role
+  mismatch, or silent fallback stops the phase. Missing resolved-model or usage
+  metadata is only an observability warning when the requested selector was
+  honored and a terminal response has the requested role. Retain observability
+  reporting.
 
 ## Route evidence
 
 - Record requested agent, job ID, session ID, and bound/reported model.
 - Accept an honored named selector plus a terminal role response as minimum
   route evidence. Query normalized usage after terminal state when available.
-- Report unresolved normalized model identity or partial accounting as an
-  observability warning when no evidence contradicts the selected role.
-- Stop on selector rejection, mismatched continuations, explicit model
-  contradiction, or silent fallback. Never substitute silently.
+- Report missing resolved-model identity or partial accounting as an
+  observability warning only when the requested selector was honored and a
+  terminal response has the requested role, with no contradictory evidence.
+- For an exception, record requested agent and variant, evidence, acceptance
+  gate, job/session identity, and resolved-model/usage warnings. A variant
+  does not reset retries or count as a revised approach. Stop on any selector,
+  model, role, or session-lineage contradiction.
+- Stop on selector/model unavailability, failed execution, selector rejection,
+  mismatched continuations, explicit model contradiction, role mismatch, or
+  silent fallback. Never substitute silently.
 
 ## Luna and Sol-expert lifecycle
 
@@ -55,6 +93,9 @@ cross-repository work, worktree operation, editing, publishing, or syncing.
 - Allow at most three implementation/fix attempts. After two failures on the
   same blocker, request one bounded Sol-expert consultation. Permit a third
   attempt only after a materially revised approach is agreed.
+- After Luna `xhigh` or `max`, require exactly one existing independent review:
+  Codex Terra for Claude-controlled work. Whole-phase Sol keeps its mandatory
+  Terra review; do not stack reviews or permit preflight-author self-review.
 - Give Sol-expert approved scope, one focused question or blocker, and selected
   compact diff/test evidence. Allow one consultation and at most one follow-up.
   Require: findings, proposed approach, acceptance gate, stop/go. Sol-expert
