@@ -8,7 +8,9 @@ Red gate: <check + expected failure>
 Success criteria: <checks/metrics>
 Safety risk: <L1-L4>
 Implementation difficulty: <mechanical/economy | standard | difficult>
-Routing: <agent="luna" | explicit user configured default | sol-expert | terra | sol>
+Routing: <agent="luna" with model/variant omitted | named Luna variant="xhigh" or "max" exception | explicit user configured default | sol-expert | fresh agent="terra", model="openai/gpt-6-astra", variant="high" | terra review | sol>
+Expert escalation evidence: <role or none>; reason/question: <...>; why cheaper route is insufficient: <...>; requested/resolved model: <...>; effort: <...>; job/session: <...>; expected evidence: <...>; stop condition: <...>
+Effort-variant evidence: <named complex phase; reasoning bottleneck; why clarification/decomposition is insufficient; fixed acceptance gate; relevant failure evidence or bounded Sol-expert recommendation for max; warnings>
 Elapsed-time checkpoint / final-synthesis grace (full Sol only) / maximum wait: <phase-defined values>
 Constraints:
 - one bounded phase/subphase; no commit or edits outside scope
