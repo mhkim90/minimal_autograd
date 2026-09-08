@@ -80,6 +80,8 @@ or slowness evidence, a second review, and preflight-author self-review.
 
 ## Invariants
 
+### Authorization and P0 verification
+
 - Use an exact approved plan and the declared delivery topology for phased,
   non-trivial, or L2–L4 work. For eligible L2/L3 work, a combined
   draft-plan/implementation topology may use one draft PR, but it has exactly
@@ -93,15 +95,21 @@ or slowness evidence, a second review, and preflight-author self-review.
   checkpoint P0; it permits only validated in-envelope commits and pushes to
   that same draft PR. It never permits merge, deployment/release, or
   cross-repository delivery.
-  P0 verification requires that the initial PR diff contain exactly the
-  approved plan, the published plan match the approved revision, entry gates
-  pass, and the first implementation head equal P0 except for an explicitly
-  authorized and inspected pre-implementation change. Expected in-envelope
-  descendants of P0 do not invalidate implementation authority: inspect
-  cumulative scope, topology, and evidence; ancestry alone is insufficient.
-  A plan amendment, unexpected history, scope/topology change, target
-  branch/repository change, material base-assumption change, or split boundary
-  pauses affected work and requires appropriate rebinding or renewal.
+   **Starting check:** P0 verification requires that the initial PR diff contain
+   exactly the approved plan, the published plan match the approved revision,
+   entry gates pass, and the first implementation head equal P0 except for an
+   explicitly authorized and inspected pre-implementation change.
+   **Before each delivery:** expected in-envelope descendants of P0 do not
+   invalidate implementation authority, but inspect the cumulative scope,
+   topology, and evidence; ancestry alone is insufficient. Verify that the plan
+   artifact is unchanged, the current PR head is an expected descendant of P0,
+   and cumulative intervening changes remain inside the declared phase envelope
+   with current evidence. **Drift:** a plan amendment, unexpected history,
+   scope/topology change, target branch/repository change, material
+   base-assumption change, or split boundary pauses affected work and
+   requires appropriate rebinding or renewal. A plan edit, replacement,
+   ambiguous identity, or unexpected pre-implementation head drift invalidates
+   plan approval.
   Preserve separate merged plan-only PRs for L4 pending owner direction,
   material migration, security/trust boundaries, release/deployment,
   cross-repository, rollback/ownership, and upstream independent-decision
@@ -118,11 +126,14 @@ or slowness evidence, a second review, and preflight-author self-review.
   event. The existing narrow qualified-L1 direct path, or a recorded
   one-named-task plan-only waiver, is the only alternative and retains its
   exact qualification, scope, validation, delivery, and final PR-specific
-  merge-approval requirements. Any implementation outside the named envelope,
+   merge-approval requirements. Any implementation outside the named envelope,
   or material change to scope, topology, risk, affected files or repositories,
   acceptance criteria, rollout, sync, manual boundaries, or base assumptions,
   invalidates the affected authorization and requires renewed approval.
   Protections, required checks, and reviewer rules are never bypassed.
+
+### Contextual approval
+
 - A direct owner reply containing exactly `approved` or `approve` is contextual
   authorization only for the immediately preceding exact named action prompt;
   it never supplies an omitted repository, worktree, branch, base, plan,
@@ -140,6 +151,9 @@ or slowness evidence, a second review, and preflight-author self-review.
   delivery record and final fully enumerated merge snapshot replace repeated
   target prompts only; they never apply to source implementation,
   code/configuration, local guidance, variants, or generic cross-repository work.
+
+### Delivery topology
+
 - Where no independent plan gate is required, a plan and implementation may
   share one PR under the exact two-checkpoint topology above. Early
   Plan-and-Draft authorization is only a checkpoint; final merge approval
@@ -197,7 +211,6 @@ decides whether to route, pass a gate, publish, or start another phase.
 | Active agent drafted substantive plan | `grilled-me` | `grilled-me` |
 | User/repo/issue/external substantive author | `plan-audit` | `plan-audit` |
 | Implementation delegation | `opencode-delegate` + `references/delegation.md` | `opencode-delegate` + [`references/delegation.md`](references/delegation.md) |
-| Optional bounded Astra expert escalation | fresh `agent="terra", model="openai/gpt-6-astra", variant="high"`; [`references/delegation.md`](references/delegation.md) | fresh `agent="terra", model="openai/gpt-6-astra", variant="high"`; [`references/delegation.md`](references/delegation.md) |
 | Triggered independent read-only review | `claude-delegate` + `references/review-and-wait-policy.md` | `codex-delegate` + [`references/review-and-wait-policy.md`](references/review-and-wait-policy.md) |
 | Resume/cross-repository work | `memory-continuity` | `memory-continuity` |
 | Transfer to a fresh session | `handoff` | `handoff` |
