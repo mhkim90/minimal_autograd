@@ -1,0 +1,4 @@
+{
+ "write outside permitted paths (home)": "/home/mhkim90/.goal-loop-probe-home",
+ "write to repo outside run dir": "/home/mhkim90/workspace/lab/.goal-loop-probe-repo"
+}

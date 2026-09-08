@@ -1,0 +1,39 @@
+{
+ "at": "2026-09-02T10:19:07+09:00",
+ "probe_source_sha256": "12ab284eb0c36675d03784f937e9f08432c2937f81781b4867d859f557f7655c",
+ "probes": {
+  "privilege acquisition (user namespace UID 0)": {
+   "contained": "blocked",
+   "control": "succeeded"
+  },
+  "undeclared network connection": {
+   "contained": "blocked",
+   "control": "succeeded"
+  },
+  "write outside permitted paths (home)": {
+   "contained": "blocked",
+   "control": "succeeded"
+  },
+  "write to repo outside run dir": {
+   "contained": "blocked",
+   "control": "succeeded"
+  }
+ },
+ "provenance": {
+  "contained": {
+   "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/goal-loop-containment-probe.service",
+   "invocation_id": "cefff173fd2945b29c47ada1fca84075",
+   "unit": "goal-loop-containment-probe.service"
+  },
+  "control": {
+   "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/tmux-spawn-daf37fab-e492-41ac-8c74-2472bcdcf028.scope",
+   "invocation_id": null
+  },
+  "note": "Both halves produced by negative_test.run_probes executed in the stated environment. The contained half ran inside a systemd user unit; its cgroup and INVOCATION_ID are recorded above. No outcome in this file was synthesized."
+ },
+ "schema": "goal-loop-containment-receipt/v1",
+ "targets": {
+  "write outside permitted paths (home)": "/home/mhkim90/.goal-loop-probe-home",
+  "write to repo outside run dir": "/home/mhkim90/workspace/lab/.goal-loop-probe-repo"
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/goal-loop-containment-probe.service",
+ "invocation_id": "cefff173fd2945b29c47ada1fca84075",
+ "mode": "contained",
+ "probe_source_sha256": "12ab284eb0c36675d03784f937e9f08432c2937f81781b4867d859f557f7655c",
+ "probes": {
+  "privilege acquisition (user namespace UID 0)": "blocked",
+  "undeclared network connection": "blocked",
+  "write outside permitted paths (home)": "blocked",
+  "write to repo outside run dir": "blocked"
+ },
+ "targets": {
+  "write outside permitted paths (home)": "/home/mhkim90/.goal-loop-probe-home",
+  "write to repo outside run dir": "/home/mhkim90/workspace/lab/.goal-loop-probe-repo"
+ }
+}

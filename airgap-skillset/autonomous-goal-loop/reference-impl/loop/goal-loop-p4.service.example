@@ -1,0 +1,24 @@
+[Unit]
+Description=goal-loop P4 current unattended security check
+
+[Service]
+Type=oneshot
+WorkingDirectory=<worktree>
+TimeoutStartSec=600
+TimeoutStartFailureMode=kill
+TimeoutStopSec=1s
+KillMode=control-group
+SendSIGKILL=yes
+ExecStart=<worktree>/loop/run.sh <control-plane>/<run-id>
+Environment=GOAL_LOOP_SUPERVISED=
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=<control-plane>/<run-id>
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictNamespaces=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+MemoryMax=512M
+CPUQuota=50%
+TasksMax=64

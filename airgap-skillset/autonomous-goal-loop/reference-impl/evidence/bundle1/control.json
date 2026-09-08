@@ -1,0 +1,16 @@
+{
+ "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/tmux-spawn-daf37fab-e492-41ac-8c74-2472bcdcf028.scope",
+ "invocation_id": null,
+ "mode": "control",
+ "probe_source_sha256": "12ab284eb0c36675d03784f937e9f08432c2937f81781b4867d859f557f7655c",
+ "probes": {
+  "privilege acquisition (user namespace UID 0)": "succeeded",
+  "undeclared network connection": "succeeded",
+  "write outside permitted paths (home)": "succeeded",
+  "write to repo outside run dir": "succeeded"
+ },
+ "targets": {
+  "write outside permitted paths (home)": "/home/mhkim90/.goal-loop-probe-home",
+  "write to repo outside run dir": "/home/mhkim90/workspace/lab/.goal-loop-probe-repo"
+ }
+}

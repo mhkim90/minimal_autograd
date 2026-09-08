@@ -1,0 +1,11 @@
+{
+ "provenance_note": "Host-observed, operator-supplied, from the original lab checkout this fixture was ported from. Approval parses and binds the recorded outcomes and provenance; it does not independently execute or attest them. See residual operator_supplied_containment_control. Ported as a parser-correctness test fixture only — not evidence about this package's own deployment. See PORTING.md.",
+ "receipt_path": "/home/mhkim90/workspace/claude_mcp/airgap-skillset/autonomous-goal-loop/reference-impl/evidence/bundle1/negative_test_receipts.json",
+ "receipt_sha256": "7ad0694a31b18c2d5a940aa2c04ab6c1b16866cdf314d796590798014f60d2f5",
+ "run_id": "bundle1",
+ "targets": {
+  "write outside permitted paths (home)": "/home/mhkim90/.goal-loop-probe-home",
+  "write to repo outside run dir": "/home/mhkim90/workspace/lab/.goal-loop-probe-repo"
+ },
+ "what_this_is": "The charter fragment that names and pins the containment receipt for this checkout. It is NOT a complete run charter: it declares no execution_mode, budgets, arms or components, and approval will not accept it as one. Its only job is to state which receipt bytes a charter means, so the receipt is a consumed approval input rather than a file that merely exists. `receipt_path` is checkout-relative and was rewritten at port time (see PORTING.md); `targets` are inert historical labels compared only for JSON equality against the receipt's own targets field, never touched on disk."
+}
