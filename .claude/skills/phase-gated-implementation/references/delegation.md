@@ -6,73 +6,29 @@ new phase, pass a gate, publish, or delegate again from this reference.
 
 ## Route and evidence
 
-Select the difficulty route named by the core: use `agent="luna"` for
-mechanical/economy and standard work; use the configured default only when the
-user explicitly requests that route, omitting `agent`, `model`, and `variant`;
-or use a bounded `agent="sol-expert"` consultation before Luna for difficult
-work. Preserve an explicitly approved whole-phase `agent="sol"` route: do not
-call Luna or Terra separately. Keep user-selected models as explicit overrides;
-use a raw model only for an explicit user override, an approved degraded
-fallback, or the approved Astra escalation below.
+Apply the core's [route and selector rules](../SKILL.md#usage-correlation).
+This reference adds delegation evidence: record the requested agent and
+variant, named evidence, acceptance gate, job/session identity, bound/reported
+model, and warnings. A rejected or unavailable selector/model, failed
+execution, mismatched continuation, explicit model contradiction, role
+mismatch, or silent fallback is a stop; missing resolved-model or usage
+metadata is only an observability warning after the selected route is honored
+and the requested role returns a terminal response.
 
 ### Named effort variants
 
-Normal Luna delegation remains `agent="luna"` with `model` and `variant`
-omitted; do not escalate automatically. A named Luna exception may request only
-`variant="xhigh"` or `variant="max"`, while retaining the same named agent,
-role, model/default, and session lineage. Luna `xhigh` requires a named
-complex code phase, documented reasoning bottleneck, why clarification or
-decomposition is insufficient, and a fixed acceptance gate. Luna `max` also
-requires relevant failure evidence or a bounded Sol-expert recommendation.
-Tool unavailability, missing requirements, infrastructure failure, and slow
-execution alone are not bottleneck evidence.
-
-Sol, Sol-expert, and Terra remain `high` by default; their `xhigh` is limited
-to named difficult analysis or review, and their `max` is explicit-owner only.
-Claude remains at configured `high` with no automatic override. Record the
-requested agent and variant, evidence, gate, job/session identity, and
-resolved-model or usage warnings. A variant does not reset retries or count as
-a revised approach; selector, model, or role contradiction still stops.
-
-After Luna `xhigh` or `max`, require exactly one existing independent review:
-Codex Terra for Claude-controlled work. Whole-phase Sol keeps its mandatory
-Terra review; do not stack reviews or permit preflight-author self-review.
+The core's [effort-variant policy](../SKILL.md#effort-variant-exceptions) is
+authoritative. For a named exception, retain its requested agent/variant,
+bottleneck evidence, fixed gate, retry accounting, and observability warnings
+in the delegation record.
 
 ### Optional Astra expert escalation
 
-After bounded Sol consultation, escalate only a named unresolved material
-correctness/safety question, or use Astra when multiple coupled boundaries have
-severe or irreversible consequences and require integrated analysis, or when the
-owner explicitly requests it. Start a fresh read-only session exactly as
-`agent="terra", model="openai/gpt-6-astra", variant="high"`. Record the role,
-escalation reason and named question, why Luna/Sol or another cheaper route is
-insufficient, requested and resolved model, effort, job/session identity,
-expected evidence, and stop condition. Astra does not implement, publish,
-delegate, waive L4 owner direction, reset retry caps, or persistently upgrade a
-later phase. Permit one initial consultation and at most one follow-up; use
-`variant="max"` only for a separately named unresolved question supported by
-sufficient evidence, otherwise use `high`.
-
-Astra may replace an optional isolated Terra review of the same fresh
-read-only concern, but never a required cross-provider Claude/Codex review. A
-preflight author cannot independently review its own recommendation. An
-unavailable selector or selected model, failed execution, explicit model
-contradiction, role mismatch, or silent fallback stops the phase. Missing
-resolved-model or usage/observability metadata is only an observability warning
-when the requested selector was honored and a terminal response has the
-requested role. Retain route and usage observability reporting.
-
-Record requested agent, job ID, session ID, and bound/reported model. An
-accepted named-agent selector plus a terminal role response is minimum route
-evidence; query normalized provider usage when available. Missing normalized
-resolution or partial usage is an observability warning, not a correctness
-blocker, when the selector was accepted and a terminal response has the
-requested role, with no contradiction. Stop on a rejected or unavailable
-selector/model, failed execution, mismatched continuation, explicit model
-contradiction, role mismatch, or silent fallback. Do not treat an unavailable
-selected model as missing observability metadata. For Astra,
-also retain the escalation reason, effort, expected evidence, and stop
-condition as separate fields.
+Follow the core's [Astra eligibility and limits](../SKILL.md#usage-correlation).
+For a selected consultation, record the escalation reason, named question, why
+the cheaper route is insufficient, requested/resolved model, effort, job/session
+identity, expected evidence, and stop condition. Preserve the read-only role
+and do not silently substitute a selector, model, role, or continuation.
 
 ## OpenCode caller-working-directory boundary
 

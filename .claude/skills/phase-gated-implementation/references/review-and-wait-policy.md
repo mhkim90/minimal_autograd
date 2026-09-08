@@ -6,12 +6,11 @@ the core; this reference does not decide publication or continuation.
 
 ## Triggered independent review
 
-Do not automatically launch OpenCode Terra for Claude-controlled L2/L3 work.
-Use it only for a recorded fresh-context, read-only concern. Before any Astra
-delegation, read [delegation.md](delegation.md) immediately; the optional Astra
-escalation is exactly a fresh `agent="terra", model="openai/gpt-6-astra",
-variant="high"` read-only session under its bounded triggers; it may replace an optional isolated Terra review of
-the same concern, but never a required cross-provider Claude/Codex review.
+Follow the core's [review router](../SKILL.md#router-and-lazy-policy-loading) and
+[Astra policy](../SKILL.md#usage-correlation). Do not automatically launch
+OpenCode Terra for Claude-controlled L2/L3 work; use a review only for a
+recorded fresh-context, read-only concern. Before any Astra delegation, read
+[delegation.md](delegation.md) immediately.
 Trigger one independent Codex Terra DISCUSS/read-only review for architecture/API
 compatibility, security, memory/concurrency, CUDA or numerical correctness,
 release behavior, weak tests, disagreement, suspicious red gates, or an
@@ -20,13 +19,12 @@ do not assume the current Codex default is Terra. One triggered review replaces
 a review stack. Claude Code remains the gate; review evidence is not publication
 authority.
 
-When Luna uses a documented `xhigh` or `max` exception, trigger exactly one
-existing runtime-appropriate independent review: Codex Terra for
-Claude-controlled work. The review checks the named bottleneck evidence, fixed
-acceptance gate, route/model/role/session lineage, retry accounting, and
-observability warnings. Whole-phase Sol retains its mandatory Terra review.
-Do not add a review stack or allow the preflight author to review its own
-recommendation.
+When Luna uses a documented `xhigh` or `max` exception, apply the core's
+exactly-one-review requirement. This review checks the named bottleneck
+evidence, fixed acceptance gate, route/model/role/session lineage, retry
+accounting, and observability warnings. Whole-phase Sol retains its mandatory
+Terra review. Do not add a review stack or allow the preflight author to review
+its own recommendation.
 
 ## Async checkpoints
 
