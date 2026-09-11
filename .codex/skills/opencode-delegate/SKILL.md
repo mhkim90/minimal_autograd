@@ -26,6 +26,16 @@ cross-repository work, worktree operation, editing, publishing, or syncing.
 
 - **Mechanical/economy**: use `agent="luna"`; omit `model` and `variant`.
 - **Standard**: use `agent="luna"`; omit `model` and `variant`.
+- **Explicit Terra implementation**: use `agent="terra-implementer"` only
+  after an explicit owner exact-model request or an already-approved recorded
+  route; omit `model` and `variant`. This is a bounded Luna-clone implementer,
+  never Terra review. A model or variant with this named agent is a route
+  contradiction and stops the phase.
+- **Explicit Sol implementation**: use `agent="sol-implementer"` only after
+  an explicit owner exact-model request or an already-approved recorded route;
+  omit `model` and `variant`. This is a bounded Luna-clone implementer, never
+  Sol planning or Sol-expert consultation. A model or variant with this named
+  agent is a route contradiction and stops the phase.
 - **Explicit configured-default request**: only when the user requests this
   route, omit `agent`, `model`, and `variant`, and report it as an explicit
   user route rather than a default.
@@ -43,16 +53,18 @@ cross-repository work, worktree operation, editing, publishing, or syncing.
   for named difficult analysis/review and their `max` is explicit-owner only.
   Astra retains its existing fresh read-only high route and bounded,
   evidence-supported max exception. Claude remains configured high with no
-  automatic override.
+  automatic override. Terra-implementer, Sol-implementer, and Astra-expert bind
+  their configured exact model and high effort by profile name; model and
+  variant are omitted and any supplied override is a contradiction.
 - Use `agent="terra"` only for a separate, fresh-context, read-only review
   with a recorded reason; never use Terra as implementer. The optional Astra
-  escalation is exactly `agent="terra", model="openai/gpt-6-astra",
-  variant="high"`, and is allowed only for a named unresolved material
+  escalation uses the fresh named read-only profile `agent="astra-expert"`
+  with model and variant omitted, and is allowed only for a named unresolved material
   correctness/safety question after bounded Sol consultation, multiple coupled
   boundaries with severe/irreversible consequence requiring integrated
   analysis, or an explicit owner request. Record why the cheaper route is
   insufficient, expected evidence, stop condition, role, effort,
-  requested/resolved model, and job/session. Permit one initial consultation
+  requested/resolved named profile/model, and job/session. Permit one initial consultation
   plus one follow-up maximum; `max` requires a separately named question and
   sufficient evidence. Astra is read-only and cannot implement, publish,
   delegate, waive L4 owner direction, reset retries, or upgrade later phases.
@@ -61,8 +73,10 @@ cross-repository work, worktree operation, editing, publishing, or syncing.
   recommendation.
 - Use `agent="sol"` only for explicit whole-phase triad compatibility. Do not
   call Luna or Terra separately in that route.
-- Use a raw model only for an explicit user override, approved degraded
-  fallback, or the approved Astra escalation. An unavailable selector or
+- Use a raw model only for an explicit user override or approved degraded
+  fallback. Exact-model implementation requests use the named implementer
+  profile, and Astra uses `agent="astra-expert"`; never pass model or variant
+  with either named profile. An unavailable selector or
   selected model, failed execution, explicit model contradiction, role
   mismatch, or silent fallback stops the phase. Missing resolved-model or usage
   metadata is only an observability warning when the requested selector was
