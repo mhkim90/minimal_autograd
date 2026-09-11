@@ -14,7 +14,7 @@ Red gate: <command/check + expected failure>
 Success criteria: <checks/metrics>
 Safety risk: <L1-L4>
 Implementation difficulty: <mechanical/economy | standard | difficult>
-Implementation route: <agent="luna" with omitted model/variant | named Luna xhigh/max exception | explicit user request: configured default | sol-expert then Luna>
+Implementation route: <agent="luna" with omitted model/variant | explicit owner exact-model request: agent="terra-implementer" or agent="sol-implementer" with model/variant omitted | named Luna xhigh/max exception | explicit user request: configured default | sol-expert then Luna>
 Expert escalation evidence: <role or none>; escalation reason/question: <...>; why cheaper route is insufficient: <...>; requested/resolved model: <...>; effort: <...>; job/session: <...>; expected evidence: <...>; stop condition: <...>
 Effort-variant evidence: <requested agent and variant; named bottleneck/evidence; why clarification/decomposition is insufficient; fixed acceptance gate; additional max evidence or Sol-expert recommendation; warnings>
 Elapsed-time checkpoint / final-synthesis grace (full Sol only) / maximum wait: <phase-defined values>
@@ -88,6 +88,28 @@ requires fresh approval. Do not use this prompt as authority for delivery,
 readiness, or target-sync delivery, or for another PR. It may be used to merge
 one independently authorized target PR; that target merge still requires its
 own bound snapshot, eligibility, and normal merge controls.
+
+## Narrow combined content-and-merge prompts
+
+Use these only for an exact plan-only PR or a verified non-operational
+documentation-only PR. Before prompting and immediately after approval, bind
+and revalidate repository, PR, source/target role, branch, head, base,
+eligibility, complete file set, file modes, and classification. Any drift,
+mixed or uncertain classification, operational documentation, generated
+output, rename, symlink, executable mode, configuration-like documentation,
+profiles, skills, agents, policy, workflows, configuration, code, or a plan-plus-
+implementation PR falls back to the ordinary final merge prompt.
+
+```text
+Approve and merge the plan in <repository> PR #<N>?
+```
+
+```text
+Approve and merge the documentation-only PR in <repository> PR #<N>?
+```
+
+The ledger entry must be resolved before successful completion; these prompts
+never grant implementation, sync, or host-control bypass authority.
 
 ## Qualified mechanical skill-sync bundle prompts
 

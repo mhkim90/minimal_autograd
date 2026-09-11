@@ -37,6 +37,28 @@ Marking a PR ready is administrative after validation and review eligibility
 pass; it needs no owner approval. Readiness is not merge authority. No
 automatic merge follows from plan approval, draft state, or readiness.
 
+## PR-lifecycle ledger gate
+
+Create or update the non-authoritative ledger for every workflow-touched PR,
+including created, adopted, updated, readied, reopened, closed, and merged
+events. Record host/repository/PR, source-or-target role, branch, head, base,
+complete file set and file modes, classification, lifecycle state, owner
+disposition, authority evidence, and last validation. The ledger grants no
+authority. Before implementation entry, successful phase completion, sync, or
+success reporting, every entry must be merged, explicitly retained by
+PR-specific boundary-scoped owner direction, or explicitly closed. Retained is
+not an unmerged-plan exception. Stop reports may list unresolved entries but
+cannot claim success.
+
+For the only combined content-and-merge paths, bind and revalidate the full
+repository/PR/role/branch/head/base/eligibility/file-set/file-mode/classification
+snapshot before the prompt and immediately after approval. Exact plan-only and
+verified non-operational documentation-only PRs use their named prompts;
+plan-plus-implementation, operational or uncertain documentation, profiles, skills,
+agents, local guidance, policy, workflow, configuration, generated, renamed,
+symlinked, executable, and code content use ordinary merge control. Drift
+requires fresh approval.
+
 ## Plan-first workflow
 
 Follow the core's [combined topology and boundary rules](../SKILL.md#delivery-topology).
@@ -74,6 +96,10 @@ manual next-phase gate blocks only entry to the next phase, not this green
 phase's publication; a topology deviation or stop rule blocks the affected
 phase. Keep the plan-only PR in draft while verifying it and mark it ready only
 after validation and review eligibility pass.
+
+Update the PR-lifecycle ledger for each publication transition, including
+external PR changes observed during the gate. Do not enter implementation,
+complete the phase, or sync downstream while an entry is unresolved.
 
 Follow the core's [publication and merge boundaries](../SKILL.md#contextual-approval):
 bind the repository, PR, head, base, and check/review eligibility snapshot;

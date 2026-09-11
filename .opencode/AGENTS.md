@@ -1,69 +1,75 @@
-# AGENTS.md
+# OpenCode Triad
 
-## Purpose
+This repository is `opencode_mcp`, a Python 3.12 MCP server. The main
+implementation is `server.py`; tests are under `tests/` and use pytest with
+mocked HTTP interactions. There is no compiled build. GPU access may be used
+for an explicit smoke check when relevant, but it is not required for normal
+tests.
 
-This repository is a minimal reverse-mode automatic differentiation library in C++17, built on top of Eigen3. It implements a tape-based autograd engine, a module system (`Linear`, `Sequential`, `Conv2d`, `MaxPool2d`, `AvgPool2d`, `DepthwiseConv2d`, `NearestUpsample2d`, `GroupNorm`), losses (`mse_loss`, `cross_entropy`), optimizers (`SGD`, `Adam`), and diffusion-model primitives (`randn`, `sinusoidal_time_embedding`, `q_sample`). CPU (Eigen, optionally OpenMP) is the default backend; an optional CUDA backend (`-DAUTOGRAD_USE_CUDA=ON`) mirrors core ops, `Linear`, losses, `Conv2d`, and `MaxPool2d` via `.cuda()`/`.cpu()` on `Var`. Intended for teaching and small experiments. Use these instructions for all code work in this repo.
+## Roles and routing
 
-## General Rules
+- **Sol** (`agents/sol.md`) is the explicit whole-phase triad route
+  (`agent="sol"`): planner and decider for risk, gates, delegation, and
+  stop/go. Beneath an external controller it returns diff/evidence only and
+  does not commit, push, or create a PR; the controller retains publication.
+- **Sol-expert** (`agents/sol-expert.md`) is bounded, read-only difficult
+  preflight or breakthrough analysis: one initial consultation and at most one
+  follow-up. It never edits, delegates, or publishes.
+- **Luna** (`agents/luna.md`) is the normal implementation route
+  (`agent="luna"`) for mechanical/economy and standard work. It cannot publish
+  or broaden scope. Follow **red -> implement -> green -> GPU** with at most 3
+  attempts; after two failures on one blocker, consult Sol-expert and attempt
+  a third time only after a materially revised approach.
+- **Terra implementer** (`agents/terra-implementer.md`) is the explicit exact-
+  model implementation route (`agent="terra-implementer"`) only after an
+  explicit owner exact-model request or an already-approved recorded route.
+  Never pass a model or variant with this named agent; doing so is a route
+  contradiction and stops the phase. It is a semantic Luna clone for bounded
+  edits, focused inspection, and tests, with no planner, reviewer, delegation,
+  staging, commit, push, PR, or publication authority.
+- **Sol implementer** (`agents/sol-implementer.md`) has the same bounded Luna
+  implementation contract for an explicit exact-model Sol request
+  (`agent="sol-implementer"`). A model or variant with the named agent is a
+  contradiction and stops the phase; it cannot substitute for Sol planning,
+  Terra review, delegation, staging, commit, push, PR, or publication.
+- **Terra** (`agents/terra.md`) remains an explicit, fresh-context, read-only
+  review (`agent="terra"`) with a recorded reason. Only explicit whole-phase
+  Sol mode makes L3 preflight and non-trivial post-review mandatory; Terra is
+  never a routine external-controller review.
+- **Astra expert** (`agents/astra-expert.md`) is the named, fresh, read-only
+  Astra consultation route (`agent="astra-expert"`) for the existing bounded
+  escalation cases. Omit model and variant; selector/model/role mismatch stops
+  rather than silently falling back. It never implements, publishes, delegates,
+  waives L4 direction, resets retries, replaces required review, or self-reviews.
+- The configured default route is used only when the user explicitly requests
+  it: omit `agent`, `model`, and `variant`. Never infer it as a default Sol or
+  Terra route.
 
-- Prefer small, surgical changes.
-- Keep code simple and avoid speculative abstractions.
-- Use the existing repository structure and conventions.
-- When multiple independent reads are needed, use parallel tool calls.
-- Before editing, inspect the relevant files first.
-- After edits, run the smallest useful validation for the touched area.
+## PR lifecycle and approval
 
-## Build, Test, and Validation
+Maintain a non-authoritative lifecycle ledger entry for every workflow-touched
+PR, including created, adopted, updated, readied, reopened, closed, and merged
+events. Record the host/repository/PR, source-or-target role, branch, head,
+base, complete file set and modes, classification, lifecycle state, owner
+disposition, authority evidence, and last validation. The ledger grants no authority. Every
+entry must be merged, explicitly retained by PR-specific boundary-scoped owner
+direction, or explicitly closed before successful phase completion, entering
+implementation, downstream sync, or success reporting; unresolved entries may
+only appear in a terminal Stop report.
 
-- Build with CMake: `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$(nproc)`
-- Core test binaries: `./test_core`, `./test_nn`, `./test_conv` — all should print `ALL TESTS PASSED`.
-- Optional CUDA backend: configure with `-DAUTOGRAD_USE_CUDA=ON` (needs CMake 3.18+ and a CUDA toolkit; use the `cuda` symlink, e.g. `PATH=/usr/local/cuda/bin:$PATH`, if a versioned `cuda-X.Y` path isn't directly accessible). Adds `./test_cuda_core`, which should print `ALL CUDA CORE TESTS PASSED`. CUDA `Conv2d`/`MaxPool2d` are cross-checked against the CPU path in that test — keep both numerically consistent when touching either.
-- Optional extended ops/tests: configure with `-DAUTOGRAD_BUILD_ADVANCED_OPS=ON` to build `./test_extensions`, `./test_diffusion`, `./test_smoke`.
-- If a change affects a single op or module, run only the relevant test binary.
-- Do not introduce new tooling unless it is clearly needed.
+Combined plan-only approval and verified non-operational documentation-only
+approval are narrow exceptions. Bind and revalidate repository, PR, head, base,
+eligibility, complete file set, file modes, and classification immediately
+before and after approval. Plan-plus-implementation, operational or uncertain
+documentation, profiles, skills, agents, AGENTS.md, CLAUDE.md, `.opencode`, policy,
+workflow, configuration, code, generated, renamed, symlinked, or executable
+content retains ordinary final merge control.
 
-## Library and Dependency Rules
+## Gates and safety
 
-- Prefer the libraries already used in the repository (Eigen3, C++17 stdlib).
-- Avoid adding a new dependency unless it materially improves correctness or maintainability.
-- If a new library is necessary, keep the scope narrow and document why it is needed.
-- Keep includes minimal and remove unused dependencies when possible.
-
-## Controller Boundary
-
-The external controller owns shared-skill routing, approvals, and publication.
-OpenCode follows the local triad role contract, approved scope, and repository
-validation below; the applicable checked-in plan remains authoritative for scope
-and phase gates. It does not load or duplicate Codex/Claude shared-skill maps.
-
-## OpenCode Triad
-
-- **Sol** (`agents/sol.md`): explicit whole-phase triad planner
-  (`agent="sol"`). When invoked beneath an external controller, it returns
-  evidence and never publishes.
-- **Sol-expert** (`agents/sol-expert.md`): bounded, read-only difficult-task
-  preflight or breakthrough consultation; it cannot edit or delegate.
-- **Terra** (`agents/terra.md`): explicit (`agent="terra"`) fresh-context,
-  read-only review with a recorded reason; mandatory only inside whole-phase
-  Sol mode.
-- **Luna** (`agents/luna.md`): normal implementation route
-  (`agent="luna"`) for mechanical/economy and standard work. It is the
-  C++/CUDA implementer for one bounded phase or subphase; it cannot publish or
-  broaden scope.
-
-Keep L1-L4 for safety and approval; independently classify implementation as
-mechanical/economy, standard, or difficult. Use Luna for mechanical/economy and
-standard work. Use the configured default only when the user explicitly
-requests that route, omitting `agent`, `model`, and `variant`. Use
-Sol-expert only for a justified difficult preflight or repeated blocker before
-Luna implements. Use Terra only when explicitly requested, except that
-whole-phase Sol mode makes its review mandatory. Do not call Luna or Terra
-separately in an explicit whole-phase Sol route. After two same-blocker Luna
-failures, stop blind retries; a third attempt requires a materially revised
-approach. Record named-agent route evidence and stop on contradiction or silent
-fallback.
-
-Permissions are guardrails, not a complete trust boundary. Role prompts,
-repository boundaries, managed sandboxing, and Sol's diff gate remain
-required. Preserve unrelated artifacts. No agent may read, print, copy,
-expose, or request credentials or secrets.
+Role prompts are authoritative. In explicit whole-phase Sol mode, L3 requires
+Terra preflight; L4 stops before implementation. Delegated paths stay within
+the caller's working directory; external paths are denied. Permissions are
+guardrails, not a complete trust boundary, so preserve repository boundaries,
+sandboxing, and diff gates. Keep unrelated artifacts untouched, and never read,
+print, copy, expose, or request credentials or secrets.

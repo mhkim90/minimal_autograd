@@ -23,7 +23,7 @@ configured default only when the user explicitly requests that route, omitting
 breakthrough only for difficult work before Luna implements. Preserve an
 explicitly approved whole-phase `agent="sol"` route without separately calling
 Luna or Terra. An optional Astra expert escalation is a fresh, read-only
-`agent="terra", model="openai/gpt-6-astra", variant="high"` session only when
+`agent="astra-expert"` session with model and variant omitted only when
 a bounded Sol consultation leaves a named material correctness/safety question
 unresolved, multiple coupled boundaries have severe or irreversible
 consequences and need integrated analysis, or the owner explicitly requests
@@ -32,13 +32,22 @@ evidence, and stop condition. Permit one initial Astra consultation and at most
 one follow-up; `max` requires a separately named unresolved question and
 sufficient evidence. Astra never implements, publishes, delegates, waives L4
 owner direction, resets retry caps, or persistently upgrades later phases.
-The approved Astra route is the only additional raw-model override beyond an
-explicit user override or degraded fallback. Never silently replace a selected
+The approved Astra route is the only additional named expert escalation beyond
+an explicit user override or degraded fallback. Never silently replace a selected
 route or raw-model override: selector rejection, selected selector/model
 unavailability, explicit model contradiction, role mismatch, silent fallback,
 or failed execution stops work. Only after the selector is honored, the
 requested role returns a terminal response, and no contradiction exists may
 missing resolved-model or usage metadata produce an observability warning.
+
+Exact-model implementation is a named-profile route, never a model/variant
+override on a named agent. After an explicit owner exact-model request or an
+already-approved recorded route, select `agent="terra-implementer"` or
+`agent="sol-implementer"` with model and variant omitted. Either profile is a
+bounded Luna clone for edits, focused inspection, and tests; neither may plan,
+review, delegate, stage, commit, push, create or modify PRs, publish, or
+invoke subagents. Supplying a model or variant with either selector is a route
+contradiction and stops the phase.
 
 ## Effort-variant exceptions
 
@@ -70,14 +79,51 @@ missing resolved-model or usage metadata produce an observability warning.
 
 ## Effort-variant scenario matrix
 
-The phase gate accepts and records default Luna with omitted variant, qualifying
-Luna `xhigh`, Luna `max` with its additional evidence, qualifying Sol/Terra
+The phase gate accepts and records default Luna with omitted variant, explicit
+owner-approved Terra/Sol implementer selectors with omitted model and variant,
+qualifying Luna `xhigh`, Luna `max` with its additional evidence, qualifying Sol/Terra
 `xhigh`, the owner-only Sol/Terra `max`, the existing Astra exception, and
 unchanged configured Claude `high`. It rejects or stops automatic escalation,
-role/model substitution, retry resets, tool/infrastructure/missing-requirement
+role/model substitution, named-agent model/variant contradictions, retry resets, tool/infrastructure/missing-requirement
 or slowness evidence, a second review, and preflight-author self-review.
 
 ## Invariants
+
+### PR-lifecycle ledger
+
+Maintain one non-authoritative ledger entry for every workflow-touched PR,
+including a PR that is created, adopted, updated, readied, reopened, closed,
+or merged, whether the event is local or observed externally. Each entry
+records host/repository/PR, source-or-target role, branch, head, base, complete
+file set of changed files and file modes, artifact classification, lifecycle state,
+owner disposition, authority evidence, and last validation. The ledger is
+bookkeeping and a blocking gate only: it never grants implementation, delivery,
+exception, readiness, close, merge, or sync authority.
+
+Before successful phase completion, implementation entry, downstream sync, or
+success reporting, every entry must be merged, explicitly retained by
+PR-specific boundary-scoped owner direction, or explicitly closed. Retained is
+not an unmerged-plan exception and never authorizes implementation or sync. A
+terminal Stop/blocker report may list unresolved entries, but must not claim
+success.
+
+### Combined approval and classification
+
+The only combined content-and-merge paths are an exact plan-only PR and a
+verified non-operational documentation-only PR. Before the prompt and again
+immediately after approval, bind and revalidate host/repository/PR, source or
+target role, branch, head, base, eligibility, complete file set of changed files, file
+modes, and classification. Any drift requires a fresh exact prompt and
+approval; rebinding cannot revive the old approval.
+
+Classify plan-only content separately from documentation-only content. The
+documentation-only path is fail-closed: mixed content, rename, symlink,
+executable mode, generated output, configuration-like documentation, or
+uncertain operational effect uses ordinary final merge control. Profiles, skills, agents,
+`AGENTS.md`, `CLAUDE.md`, `.opencode`, policy, workflows, configuration, and
+code are never qualifying documentation. A combined plan-plus-implementation
+PR retains ordinary final implementation merge control. Neither exception
+bypasses checks, reviews, branch protection, host controls, or the ledger gate.
 
 ### Authorization and P0 verification
 
@@ -150,6 +196,26 @@ or slowness evidence, a second review, and preflight-author self-review.
   delivery record and final fully enumerated merge snapshot replace repeated
   target prompts only; they never apply to source implementation,
   code/configuration, local guidance, variants, or generic cross-repository work.
+
+  The narrow combined content-and-merge exceptions use these prompts only
+  after the ledger entry is resolved, all checks/reviews are eligible, and the
+  complete binding/classification snapshot is green:
+
+  ```text
+  Approve and merge the plan in <repository> PR #<N>?
+  ```
+
+  ```text
+  Approve and merge the documentation-only PR in <repository> PR #<N>?
+  ```
+
+  The first requires an exact plan-only file set. The second requires verified
+  non-operational documentation-only classification. Mixed, operational,
+  uncertain, or plan-plus-implementation content uses the ordinary final merge
+  prompt. Bind and revalidate repository, PR, head, base, eligibility, file
+  set, file modes, and classification immediately before and after approval;
+  drift requires fresh approval. These exceptions never grant implementation,
+  readiness, sync, or host-control bypass authority.
 
 ### Delivery topology
 
