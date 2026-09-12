@@ -57,8 +57,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
@@ -1822,74 +1824,234 @@ void test_oop_adam_cuda_mixed_list() {
     report("Tensor CUDA: optim::Adam mixed CPU/CUDA parameter list updates both");
 }
 
-void test_oop_adam_cuda_load_state_preserves_device() {
-    // Construct two CUDA Adam optimizers with the same params.
-    // Run a step on source, snapshot source.state(), and load that
-    // snapshot into target. Then drive both target and a fresh
-    // reference optimizer through the same next gradient and verify
-    // that the parameter values match: load_state restores the
-    // optimizer's full state (step count + moments + hyperparameters)
-    // so the resumed trajectory is identical to one that took the
-    // original step in-line.
-    const std::vector<float> pv{
-        0.5f, -0.25f, 0.75f, -0.5f,
-    };
-    Variable source_p(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
-    Variable target_p(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
-    Variable ref_p(Tensor::from_host(pv.data(), Shape{2, 2}, Device::cuda(0)), true);
+struct AdamCudaFixture {
+    Variable p0;
+    Variable p1;
+    Variable p2;
+    ag::optim::Adam adam;
 
-    ag::optim::Adam source({source_p}, 1e-2f);
-    ag::optim::Adam target({target_p}, 1e-2f);
-    ag::optim::Adam reference({ref_p}, 1e-2f);
+    explicit AdamCudaFixture(const std::array<float, 3>& values)
+        : p0(Variable(Tensor::from_host(&values[0], Shape{}, Device::cuda(0)), true)),
+          p1(Variable(Tensor::from_host(&values[1], Shape{}, Device::cuda(0)), true)),
+          p2(Variable(Tensor::from_host(&values[2], Shape{}, Device::cuda(0)), true)),
+          adam({p0, p1, p2}, 1e-2f, 0.9f, 0.999f, 1e-8f) {}
+};
 
-    const std::vector<float> g1{0.05f, -0.05f, 0.1f, -0.1f};
-    const std::vector<float> g2{-0.1f, 0.1f, -0.05f, 0.05f};
+struct AdamExactObservation {
+    std::vector<std::uint32_t> loss;
+    std::array<std::vector<std::uint32_t>, 3> gradients;
+    std::array<std::vector<std::uint32_t>, 3> parameters;
+    std::array<std::vector<std::uint32_t>, 3> first_moments;
+    std::array<std::vector<std::uint32_t>, 3> second_moments;
+    std::int64_t t = 0;
+};
 
-    // Bring target to the same post-g1 state as source.
-    assign_grad(source_p, g1);
-    source.step();
-    source.zero_grad();
-    assign_grad(target_p, g1);
-    target.step();
-    target.zero_grad();
-    // Reference needs to also see g1 so its bias-correction step
-    // count matches target's after load_state (t_ = 1).
-    assign_grad(ref_p, g1);
-    reference.step();
-    reference.zero_grad();
+std::uint32_t float_bits(float value) {
+    std::uint32_t bits = 0;
+    static_assert(sizeof(bits) == sizeof(value), "float must be 32-bit");
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
 
-    // Snapshot source's state and load it into target. After the
-    // load, target's optimizer state (moments, step_count,
-    // hyperparameters) is identical to source's — but target_p.value
-    // already matches source_p.value because we stepped target too.
-    ag::optim::AdamState snapshot = source.state();
-    CHECK(snapshot.first_moments[0].device().is_cuda());
-    CHECK(snapshot.second_moments[0].device().is_cuda());
-    target.load_state(snapshot);
-    CHECK(target.step_count() == source.step_count());
+std::vector<std::uint32_t> read_exact_bits(const Tensor& tensor) {
+    std::vector<float> values(tensor.elements());
+    read_host(tensor, values.data());
+    std::vector<std::uint32_t> bits;
+    bits.reserve(values.size());
+    for (float value : values) bits.push_back(float_bits(value));
+    return bits;
+}
 
-    // Snapshot moments are deep copies: mutating them does not
-    // perturb the live target optimizer's moments.
-    std::vector<float> zeros(pv.size(), 0.f);
-    snapshot.first_moments[0].copy_from_host(zeros.data(), zeros.size());
-    snapshot.second_moments[0].copy_from_host(zeros.data(), zeros.size());
+std::array<const Variable*, 3> fixture_parameters(
+    const AdamCudaFixture& fixture) {
+    return {&fixture.p0, &fixture.p1, &fixture.p2};
+}
 
-    // Continue both target (loaded) and reference (fresh) with the
-    // same gradient; they must converge to the same parameters
-    // because load_state restored target's full AdamState (step
-    // count + moments) before the next step.
-    assign_grad(target_p, g2);
-    target.step();
-    assign_grad(ref_p, g2);
-    reference.step();
+[[noreturn]] void exact_float_mismatch(const char* phase, int step,
+                                       const char* field, int parameter,
+                                       std::size_t element,
+                                       std::uint32_t actual,
+                                       std::uint32_t expected) {
+    std::fprintf(stderr,
+                 "FAIL exact: phase=%s step=%d field=%s parameter=%d "
+                 "element=%zu actual=0x%08x expected=0x%08x\n",
+                 phase, step, field, parameter, element, actual, expected);
+    std::exit(1);
+}
 
-    std::vector<float> tv(pv.size()), rv(pv.size());
-    read_host(target_p.value(), tv.data());
-    read_host(ref_p.value(), rv.data());
-    check_close(tv, rv, 5e-5f);
+[[noreturn]] void exact_integer_mismatch(const char* phase, int step,
+                                         const char* field,
+                                         std::int64_t actual,
+                                         std::int64_t expected) {
+    std::fprintf(stderr,
+                 "FAIL exact: phase=%s step=%d field=%s parameter=-1 "
+                 "element=0 actual=%lld expected=%lld\n",
+                 phase, step, field, static_cast<long long>(actual),
+                 static_cast<long long>(expected));
+    std::exit(1);
+}
 
-    report("Tensor CUDA: optim::Adam load_state preserves device, "
-           "continues trajectory, deep copies moments");
+void compare_exact_bits(const char* phase, int step, const char* field,
+                        int parameter,
+                        const std::vector<std::uint32_t>& actual,
+                        const std::vector<std::uint32_t>& expected) {
+    if (actual.size() != expected.size()) {
+        std::fprintf(stderr,
+                     "FAIL exact: phase=%s step=%d field=%s parameter=%d "
+                     "element=count actual=%zu expected=%zu\n",
+                     phase, step, field, parameter, actual.size(),
+                     expected.size());
+        std::exit(1);
+    }
+    for (std::size_t element = 0; element < actual.size(); ++element) {
+        if (actual[element] != expected[element]) {
+            exact_float_mismatch(phase, step, field, parameter, element,
+                                 actual[element], expected[element]);
+        }
+    }
+}
+
+void compare_exact_state(const char* phase, int step,
+                         const AdamExactObservation& actual,
+                         const AdamExactObservation& expected) {
+    for (int parameter = 0; parameter < 3; ++parameter) {
+        compare_exact_bits(phase, step, "parameter", parameter,
+                           actual.parameters[parameter],
+                           expected.parameters[parameter]);
+        compare_exact_bits(phase, step, "m", parameter,
+                           actual.first_moments[parameter],
+                           expected.first_moments[parameter]);
+        compare_exact_bits(phase, step, "v", parameter,
+                           actual.second_moments[parameter],
+                           expected.second_moments[parameter]);
+    }
+    if (actual.t != expected.t) {
+        exact_integer_mismatch(phase, step, "t", actual.t, expected.t);
+    }
+}
+
+void compare_exact_observation(const char* phase, int step,
+                               const AdamExactObservation& actual,
+                               const AdamExactObservation& expected) {
+    compare_exact_bits(phase, step, "loss", -1, actual.loss, expected.loss);
+    for (int parameter = 0; parameter < 3; ++parameter) {
+        compare_exact_bits(phase, step, "gradient", parameter,
+                           actual.gradients[parameter],
+                           expected.gradients[parameter]);
+    }
+    compare_exact_state(phase, step, actual, expected);
+}
+
+AdamExactObservation observe_adam_step(AdamCudaFixture& fixture) {
+    fixture.adam.zero_grad();
+
+    // Rebuild this shared graph for every step. The two uses of `shared`
+    // and the repeated p0 edge are intentional; no reduction is involved.
+    Variable shared = ag::mul(fixture.p0, fixture.p1);
+    Variable left = ag::mul(shared, fixture.p2);
+    Variable right = ag::scale(ag::mul(shared, fixture.p0), 0.5f);
+    Variable loss = ag::add(left, right);
+
+    AdamExactObservation observation;
+    observation.loss = read_exact_bits(loss.value());
+    loss.backward(Tensor::ones(loss.value().shape(), Device::cuda(0)));
+
+    const auto parameters = fixture_parameters(fixture);
+    for (int parameter = 0; parameter < 3; ++parameter) {
+        observation.gradients[parameter] =
+            read_exact_bits(parameters[parameter]->grad());
+    }
+
+    fixture.adam.step();
+    const ag::optim::AdamState state = fixture.adam.state();
+    for (int parameter = 0; parameter < 3; ++parameter) {
+        observation.parameters[parameter] =
+            read_exact_bits(parameters[parameter]->value());
+        observation.first_moments[parameter] =
+            read_exact_bits(state.first_moments[parameter]);
+        observation.second_moments[parameter] =
+            read_exact_bits(state.second_moments[parameter]);
+    }
+    observation.t = state.t;
+    return observation;
+}
+
+AdamExactObservation observe_adam_boundary(const AdamCudaFixture& fixture) {
+    AdamExactObservation observation;
+    const auto parameters = fixture_parameters(fixture);
+    const ag::optim::AdamState state = fixture.adam.state();
+    for (int parameter = 0; parameter < 3; ++parameter) {
+        observation.parameters[parameter] =
+            read_exact_bits(parameters[parameter]->value());
+        observation.first_moments[parameter] =
+            read_exact_bits(state.first_moments[parameter]);
+        observation.second_moments[parameter] =
+            read_exact_bits(state.second_moments[parameter]);
+    }
+    observation.t = state.t;
+    return observation;
+}
+
+std::array<float, 3> copy_adam_parameters_to_host(
+    const AdamCudaFixture& fixture) {
+    std::array<float, 3> values{};
+    const auto parameters = fixture_parameters(fixture);
+    for (int parameter = 0; parameter < 3; ++parameter) {
+        read_host(parameters[parameter]->value(), &values[parameter]);
+    }
+    return values;
+}
+
+void test_oop_adam_cuda_exact_shared_graph_trajectory() {
+    constexpr int total_steps = 7;
+    constexpr int split_step = 3;
+    const std::array<float, 3> initial_values{0.75f, -0.5f, 1.25f};
+    AdamCudaFixture a(initial_values);
+    AdamCudaFixture b(initial_values);
+
+    for (int step = 0; step <= split_step; ++step) {
+        const AdamExactObservation a_observation = observe_adam_step(a);
+        const AdamExactObservation b_observation = observe_adam_step(b);
+        compare_exact_observation("A/B", step, a_observation, b_observation);
+
+        if (step == split_step) {
+            const std::array<float, 3> boundary_values =
+                copy_adam_parameters_to_host(a);
+            AdamCudaFixture r(boundary_values);
+            ag::optim::AdamState interrupted = a.adam.state();
+            r.adam.load_state(interrupted);
+            compare_exact_state("A/R boundary", step,
+                                observe_adam_boundary(r),
+                                observe_adam_boundary(a));
+            for (std::size_t parameter = 0; parameter < 3; ++parameter) {
+                std::vector<float> zeros(
+                    interrupted.first_moments[parameter].elements(), 0.f);
+                interrupted.first_moments[parameter].copy_from_host(
+                    zeros.data(), zeros.size());
+                interrupted.second_moments[parameter].copy_from_host(
+                    zeros.data(), zeros.size());
+            }
+            compare_exact_state("A/R snapshot mutation", step,
+                                observe_adam_boundary(r),
+                                observe_adam_boundary(a));
+
+            for (int continued_step = split_step + 1;
+                 continued_step < total_steps; ++continued_step) {
+                const AdamExactObservation continued_a =
+                    observe_adam_step(a);
+                const AdamExactObservation continued_b =
+                    observe_adam_step(b);
+                const AdamExactObservation continued_r =
+                    observe_adam_step(r);
+                compare_exact_observation("A/B", continued_step,
+                                          continued_a, continued_b);
+                compare_exact_observation("A/R", continued_step,
+                                          continued_a, continued_r);
+            }
+        }
+    }
+
+    report("Tensor CUDA: Adam exact shared-graph trajectory and interruption restore");
 }
 
 void test_predicate_selection_and_status_cuda() {
@@ -2045,7 +2207,7 @@ int main() {
     test_oop_sgd_cuda_mixed_list();
     test_oop_adam_cuda_step_parity_and_moments();
     test_oop_adam_cuda_mixed_list();
-    test_oop_adam_cuda_load_state_preserves_device();
+    test_oop_adam_cuda_exact_shared_graph_trajectory();
     test_predicate_selection_and_status_cuda();
     test_fixed_grid_support_cuda();
 
