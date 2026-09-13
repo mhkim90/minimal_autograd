@@ -10,6 +10,20 @@ define authority, contextual approval, protected boundaries, and the complete
 invalidation set. This reference supplies the publication order below; it does
 not add authority or override the core gate.
 
+### Exact publication-transfer binding
+
+Immediately before a publication transfer, bind the source repository, named
+configured GitHub destination, base, branch, exact approved payload paths/diff
+or manifest, minimum PR metadata, and permitted actions in one visible prompt;
+read [templates.md](templates.md) immediately before presenting that prompt.
+An immediately following `approve`/`approved` authorizes only the unchanged
+enumerated transfer, without a duplicate disclosure prompt, and never supplies
+an omitted field. A changed repository, destination, base, branch, payload,
+manifest, metadata, or eligibility; an unconfigured service, out-of-scope
+private material, destructive action, readiness, merge, later phase, or host
+rejection stops the transfer and requires fresh exact authority. Host policy and
+safety enforcement are never bypassed.
+
 ### Qualified mechanical skill-sync bundle
 
 `skill-sync` alone may replace repeated target approvals, and only after its
@@ -61,7 +75,7 @@ requires fresh approval.
 
 ## Plan-first workflow
 
-Follow the core's [combined topology and boundary rules](../SKILL.md#delivery-topology).
+Follow the core's [combined topology and boundary rules](../SKILL.md#authorization-and-p0-verification).
 When publication is permitted, execute the combined L2/L3 workflow in this
 order:
 
@@ -112,6 +126,25 @@ name the target repository, exact worktree and branch, exact paths or diff, and
 permitted target actions; it authorizes only those actions and never a merge.
 For the L1 fast path, record qualification and acceptance evidence in the
 normal PR and wait for separate final merge approval.
+
+### Post-action successor evaluation
+
+After a successful authorized action or verified merge, update the ledger,
+refresh continuity and live state, and evaluate the ordered successor under the
+core's [automatic successor transition](../SKILL.md#automatic-successor-transition)
+guard. Only an eligible uniquely declared `advance: auto` successor with its
+existing named worktree may enter automatic preflight or bounded in-scope work;
+do not create a worktree merely to continue, and delegate only where the
+approved route and existing authority already permit it. This transition does
+not change the scopes of plan approval, delivery approval, administrative
+readiness, or bound merge approval.
+
+If the successor preflight is green but requires a commit, push, PR
+creation/update, readiness change, merge, release, deployment, downstream or
+cross-repository sync, stop before that action and present one precise request
+for its independently required authority. Automatic advance never supplies
+that authority. Record the successor, guard evidence, and transition
+disposition in the phase report.
 
 ## Minimum phase report
 
