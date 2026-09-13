@@ -38,6 +38,25 @@ __global__ void sum_kernel(const float* input, float* out, std::size_t n) {
     *out = sum;
 }
 
+__global__ void sum_fixed_tree_kernel(const float* input, float* partials,
+                                      std::size_t n) {
+    __shared__ float lane_sums[256];
+    const std::size_t lane = threadIdx.x;
+    const std::size_t base = static_cast<std::size_t>(blockIdx.x) * 1024;
+    float sum = 0.f;
+    for (std::size_t item = 0; item < 4; ++item) {
+        const std::size_t index = base + lane * 4 + item;
+        if (index < n) sum += input[index];
+    }
+    lane_sums[lane] = sum;
+    __syncthreads();
+    for (std::size_t stride = 128; stride != 0; stride /= 2) {
+        if (lane < stride) lane_sums[lane] += lane_sums[lane + stride];
+        __syncthreads();
+    }
+    if (lane == 0) partials[blockIdx.x] = lane_sums[0];
+}
+
 __global__ void broadcast_scalar_kernel(const float* scalar, float* out,
                                         std::size_t n) {
     const std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -409,9 +428,21 @@ Tensor cuda_tensor_sum(const Tensor& a) {
     check(cudaMemset(tensor_data(out), 0, sizeof(float)),
           "cudaMemset(cuda_tensor_sum)");
     if (a.elements() == 0) return out;
-    sum_kernel<<<1, 1>>>(
-        tensor_data(a), tensor_data(out), a.elements());
-    finish_kernel("cuda_tensor_sum");
+    if (a.elements() <= 256) {
+        sum_kernel<<<1, 1>>>(
+            tensor_data(a), tensor_data(out), a.elements());
+        finish_kernel("cuda_tensor_sum");
+        return out;
+    }
+    const std::size_t num_blocks = a.elements() / 1024
+        + (a.elements() % 1024 != 0 ? 1 : 0);
+    Tensor partials = Tensor::empty(
+        Shape{static_cast<int64_t>(num_blocks)}, a.device());
+    sum_fixed_tree_kernel<<<static_cast<int>(num_blocks), 256>>>(
+        tensor_data(a), tensor_data(partials), a.elements());
+    finish_kernel("cuda_tensor_sum first stage");
+    sum_kernel<<<1, 1>>>(tensor_data(partials), tensor_data(out), num_blocks);
+    finish_kernel("cuda_tensor_sum second stage");
     return out;
 }
 
