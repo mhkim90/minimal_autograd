@@ -53,6 +53,7 @@
 #include "autograd/core/variable.h"
 #include "autograd/device.h"
 #include "autograd/shape.h"
+#include "../src/detail/tensor_cuda_ops.h"
 
 #include <algorithm>
 #include <array>
@@ -2568,9 +2569,115 @@ void test_fixed_grid_support_cuda() {
     report("Tensor CUDA ops: fixed-grid support matches clamped floor boundaries");
 }
 
+struct CudaSumBenchmarkResult {
+    float milliseconds = 0.f;
+    std::uint32_t output_bits = 0;
+    bool repeated_bits_match = true;
+};
+
+std::vector<float> benchmark_ordinary_values(std::size_t n) {
+    std::vector<float> values(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        values[i] = static_cast<float>((i * 13) % 29) * 0.03125f - 0.375f;
+    }
+    return values;
+}
+
+void benchmark_cuda_check(cudaError_t status, const char* operation) {
+    if (status != cudaSuccess) {
+        std::fprintf(stderr, "FAIL benchmark: operation=%s error=%s\n",
+                     operation, cudaGetErrorString(status));
+        std::exit(1);
+    }
+}
+
+CudaSumBenchmarkResult benchmark_cuda_sum(const std::vector<float>& values) {
+    constexpr int warmup_runs = 10;
+    constexpr int measured_runs = 50;
+    const Tensor input = Tensor::from_host(
+        values.data(), Shape{static_cast<std::int64_t>(values.size())},
+        Device::cuda(0));
+
+    for (int run = 0; run < warmup_runs; ++run) {
+        Tensor output = ag::detail::cuda_tensor_sum(input);
+        (void)output;
+    }
+
+    cudaEvent_t start = nullptr;
+    cudaEvent_t stop = nullptr;
+    benchmark_cuda_check(cudaEventCreate(&start), "cudaEventCreate(start)");
+    benchmark_cuda_check(cudaEventCreate(&stop), "cudaEventCreate(stop)");
+
+    float total_milliseconds = 0.f;
+    std::uint32_t first_bits = 0;
+    bool repeated_bits_match = true;
+    for (int run = 0; run < measured_runs; ++run) {
+        benchmark_cuda_check(cudaEventRecord(start), "cudaEventRecord(start)");
+        // Do not reuse output: cuda_tensor_sum's existing output allocation is
+        // part of every timed operation.
+        Tensor output = ag::detail::cuda_tensor_sum(input);
+        benchmark_cuda_check(cudaEventRecord(stop), "cudaEventRecord(stop)");
+        benchmark_cuda_check(cudaEventSynchronize(stop),
+                             "cudaEventSynchronize(stop)");
+        float milliseconds = 0.f;
+        benchmark_cuda_check(cudaEventElapsedTime(&milliseconds, start, stop),
+                             "cudaEventElapsedTime");
+        total_milliseconds += milliseconds;
+
+        const std::vector<std::uint32_t> bits = read_exact_bits(output);
+        CHECK(bits.size() == 1);
+        if (run == 0) {
+            first_bits = bits[0];
+        } else if (bits[0] != first_bits) {
+            repeated_bits_match = false;
+        }
+    }
+
+    benchmark_cuda_check(cudaEventDestroy(start), "cudaEventDestroy(start)");
+    benchmark_cuda_check(cudaEventDestroy(stop), "cudaEventDestroy(stop)");
+    return {total_milliseconds / measured_runs, first_bits,
+            repeated_bits_match};
+}
+
+int run_cuda_sum_benchmark() {
+    if (!cuda_available()) {
+        std::printf("CUDA_SUM_BENCHMARK status=skip reason=no_cuda_device "
+                    "production_proxy=unavailable\n");
+        return 0;
+    }
+
+    constexpr std::array<std::size_t, 8> sizes{
+        64, 81, 255, 256, 257, 1024, 4096, 65536};
+    std::printf("CUDA_SUM_BENCHMARK version=1 warmups=10 runs=50 "
+                "production_proxy=unavailable\n");
+    for (std::size_t n : sizes) {
+        const std::array<std::pair<const char*, std::vector<float>>, 2> cases{
+            std::make_pair("ordinary", benchmark_ordinary_values(n)),
+            std::make_pair("cancellation", d31_heterogeneous_values(n))};
+        for (const auto& input_case : cases) {
+            const CudaSumBenchmarkResult result =
+                benchmark_cuda_sum(input_case.second);
+            std::printf("CUDA_SUM size=%zu input=%s avg_ms=%.6f "
+                        "output_bits=0x%08x repeat_bits=%s\n",
+                        n, input_case.first,
+                        static_cast<double>(result.milliseconds),
+                        result.output_bits,
+                        result.repeated_bits_match ? "match" : "mismatch");
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc == 2 && std::strcmp(argv[1], "--benchmark-cuda-sum") == 0) {
+        return run_cuda_sum_benchmark();
+    }
+    if (argc != 1) {
+        std::fprintf(stderr, "usage: %s [--benchmark-cuda-sum]\n", argv[0]);
+        return 2;
+    }
     if (!cuda_available()) {
         std::printf("\nSKIP CUDA TENSOR TESTS: no reachable CUDA device\n");
         return 0;
