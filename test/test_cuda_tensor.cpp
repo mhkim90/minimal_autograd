@@ -638,6 +638,8 @@ void test_header_hygiene_preprocessor() {
     report("Tensor CUDA: public OOP headers and cuda extension stay CUDA-runtime free");
 }
 
+#include <cuda_runtime_api.h>
+
 void test_legacy_extension_eigen_aliases_still_available() {
     // extension/eigen.h is the opt-in path for the legacy Var / Mats
     // / shape(Mat) / numel(Mat) aliases; CUDA-enabled consumers
@@ -1175,6 +1177,415 @@ void test_oop_broadcast_repeated_backward_cuda() {
     CHECK(x.grad().device().is_cuda());
 
     report("Tensor CUDA: broadcast graph accumulates repeated backward on CUDA");
+}
+
+std::vector<float> d21_cancellation_sensitive_values() {
+    const std::array<float, 9> pattern{
+        1.0e20f, 1.0f, -1.0e20f,
+        3.0f, -3.0f, 65536.0f,
+        -65535.0f, 0.03125f, -0.03125f,
+    };
+    std::vector<float> values(81);
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        values[i] = pattern[i % pattern.size()];
+    }
+    return values;
+}
+
+std::vector<float> d21_plane_values() {
+    std::vector<float> values(81);
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        values[i] = static_cast<float>(i % 13) * 0.125f - 0.75f;
+    }
+    return values;
+}
+
+void d21_synchronize(const char* operation, int iteration) {
+    const cudaError_t status = cudaDeviceSynchronize();
+    if (status != cudaSuccess) {
+        std::fprintf(stderr,
+                     "FAIL exact: operation=%s pair=A/B iteration=%d "
+                     "cudaDeviceSynchronize error=%s\n",
+                     operation, iteration, cudaGetErrorString(status));
+        std::exit(1);
+    }
+}
+
+std::vector<std::uint32_t> read_exact_bits(const Tensor& tensor);
+std::uint32_t float_bits(float value);
+
+void d21_compare_scalar(const char* operation, int iteration,
+                        const std::vector<std::uint32_t>& actual,
+                        const std::vector<std::uint32_t>& expected) {
+    if (actual.size() != 1 || expected.size() != 1 ||
+        actual[0] != expected[0]) {
+        const std::uint32_t actual_bits = actual.empty() ? 0 : actual[0];
+        const std::uint32_t expected_bits = expected.empty() ? 0 : expected[0];
+        std::fprintf(stderr,
+                     "FAIL exact: operation=%s pair=A/B iteration=%d "
+                     "actual=0x%08x expected=0x%08x\n",
+                     operation, iteration, actual_bits, expected_bits);
+        std::exit(1);
+    }
+}
+
+void test_d21_scalar_broadcast_add_backward_exact_isolation() {
+    constexpr int iterations = 32;
+    const Shape plane_shape{9, 9};
+    const std::vector<float> plane_values = d21_plane_values();
+    const std::vector<float> upstream_values =
+        d21_cancellation_sensitive_values();
+    const float scalar_value = 0.25f;
+    const Tensor upstream = Tensor::from_host(
+        upstream_values.data(), plane_shape, Device::cuda(0));
+
+    for (int iteration = 0; iteration < iterations; ++iteration) {
+        Variable a_scalar(
+            Tensor::from_host(&scalar_value, Shape{}, Device::cuda(0)), true);
+        Variable a_plane(Tensor::from_host(
+            plane_values.data(), plane_shape, Device::cuda(0)), true);
+        Variable b_scalar(
+            Tensor::from_host(&scalar_value, Shape{}, Device::cuda(0)), true);
+        Variable b_plane(Tensor::from_host(
+            plane_values.data(), plane_shape, Device::cuda(0)), true);
+
+        Variable a_output = ag::broadcast_add(a_scalar, a_plane);
+        Variable b_output = ag::broadcast_add(b_scalar, b_plane);
+        a_output.backward(upstream);
+        b_output.backward(upstream);
+        d21_synchronize("broadcast_add backward scalar gradient", iteration);
+
+        d21_compare_scalar(
+            "broadcast_add backward scalar gradient", iteration,
+            read_exact_bits(a_scalar.grad()), read_exact_bits(b_scalar.grad()));
+    }
+
+    report("D2.1 exact isolation: scalar broadcast_add backward");
+}
+
+void test_d21_full_scalar_sum_exact_isolation() {
+    constexpr int iterations = 32;
+    const Shape input_shape{9, 9};
+    const std::vector<float> input_values = d21_cancellation_sensitive_values();
+
+    for (int iteration = 0; iteration < iterations; ++iteration) {
+        Variable a_input(Tensor::from_host(
+            input_values.data(), input_shape, Device::cuda(0)), true);
+        Variable b_input(Tensor::from_host(
+            input_values.data(), input_shape, Device::cuda(0)), true);
+        Variable a_output = ag::sum(a_input);
+        Variable b_output = ag::sum(b_input);
+        d21_synchronize("full scalar sum", iteration);
+
+        d21_compare_scalar("full scalar sum", iteration,
+                           read_exact_bits(a_output.value()),
+                           read_exact_bits(b_output.value()));
+    }
+
+    report("D2.1 exact isolation: full scalar sum");
+}
+
+bool d31_failed = false;
+
+std::vector<float> d31_heterogeneous_values(std::size_t n) {
+    const std::array<float, 9> pattern{
+        1.0e20f, 1.0f, -1.0e20f,
+        3.0f, -3.0f, 65536.0f,
+        -65535.0f, 0.03125f, -0.03125f,
+    };
+    std::vector<float> values(n);
+    for (std::size_t i = 0; i < n; ++i) values[i] = pattern[i % pattern.size()];
+    return values;
+}
+
+float d31_expected_scalar_sum(const std::vector<float>& values) {
+    float sum = 0.f;
+    for (float value : values) sum += value;
+    return sum;
+}
+
+std::vector<float> d31_plane_values(std::size_t n) {
+    std::vector<float> values(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        values[i] = static_cast<float>((i * 7) % 23) * 0.03125f - 0.25f;
+    }
+    return values;
+}
+
+void d31_note_scalar_expected(const Shape& shape, const char* order,
+                              int iteration,
+                              const std::vector<std::uint32_t>& actual,
+                              std::uint32_t expected, bool& reported) {
+    if (reported || (actual.size() == 1 && actual[0] == expected)) return;
+    const std::uint32_t actual_bits = actual.empty() ? 0 : actual[0];
+    std::fprintf(stderr,
+                 "FAIL D3.1 exact: shape=%s order=%s iteration=%d "
+                 "field=scalar_gradient actual=0x%08x expected=0x%08x\n",
+                 shape.to_string().c_str(), order, iteration, actual_bits,
+                 expected);
+    reported = true;
+    d31_failed = true;
+}
+
+void d31_note_scalar_mismatch(const Shape& shape, const char* order,
+                              int iteration,
+                              const std::vector<std::uint32_t>& actual,
+                              const std::vector<std::uint32_t>& expected,
+                              bool& reported) {
+    if (reported || (actual.size() == 1 && expected.size() == 1 &&
+                     actual[0] == expected[0])) {
+        return;
+    }
+    const std::uint32_t actual_bits = actual.empty() ? 0 : actual[0];
+    const std::uint32_t expected_bits = expected.empty() ? 0 : expected[0];
+    std::fprintf(stderr,
+                 "FAIL D3.1 exact: shape=%s order=%s pair=A/B "
+                 "iteration=%d field=scalar_gradient "
+                 "actual=0x%08x expected=0x%08x\n",
+                 shape.to_string().c_str(), order, iteration,
+                 actual_bits, expected_bits);
+    reported = true;
+    d31_failed = true;
+}
+
+void test_d31_rank0_scalar_second_broadcast_backward_exact() {
+    constexpr int repetitions = 32;
+    const std::array<Shape, 2> plane_shapes{Shape{1, 1, 9, 9}, Shape{8, 8}};
+    const float scalar_value = 0.25f;
+
+    for (const Shape& plane_shape : plane_shapes) {
+        const std::vector<float> plane_values =
+            d31_plane_values(plane_shape.numel());
+        const std::vector<float> upstream_values =
+            d31_heterogeneous_values(plane_shape.numel());
+        const std::uint32_t expected_scalar_bits =
+            float_bits(d31_expected_scalar_sum(upstream_values));
+        const Tensor upstream = Tensor::from_host(
+            upstream_values.data(), plane_shape, Device::cuda(0));
+
+        for (int order_index = 0; order_index < 2; ++order_index) {
+            const char* order = order_index == 0
+                ? "plane+scalar(scalar-second)"
+                : "scalar+plane(scalar-first)";
+            bool reported = false;
+            for (int iteration = 0; iteration < repetitions; ++iteration) {
+                Variable a_plane(Tensor::from_host(
+                    plane_values.data(), plane_shape, Device::cuda(0)), false);
+                Variable a_scalar(Tensor::from_host(
+                    &scalar_value, Shape{}, Device::cuda(0)), true);
+                Variable b_plane(Tensor::from_host(
+                    plane_values.data(), plane_shape, Device::cuda(0)), false);
+                Variable b_scalar(Tensor::from_host(
+                    &scalar_value, Shape{}, Device::cuda(0)), true);
+
+                Variable a_output = order_index == 0
+                    ? ag::broadcast_add(a_plane, a_scalar)
+                    : ag::broadcast_add(a_scalar, a_plane);
+                Variable b_output = order_index == 0
+                    ? ag::broadcast_add(b_plane, b_scalar)
+                    : ag::broadcast_add(b_scalar, b_plane);
+                a_output.backward(upstream);
+                b_output.backward(upstream);
+                d21_synchronize("D3.1 rank-0 broadcast backward", iteration);
+
+                CHECK(a_scalar.grad().shape() == Shape{});
+                CHECK(a_scalar.grad().device().is_cuda());
+                CHECK(a_scalar.grad().device().index() == 0);
+                CHECK(b_scalar.grad().shape() == Shape{});
+                CHECK(b_scalar.grad().device().is_cuda());
+                CHECK(b_scalar.grad().device().index() == 0);
+                const std::vector<std::uint32_t> a_scalar_bits =
+                    read_exact_bits(a_scalar.grad());
+                const std::vector<std::uint32_t> b_scalar_bits =
+                    read_exact_bits(b_scalar.grad());
+                d31_note_scalar_mismatch(
+                    plane_shape, order, iteration,
+                    a_scalar_bits, b_scalar_bits, reported);
+                d31_note_scalar_expected(plane_shape, order, iteration,
+                                         a_scalar_bits, expected_scalar_bits,
+                                         reported);
+                d31_note_scalar_expected(plane_shape, order, iteration,
+                                         b_scalar_bits, expected_scalar_bits,
+                                         reported);
+            }
+        }
+    }
+
+    if (!d31_failed) {
+        report("D3.1 exact: rank-0 scalar-second broadcast backward");
+    } else {
+        std::printf("  [diagnostic red] D3.1 rank-0 scalar broadcast mismatch recorded\n");
+    }
+}
+
+void test_d31_empty_upstream_rank0_scalar_broadcast() {
+    const std::array<Shape, 2> empty_shapes{Shape{0, 3}, Shape{1, 0, 9, 9}};
+    const float scalar_value = 0.25f;
+
+    for (const Shape& plane_shape : empty_shapes) {
+        for (int order_index = 0; order_index < 2; ++order_index) {
+            Variable scalar(Tensor::from_host(
+                &scalar_value, Shape{}, Device::cuda(0)), true);
+            Variable plane(Tensor::empty(plane_shape, Device::cuda(0)), false);
+            Variable output = order_index == 0
+                ? ag::broadcast_add(plane, scalar)
+                : ag::broadcast_add(scalar, plane);
+            output.backward(Tensor::empty(plane_shape, Device::cuda(0)));
+
+            CHECK(scalar.grad().shape() == Shape{});
+            CHECK(scalar.grad().device().is_cuda());
+            CHECK(scalar.grad().device().index() == 0);
+            const std::vector<std::uint32_t> bits = read_exact_bits(scalar.grad());
+            CHECK(bits.size() == 1);
+            CHECK(bits[0] == float_bits(0.f));
+        }
+    }
+
+    report("D3.1 exact: empty-upstream rank-0 scalar broadcast is CUDA zero");
+}
+
+struct D31GaussianGraph {
+    Variable log_sigma;
+    Variable sigma;
+    Variable sigma_sq;
+    Variable sigma_sq_broadcast;
+    Variable exponent;
+    Variable exp_exponent;
+    Variable log_sum_exp;
+    Variable normalizer_broadcast;
+    Variable gaussian;
+};
+
+D31GaussianGraph d31_make_gaussian_graph(const Shape& shape,
+                                         const std::vector<float>& input,
+                                         float log_sigma_seed) {
+    Variable x(Tensor::from_host(input.data(), shape, Device::cuda(0)), false);
+    Variable log_sigma(Tensor::from_host(
+        &log_sigma_seed, Shape{}, Device::cuda(0)), true);
+    Variable sigma = ag::exp_op(log_sigma);
+    Variable sigma_sq = ag::mul(sigma, sigma);
+    Variable zeros(Tensor::zeros(shape, Device::cuda(0)), false);
+    Variable sigma_sq_broadcast = ag::broadcast_add(zeros, sigma_sq);
+    Variable squared = ag::mul(x, x);
+    Variable exponent = ag::scale(
+        ag::div_op(squared, sigma_sq_broadcast), -0.5f);
+    Variable exp_exponent = ag::exp_op(exponent);
+    Variable log_sum_exp = ag::log_op(ag::sum(exp_exponent));
+    Variable normalizer_broadcast = ag::broadcast_add(zeros, log_sum_exp);
+    Variable gaussian = ag::exp_op(
+        ag::sub(exponent, normalizer_broadcast));
+    return {std::move(log_sigma), std::move(sigma), std::move(sigma_sq),
+            std::move(sigma_sq_broadcast), std::move(exponent),
+            std::move(exp_exponent), std::move(log_sum_exp),
+            std::move(normalizer_broadcast), std::move(gaussian)};
+}
+
+void d31_note_graph_mismatch(const char* boundary, const char* field,
+                             int seed_index, float seed, int iteration,
+                             const std::vector<std::uint32_t>& actual,
+                             const std::vector<std::uint32_t>& expected,
+                             bool& reported) {
+    if (reported || (actual.size() == expected.size() &&
+                     std::equal(actual.begin(), actual.end(), expected.begin()))) {
+        return;
+    }
+    std::size_t element = 0;
+    const std::size_t count = std::min(actual.size(), expected.size());
+    while (element < count && actual[element] == expected[element]) ++element;
+    const std::uint32_t actual_bits = element < actual.size() ? actual[element] : 0;
+    const std::uint32_t expected_bits =
+        element < expected.size() ? expected[element] : 0;
+    std::fprintf(stderr,
+                 "FAIL D3.1 exact: shape={1,1,9,9} graph=Gaussian "
+                 "seed_index=%d seed=% .8g boundary=%s field=%s pair=A/B "
+                 "iteration=%d element=%zu actual=0x%08x expected=0x%08x\n",
+                 seed_index, static_cast<double>(seed), boundary, field,
+                 iteration, element, actual_bits, expected_bits);
+    reported = true;
+    d31_failed = true;
+}
+
+void test_d31_public_gaussian_subgraph_exact() {
+    constexpr int repetitions = 8;
+    const Shape shape{1, 1, 9, 9};
+    const std::vector<float> input = d31_plane_values(shape.numel());
+    const std::vector<float> upstream = d31_heterogeneous_values(shape.numel());
+    const std::array<float, 2> seeds{-0.35f, 0.4f};
+
+    for (std::size_t seed_index = 0; seed_index < seeds.size(); ++seed_index) {
+        bool reported = false;
+        for (int iteration = 0; iteration < repetitions; ++iteration) {
+            D31GaussianGraph a = d31_make_gaussian_graph(
+                shape, input, seeds[seed_index]);
+            D31GaussianGraph b = d31_make_gaussian_graph(
+                shape, input, seeds[seed_index]);
+            d21_synchronize("D3.1 Gaussian forward", iteration);
+
+            const std::array<std::pair<const char*, const Variable*>, 8> values{
+                std::make_pair("sigma", &a.sigma),
+                std::make_pair("sigma_sq", &a.sigma_sq),
+                std::make_pair("sigma_sq_broadcast", &a.sigma_sq_broadcast),
+                std::make_pair("exponent", &a.exponent),
+                std::make_pair("exp_exponent", &a.exp_exponent),
+                std::make_pair("log_sum_exp", &a.log_sum_exp),
+                std::make_pair("normalizer_broadcast", &a.normalizer_broadcast),
+                std::make_pair("gaussian", &a.gaussian),
+            };
+            const std::array<const Variable*, 8> expected_values{
+                &b.sigma, &b.sigma_sq, &b.sigma_sq_broadcast, &b.exponent,
+                &b.exp_exponent, &b.log_sum_exp, &b.normalizer_broadcast,
+                &b.gaussian};
+            for (std::size_t boundary = 0; boundary < values.size(); ++boundary) {
+                d31_note_graph_mismatch(
+                    values[boundary].first, "value",
+                    static_cast<int>(seed_index), seeds[seed_index], iteration,
+                    read_exact_bits(values[boundary].second->value()),
+                    read_exact_bits(expected_values[boundary]->value()),
+                    reported);
+                if (reported) break;
+            }
+            if (reported) continue;
+
+            a.gaussian.backward(Tensor::from_host(
+                upstream.data(), shape, Device::cuda(0)));
+            b.gaussian.backward(Tensor::from_host(
+                upstream.data(), shape, Device::cuda(0)));
+            d21_synchronize("D3.1 Gaussian backward", iteration);
+
+            const std::array<std::pair<const char*, const Variable*>, 9> gradients{
+                // Walk from the Gaussian output toward log_sigma so the
+                // first mismatch identifies the earliest backward boundary.
+                std::make_pair("gaussian", &a.gaussian),
+                std::make_pair("normalizer_broadcast", &a.normalizer_broadcast),
+                std::make_pair("log_sum_exp", &a.log_sum_exp),
+                std::make_pair("exp_exponent", &a.exp_exponent),
+                std::make_pair("exponent", &a.exponent),
+                std::make_pair("sigma_sq_broadcast", &a.sigma_sq_broadcast),
+                std::make_pair("sigma_sq", &a.sigma_sq),
+                std::make_pair("sigma", &a.sigma),
+                std::make_pair("log_sigma", &a.log_sigma),
+            };
+            const std::array<const Variable*, 9> expected_gradients{
+                &b.gaussian, &b.normalizer_broadcast, &b.log_sum_exp,
+                &b.exp_exponent, &b.exponent, &b.sigma_sq_broadcast,
+                &b.sigma_sq, &b.sigma, &b.log_sigma};
+            for (std::size_t boundary = 0; boundary < gradients.size(); ++boundary) {
+                d31_note_graph_mismatch(
+                    gradients[boundary].first, "gradient",
+                    static_cast<int>(seed_index), seeds[seed_index], iteration,
+                    read_exact_bits(gradients[boundary].second->grad()),
+                    read_exact_bits(expected_gradients[boundary]->grad()),
+                    reported);
+                if (reported) break;
+            }
+        }
+    }
+
+    if (!d31_failed) {
+        report("D3.1 exact: public Gaussian subgraph values and gradients");
+    } else {
+        std::printf("  [diagnostic red] D3.1 Gaussian first mismatch recorded\n");
+    }
 }
 
 void test_oop_backward_cuda_accumulates_and_matmul_works() {
@@ -2189,6 +2600,11 @@ int main() {
     test_oop_elementwise_rank4_and_empty_cuda();
     test_oop_broadcast_add_rank4_cuda();
     test_oop_sum_axes_and_mean_cuda();
+    test_d21_scalar_broadcast_add_backward_exact_isolation();
+    test_d21_full_scalar_sum_exact_isolation();
+    test_d31_rank0_scalar_second_broadcast_backward_exact();
+    test_d31_empty_upstream_rank0_scalar_broadcast();
+    test_d31_public_gaussian_subgraph_exact();
     test_oop_softmax_nonlast_axis_cuda();
     test_oop_broadcast_repeated_backward_cuda();
     test_oop_backward_cuda_accumulates_and_matmul_works();
@@ -2211,6 +2627,11 @@ int main() {
     test_predicate_selection_and_status_cuda();
     test_fixed_grid_support_cuda();
 
+    if (d31_failed) {
+        std::printf("\nD3.1 CUDA TENSOR DIAGNOSTICS RED (%d prior checks passed)\n",
+                    passed);
+        return 1;
+    }
     std::printf("\nALL CUDA TENSOR TESTS PASSED (%d)\n", passed);
     return 0;
 }

@@ -32,8 +32,10 @@ inline void finish_kernel(const char* what) {
 }
 
 __global__ void sum_kernel(const float* input, float* out, std::size_t n) {
-    const std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) atomicAdd(out, input[i]);
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
+    float sum = 0.f;
+    for (std::size_t i = 0; i < n; ++i) sum += input[i];
+    *out = sum;
 }
 
 __global__ void broadcast_scalar_kernel(const float* scalar, float* out,
@@ -407,7 +409,7 @@ Tensor cuda_tensor_sum(const Tensor& a) {
     check(cudaMemset(tensor_data(out), 0, sizeof(float)),
           "cudaMemset(cuda_tensor_sum)");
     if (a.elements() == 0) return out;
-    sum_kernel<<<blocks(a.elements()), 256>>>(
+    sum_kernel<<<1, 1>>>(
         tensor_data(a), tensor_data(out), a.elements());
     finish_kernel("cuda_tensor_sum");
     return out;
@@ -465,6 +467,7 @@ Tensor cuda_tensor_broadcast_add_backward(const Tensor& g,
     if (rank_input > rank_g) {
         throw std::invalid_argument("broadcast_add_backward: rank mismatch");
     }
+    if (input_shape.rank() == 0) return cuda_tensor_sum(g);
     Tensor out = Tensor::empty(input_shape, g.device());
     if (out.elements() == 0) return out;
     set_device(g, "cuda_tensor_broadcast_add_backward");
