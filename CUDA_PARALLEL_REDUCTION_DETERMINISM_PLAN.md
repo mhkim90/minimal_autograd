@@ -105,11 +105,15 @@ cannot be reproduced.
 
 Risk: L2.  Difficulty: standard.  Route: `agent="luna"`.
 
-P1 freezes the cutoff, block size, items-per-thread, and contiguous-tile rule.
-Add a CPU mirror of that exact fixed tree and select a cancellation-heavy input
-above the cutoff whose fixed-tree bits differ from the serial left fold.  The
-new assertion is therefore RED against the current serial implementation and
-locks the selected addition graph without an internal production test hook.
+P1 freezes the cutoff only.  At P2 entry, the controller records the initial
+fixed-tree configuration of `256` threads per block, `4` contiguous items per
+thread, and contiguous indexed tiles (`1024` elements per full tile).  This
+choice is a correctness contract for P2/P3, not a performance claim; changing
+it later requires a plan revision.  Add a CPU mirror of that exact fixed tree
+and select a cancellation-heavy input above the cutoff whose fixed-tree bits
+differ from the serial left fold.  The new assertion is therefore RED against
+the current serial implementation and locks the selected addition graph
+without an internal production test hook.
 Preserve existing small-input left-fold oracles unchanged.  New large-path
 tests cover:
 
