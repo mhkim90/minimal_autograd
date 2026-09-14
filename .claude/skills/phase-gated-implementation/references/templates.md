@@ -28,23 +28,28 @@ retries, requested agent, job ID, session ID, bound/reported model, and route
 
 ## Plan-and-Draft authorization checkpoint
 
-For eligible L2/L3 work, present this exact named action only after the plan
-has passed its red gate. The controller resolves the fields; do not request a
-user-supplied SHA.
+For eligible L2/L3 work, present this exact visible publication-transfer action
+only after the plan has passed its red gate. It must enumerate the source
+repository, configured GitHub destination, base, branch, approved payload paths
+or diff/manifest, minimum PR metadata, and allowed actions. The controller
+resolves the fields; do not request a user-supplied SHA.
 
 ```text
-Authorize Plan-and-Draft for repository=<repository>; exact worktree=<worktree>;
-branch=<branch>; base=<base>; plan path/revision=<path and approved revision>;
-exact plan diff=<controller-rendered exact approved plan diff>; one draft
-PR=<named draft PR/title and target>.
-Permitted actions only: commit the named plan, push the named branch, and
-create the named draft PR. Not permitted: implementation, readiness, merge,
-deployment/release, cross-repository delivery, target sync, or any other PR.
+Authorize Plan-and-Draft publication transfer: source repository=<repository>;
+configured GitHub destination=<configured host/owner/repository>; exact
+worktree=<worktree>; branch=<branch>; base=<base>; approved payload paths or
+diff/manifest=<plan path and approved revision plus exact approved diff paths,
+diff, or manifest>; minimum PR metadata=<title, draft status, and only the
+enumerated body/labels>; allowed actions only=<commit the named plan, push the
+named branch, and create the named draft PR>.
+Not permitted: implementation, readiness, merge, deployment/release,
+cross-repository delivery, target sync, or any other PR.
 ```
 
-This checkpoint is not implementation authority. A bare `approve` or
-`approved` reply is valid only for this immediately preceding exact prompt and
-never supplies a missing field.
+This checkpoint is not implementation authority. An immediately following bare
+`approve` or `approved` authorizes only the unchanged transfer enumerated above;
+do not ask a duplicate disclosure prompt, and never infer a missing field or
+authorize a changed destination, payload, or action.
 
 ## Visible-draft Implementation authorization checkpoint
 
@@ -181,6 +186,9 @@ Reviewer trigger reason: <reason or none>; independent reviewer/state/verdict: <
 Red gate: <right failure then pass>; attempts: <used>/<cap>
 Validation: <commands/results>; metrics: <values>; usage: <accounting and completeness warnings, if available>
 Plan deviations: <none or rationale>
+Successor: <uniquely declared immediate successor and existing named worktree | not declared | ambiguous | none>
+Successor evidence: <advance: auto declaration, scope/route/dependency/acceptance/topology, ancestry, blocker, and live-state/preflight evidence>
+Transition disposition: <auto-advanced | waiting-for-explicit-delivery | waiting-for-manual-boundary | blocked>
 Gate: <published; auto-proceeding | published; proceeding-within-approved-combined-topology | published; waiting-for-next-phase-approval | blocked>
 ```
 

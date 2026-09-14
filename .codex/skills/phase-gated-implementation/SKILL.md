@@ -7,269 +7,162 @@ description: Control approved phased work from a plan, issue, design, or checkli
 
 Codex controls scope, gates, publication, and stop/go; do not implement by
 default. Record the active controller model from invocation or runtime
-metadata—Terra is intended, not evidence about this session.
+metadata—Terra is intended, not evidence about this session. References supply
+procedure and evidence; this entry remains the authority for routing, gates,
+publication, and continuation.
 
 ## Usage correlation
 
-When `usage_mcp` is configured, load
+When `usage_mcp` is configured, read
 [`references/usage-correlation.md`](references/usage-correlation.md)
 immediately before starting, handling terminal provider work, or closing a
 correlated workflow. Do not infer or reconstruct a missing controller identity.
 
-Keep safety risk (L1–L4) separate from implementation difficulty. Use
-`agent="luna"` for mechanical/economy and standard work, and use OpenCode's
-configured default only when the user explicitly requests that route, omitting
-`agent`, `model`, and `variant`. Use a bounded `agent="sol-expert"` preflight or
-breakthrough only for difficult work before Luna implements. Preserve an
-explicitly approved whole-phase `agent="sol"` route without separately calling
-Luna or Terra. An optional Astra expert escalation is a fresh, read-only
-`agent="astra-expert"` session with model and variant omitted only when
-a bounded Sol consultation leaves a named material correctness/safety question
-unresolved, multiple coupled boundaries have severe or irreversible
-consequences and need integrated analysis, or the owner explicitly requests
-Astra. Record the question, why the cheaper route is insufficient, expected
-evidence, and stop condition. Permit one initial Astra consultation and at most
-one follow-up; `max` requires a separately named unresolved question and
-sufficient evidence. Astra never implements, publishes, delegates, waives L4
-owner direction, resets retry caps, or persistently upgrades later phases.
-The approved Astra route is the only additional named expert escalation beyond
-an explicit user override or degraded fallback. Never silently replace a selected
-route or raw-model override: selector rejection, selected selector/model
-unavailability, explicit model contradiction, role mismatch, silent fallback,
-or failed execution stops work. Only after the selector is honored, the
-requested role returns a terminal response, and no contradiction exists may
-missing resolved-model or usage metadata produce an observability warning.
+## Routes and selector stops
 
-Exact-model implementation is a named-profile route, never a model/variant
-override on a named agent. After an explicit owner exact-model request or an
-already-approved recorded route, select `agent="terra-implementer"` or
-`agent="sol-implementer"` with model and variant omitted. Either profile is a
-bounded Luna clone for edits, focused inspection, and tests; neither may plan,
-review, delegate, stage, commit, push, create or modify PRs, publish, or
-invoke subagents. Supplying a model or variant with either selector is a route
-contradiction and stops the phase.
+Keep safety risk (L1–L4) separate from difficulty. Mechanical/economy and
+standard implementation use `agent="luna"`; the OpenCode configured default is
+only an explicit user route and omits agent, model, and variant. Difficult work
+uses bounded read-only `agent="sol-expert"` before Luna; an explicitly approved
+whole phase may use `agent="sol"` without separately calling Luna or Terra.
+
+Exact-model implementation is only `agent="terra-implementer"` or
+`agent="sol-implementer"` after explicit owner or approved-recorded selection;
+omit model and variant. These bounded Luna clones may edit, inspect, and test,
+but never plan, review, delegate, stage, commit, push, create/modify PRs,
+publish, or invoke subagents. A model/variant with either is a contradiction.
+
+The optional Astra escalation is fresh, read-only `agent="astra-expert"` with
+model and variant omitted, only after bounded Sol leaves a named material
+correctness/safety question, for coupled severe/irreversible boundaries, or by
+explicit owner request. Record question, cheaper-route insufficiency, expected
+evidence, and stop condition; allow one consultation plus one follow-up. It
+never implements, publishes, delegates, waives L4 direction, resets retries,
+or upgrades later phases. Its `max` needs a separately named unresolved question
+and sufficient evidence; it is the only additional named expert escalation
+beyond an explicit override or approved degraded fallback.
+
+Never silently replace a requested route or raw-model override. Selector/model
+unavailability or rejection, explicit contradiction, role mismatch, silent
+fallback, failed execution, or mismatched continuation stops the phase. Missing
+resolved-model or usage metadata is only an observability warning after an
+honored selector returns the requested terminal role.
 
 ## Effort-variant exceptions
 
-- Normal named Luna routes remain `agent="luna"` with `model` and `variant`
-  omitted. There is no automatic escalation from the configured default.
-- A named Luna exception may request only `variant="xhigh"` or
-  `variant="max"`.
-  It retains the same named agent, role, model/default, and session lineage;
-  it never silently substitutes a model, role, route, or continuation.
-- Luna `xhigh` requires all of: a named complex code phase, a documented
-  reasoning bottleneck, why clarification or decomposition is insufficient,
-  and a fixed acceptance gate. Luna `max` additionally requires relevant
-  failure evidence or a bounded Sol-expert recommendation. Tool
-  unavailability, missing requirements, infrastructure failure, and slow
-  execution alone are not bottleneck evidence.
-- Sol, Sol-expert, and Terra remain `high` by default. Their `xhigh` is only
-  for named difficult analysis or review; `max` is explicit-owner only. Astra
-  keeps its existing fresh read-only `high` route and bounded,
-  evidence-supported `max` exception. Claude remains at configured `high`;
-  no automatic override is permitted.
-- Record the requested agent and variant, named evidence, acceptance gate,
-  job/session identity, and resolved-model or usage warnings. An exception
-  does not reset retries or count as a materially revised approach.
-  Selector, model, or role contradiction still stops the phase.
-- After Luna `xhigh` or `max`, require exactly one existing
-  runtime-appropriate independent review: Claude for Codex-controlled work.
-  Whole-phase Sol retains its mandatory Terra review. Do not stack reviews or
-  let a preflight author review its own recommendation.
+Normal Luna omits a variant. Named Luna `xhigh` requires a complex code phase,
+reasoning bottleneck, why clarification/decomposition is insufficient, and a
+fixed gate; `max` also requires relevant failure evidence or bounded Sol advice.
+It preserves agent, model/default, role, and session lineage and never resets
+retries. Sol, Sol-expert, and Terra remain high by default; their `xhigh` is
+named difficult analysis/review and `max` is owner-only. Astra keeps its
+read-only high route and evidence-backed max exception; Claude stays configured
+high. After Luna `xhigh`/`max`, require exactly one independent Claude review;
+whole-phase Sol retains Terra review. Do not stack reviews or self-review.
+Tool unavailability, missing requirements, infrastructure failure, and slow
+execution alone are not bottleneck evidence. A variant never counts as a
+materially revised approach.
 
-## Effort-variant scenario matrix
+Read [`references/delegation.md`](references/delegation.md) immediately before
+any implementation delegation or expert consultation. It records detailed
+route evidence and procedure but cannot pass a gate or publish.
 
-The phase gate accepts and records default Luna with omitted variant, explicit
-owner-approved Terra/Sol implementer selectors with omitted model and variant,
-qualifying Luna `xhigh`, Luna `max` with its additional evidence, qualifying Sol/Terra
-`xhigh`, the owner-only Sol/Terra `max`, the existing Astra exception, and
-unchanged configured Claude `high`. It rejects or stops automatic escalation,
-role/model substitution, named-agent model/variant contradictions, retry resets, tool/infrastructure/missing-requirement
-or slowness evidence, a second review, and preflight-author self-review.
+## Non-authoritative ledger and classifications
 
-## Invariants
+Maintain one lifecycle ledger entry for every workflow-touched PR. It records
+identity, role, branch/head/base, complete file set/modes, classification,
+lifecycle, owner disposition, authority evidence, and validation; it grants no
+authority. Before implementation, phase success, sync, or success reporting,
+every entry must be merged, explicitly retained by PR-specific boundary-scoped
+direction, or closed. Retained never authorizes an unmerged plan or success.
 
-### PR-lifecycle ledger
+Only exact plan-only and verified non-operational documentation-only PRs may
+combine content and merge approval. Mixed, uncertain, renamed, symlinked,
+executable, generated, configuration-like, profile, skill, agent, guidance,
+policy, workflow, configuration, or code content uses ordinary final merge
+control. A plan-plus-implementation PR never qualifies; drift requires fresh
+approval.
 
-Maintain one non-authoritative ledger entry for every workflow-touched PR,
-including a PR that is created, adopted, updated, readied, reopened, closed,
-or merged, whether the event is local or observed externally. Each entry
-records host/repository/PR, source-or-target role, branch, head, base, complete
-file set of changed files and file modes, artifact classification, lifecycle state,
-owner disposition, authority evidence, and last validation. The ledger is
-bookkeeping and a blocking gate only: it never grants implementation, delivery,
-exception, readiness, close, merge, or sync authority.
+## Authorization and P0 verification
 
-Before successful phase completion, implementation entry, downstream sync, or
-success reporting, every entry must be merged, explicitly retained by
-PR-specific boundary-scoped owner direction, or explicitly closed. Retained is
-not an unmerged-plan exception and never authorizes implementation or sync. A
-terminal Stop/blocker report may list unresolved entries, but must not claim
-success.
+Use an exact approved plan and declared topology for phased, non-trivial, or
+L2–L4 work. The plan declares scope, gates, risk/difficulty/routes, wait policy,
+dependencies, manual boundaries, and topology. A combined L2/L3
+draft-plan/implementation PR has exactly two
+checkpoints: named Plan-and-Draft authorization permits only that plan's
+commit/push/draft PR; named Implementation authorization permits only validated
+in-envelope commits/pushes after P0. Neither permits readiness, merge,
+deployment/release, or cross-repository delivery.
 
-### Combined approval and classification
+P0 requires the initial PR diff be exactly the approved plan, the published
+plan match its revision, and first implementation head equal P0 except an
+explicitly authorized inspected pre-implementation change. Before delivery,
+inspect cumulative scope/topology/evidence and verify plan identity, expected
+P0 descent, and no drift. Plan amendment/replacement, unexpected history,
+scope/topology/risk/target/acceptance/base change, or manual boundary pauses
+the affected work. L4, material migration/security/trust/release/cross-repo,
+rollback/ownership, and independent-decision boundaries retain a merged
+plan-only PR or explicit owner direction.
 
-The only combined content-and-merge paths are an exact plan-only PR and a
-verified non-operational documentation-only PR. Before the prompt and again
-immediately after approval, bind and revalidate host/repository/PR, source or
-target role, branch, head, base, eligibility, complete file set of changed files, file
-modes, and classification. Any drift requires a fresh exact prompt and
-approval; rebinding cannot revive the old approval.
+Outside that topology, require the applicable merged plan-only PR or a complete
+active unmerged-plan exception recording its reason, implementation branch/PR
+when available, and concrete resolution event. The qualified L1 direct path or
+recorded one-named-task waiver is the only alternative and retains exact scope,
+validation, delivery, and final PR-specific merge control.
 
-Classify plan-only content separately from documentation-only content. The
-documentation-only path is fail-closed: mixed content, rename, symlink,
-executable mode, generated output, configuration-like documentation, or
-uncertain operational effect uses ordinary final merge control. Profiles, skills, agents,
-`AGENTS.md`, `CLAUDE.md`, `.opencode`, policy, workflows, configuration, and
-code are never qualifying documentation. A combined plan-plus-implementation
-PR retains ordinary final implementation merge control. Neither exception
-bypasses checks, reviews, branch protection, host controls, or the ledger gate.
+## Contextual approval
 
-### Authorization and P0 verification
+`approve`/`approved` authorizes only the immediately preceding exact visible
+action; publication may send only its prompt's enumerated approved payload and
+minimum metadata to its named configured destination, while binding drift,
+excluded material or action, a host rejection, or a later phase requires a stop
+and fresh authority—host policy is never bypassed.
 
-- Use an exact approved plan and the declared delivery topology for phased,
-  non-trivial, or L2–L4 work. For eligible L2/L3 work, a combined
-  draft-plan/implementation topology may use one draft PR, but it has exactly
-  two authorization checkpoints. First, the Plan-and-Draft authorization must
-  explicitly name the repository, exact worktree, branch, base, plan path/revision,
-  exact plan diff, and one draft PR; it permits only committing
-  that plan, pushing, and creating that named draft PR. It never permits
-  implementation, readiness, merge, deployment/release, or cross-repository
-  delivery. After visible PR verification, the Implementation authorization
-  must explicitly name the repository, PR, branch, and immutable plan
-  checkpoint P0; it permits only validated in-envelope commits and pushes to
-  that same draft PR. It never permits merge, deployment/release, or
-  cross-repository delivery.
-   **Starting check:** P0 verification requires that the initial PR diff contain
-   exactly the approved plan, the published plan match the approved revision,
-   entry gates pass, and the first implementation head equal P0 except for an
-   explicitly authorized and inspected pre-implementation change.
-   **Before each delivery:** expected in-envelope descendants of P0 do not
-   invalidate implementation authority, but inspect the cumulative scope,
-   topology, and evidence; ancestry alone is insufficient. Verify that the plan
-   artifact is unchanged, the current PR head is an expected descendant of P0,
-   and cumulative intervening changes remain inside the declared phase envelope
-   with current evidence. **Drift:** a plan amendment, unexpected history,
-   scope/topology change, target branch/repository change, material
-   base-assumption change, or split boundary pauses affected work and
-   requires appropriate rebinding or renewal. A plan edit, replacement,
-   ambiguous identity, or unexpected pre-implementation head drift invalidates
-   plan approval.
-  Preserve separate merged plan-only PRs for L4 pending owner direction,
-  material migration, security/trust boundaries, release/deployment,
-  cross-repository, rollback/ownership, and upstream independent-decision
-  boundaries; combined topology never waives those boundaries. A plan-only PR
-  contains no implementation before its named checkpoint, generated output,
-  or downstream sync. The plan declares scope, gates, risk/difficulty/routes,
-  wait policy, dependencies, manual boundaries, and delivery topology.
-  Plan-and-Draft approval authorizes only its named plan publication actions;
-  Implementation approval authorizes only its named in-envelope delivery
-  actions. Neither authorizes readiness, merge, or another later publication
-  action. Outside the exact combined topology, require the applicable merged
-  plan-only PR or complete active unmerged-plan exception, recording its reason,
-  named implementation branch and PR when available, and concrete resolution
-  event. The existing narrow qualified-L1 direct path, or a recorded
-  one-named-task plan-only waiver, is the only alternative and retains its
-  exact qualification, scope, validation, delivery, and final PR-specific
-   merge-approval requirements. Any implementation outside the named envelope,
-  or material change to scope, topology, risk, affected files or repositories,
-  acceptance criteria, rollout, sync, manual boundaries, or base assumptions,
-  invalidates the affected authorization and requires renewed approval.
-  Protections, required checks, and reviewer rules are never bypassed.
+Ordinary merge remains exactly `Approve merging <repository> PR #<N>?`; bind
+repository, PR, head, base, complete file set/modes/classification, and
+eligibility before requesting it and immediately after approval; any drift
+invalidates approval and requires fresh authority, the user never supplies a
+SHA, and host/repository protections and required checks remain mandatory.
+Read [`references/publication-and-reporting.md`](references/publication-and-reporting.md)
+immediately before plan/approval decisions, commit, push, PR action, merge, or
+report. It supplies publication order, detailed ledger/bundle rules, and report
+fields; it cannot expand this authority.
 
-### Contextual approval
+## Delivery topology
 
-- A direct owner reply containing exactly `approved` or `approve` is contextual
-  authorization only for the immediately preceding exact named action prompt;
-  it never supplies an omitted repository, worktree, branch, base, plan,
-  checkpoint, PR, diff, or permission. The final merge prompt remains exactly
-  `Approve merging <repository> PR #<N>?`. At merge-request time, the
-  controller internally records the repository, PR, head, base, and relevant
-  check/review eligibility; the user does not provide a SHA. Any head, base, or
-  eligibility drift invalidates the approval and merge authority; immediate
-  revalidation or rebinding cannot restore it without fresh exact approval.
-  Bare approval never transfers across PRs or repositories, a later phase,
-  downstream sync, a branch-protection or host control bypass, or an
-  unmentioned action. Host, repository, branch-protection, required-check, and
-  reviewer enforcement remain additional requirements. The only exception is a
-  qualified mechanical skill-sync bundle defined by `skill-sync`: its frozen
-  delivery record and final fully enumerated merge snapshot replace repeated
-  target prompts only; they never apply to source implementation,
-  code/configuration, local guidance, variants, or generic cross-repository work.
+Default to one independently releasable/revertible implementation PR. Bundle
+only compatible adjacent phases; split at material security, API/compatibility,
+release, migration, rollback, dependency, ownership, review, or validation
+boundary. An L1 fast path retains exact scope, checks, staging, evidence, stop
+rules, and final merge authority. Readiness is administrative after validation
+and review, never merge authority.
 
-  The narrow combined content-and-merge exceptions use these prompts only
-  after the ledger entry is resolved, all checks/reviews are eligible, and the
-  complete binding/classification snapshot is green:
+Before each phase, inspect dirty state and pause files, obtain current evidence,
+run the smallest right-reason red gate, and apply the three-attempt cap unless
+the plan says otherwise. Validate in-scope diff and green evidence before
+publication; stage explicit paths only. Stop on stale/missing preflight, failed
+gate, scope expansion, unavailable evidence, contradiction, review blocker,
+maximum wait, unrelated blocker, or attempt-cap exhaustion. Memory is
+discovery-only and never approval.
 
-  ```text
-  Approve and merge the plan in <repository> PR #<N>?
-  ```
+## Automatic successor transition
 
-  ```text
-  Approve and merge the documentation-only PR in <repository> PR #<N>?
-  ```
+After a successful authorized action or verified merge, evaluate the ordered
+successor but do not advance unless exactly one declared `advance: auto`
+successor has exact scope/route/dependency/gate/topology, an existing worktree,
+valid plan/ancestry, no drift, retry/gate/review/pause/session/wait blocker, no
+manual/owner boundary, remains in the approved repository/worktree/initiative,
+and needs no new publication. Automatic transition may only refresh state and
+perform allowed bounded preflight/in-scope work; it never creates worktrees,
+commits, pushes, mutates PRs, changes readiness, merges, releases, deploys, or
+syncs. Stop and request the next independently authorized publication action.
 
-  The first requires an exact plan-only file set. The second requires verified
-  non-operational documentation-only classification. Mixed, operational,
-  uncertain, or plan-plus-implementation content uses the ordinary final merge
-  prompt. Bind and revalidate repository, PR, head, base, eligibility, file
-  set, file modes, and classification immediately before and after approval;
-  drift requires fresh approval. These exceptions never grant implementation,
-  readiness, sync, or host-control bypass authority.
+## Router and final gate
 
-### Delivery topology
-
-- Where no independent plan gate is required, a plan and implementation may
-  share one PR under the exact two-checkpoint topology above. Early
-  Plan-and-Draft authorization is only a checkpoint; final merge approval
-  comes after the complete implementation diff is available. L3 work eligible
-  for the combined topology may use it; L4 and the listed material or
-  independent-decision boundaries retain separate merged plan-only PRs or
-  owner direction as required. Any exception must meet the unmerged-plan
-  exception and pause rules above.
-- Default to one implementation PR per coherent, independently releasable or
-  revertible deliverable. One PR may contain multiple phases, but never
-  replaces each phase's scope, red/green evidence, acceptance gate, owner
-  decision, or triggered review.
-- Split at a material security, API/compatibility, release, migration,
-  rollback, dependency, ownership, required-owner-decision, independent-review,
-  or validation-environment boundary. Bundle adjacent phases only when their
-  approved scope, ownership, validation, and rollback behavior are compatible.
-  A split rationale describes that boundary; it never makes unsafe bundling
-  acceptable.
-- An L1 fast path needs exact authorized scope, checks, and publication intent;
-  it never waives explicit staging, diff/acceptance evidence, stop rules, or
-  final merge authority. Readiness is administrative after validation and
-  review; it needs no owner approval.
-  A combined topology may continue only inside its approved envelope and stops
-  at declared manual boundaries.
-- Before every phase, check dirty state and both pause files, obtain minimum
-  scope/gate/current evidence, run the smallest right-reason red gate, and set
-  a three-attempt cap unless the plan says otherwise.
-- Validate the in-scope diff and green evidence before publication. Publish a
-  green phase only with its trailer and explicit-path staging. Keep a
-  plan-only PR in GitHub draft state while verifying it; after validation and
-  required review/eligibility checks pass, mark it ready administratively.
-  Before merging any PR, bind the eligible repository, PR, head, base, and
-  check/review eligibility snapshot; make the exact merge request; obtain the
-  final owner approval; immediately revalidate the binding; then merge only with
-  GitHub's approved-head/expected-head precondition and normal merge authority.
-  No automatic merge follows from plan approval, readiness, or draft state.
-  Keep an implementation PR's merge authority separate from plan approval. A
-  manual next-phase gate does not prevent publication of the completed phase.
-- Stop and report on stale/missing preflight, wrong/failed gates, scope or
-  intent expansion, unverifiable correctness, route contradiction, unavailable
-  evidence, review blocker, maximum wait, unrelated blocking changes, or
-  attempt-cap exhaustion. Do not weaken a gate to continue.
-- Memory is discovery-only: read the applicable continuity record before
-  resuming or crossing repositories, validate it against live source, then
-  save decisions, blockers, and handoff evidence. It never supplies approval.
-
-## Router and lazy policy loading
-
-Load the named reference immediately before its transition, never merely on
-phase entry. References explain *how* and return evidence; this core alone
-decides whether to route, pass a gate, publish, or start another phase.
+Load a reference immediately before its transition, never merely at phase
+entry. It explains how and returns evidence; this core decides route, gate,
+publication, and continuation. Editing or summarizing externally authored
+material does not change its origin.
 
 | Trigger | Codex destination | Claude destination |
 | --- | --- | --- |
@@ -280,21 +173,15 @@ decides whether to route, pass a gate, publish, or start another phase.
 | Resume/cross-repository work | `memory-continuity` | `memory-continuity` |
 | Transfer to a fresh session | `handoff` | `handoff` |
 
-Editing or summarizing externally authored material does not change its origin.
-Read [`references/publication-and-reporting.md`](references/publication-and-reporting.md)
-before any plan/approval decision, commit, push, PR action, or report; read
-[`references/templates.md`](references/templates.md) immediately before using
-a prompt, capsule, or phase report.
-
-## Gate
-
-Inspect active local sessions, the contiguous commit suffix, and evidence
-before the gate. Two consecutive `Phase-gate: auto` trailers force the next
-L1 phase manual; bundle trailers do not count, and unexpected interleaving is
-scope drift. Missing approved per-phase scope disables automatic continuation.
-An L1 phase proceeds only when final L1, in scope, right red failure then pass
-within cap, no deviation, and no review blocker. A bundle phase proceeds only
-when declared, green, topology-compatible, and free of a manual boundary or
-stop condition. A new split boundary or validation/rollback mismatch is a
-plan-topology deviation and blocks affected work pending renewed approval.
-Report the current phase and whether the next one proceeds or waits.
+Read [`references/review-and-wait-policy.md`](references/review-and-wait-policy.md)
+immediately before a review, polling, or gate with local commands, and
+[`references/templates.md`](references/templates.md) immediately before a
+prompt, capsule, or report. Inspect active sessions, contiguous trailers, and
+evidence before the gate. Two consecutive `Phase-gate: auto` trailers force the
+next L1 phase manual; bundle trailers do not count and unexpected interleaving
+is scope drift. Missing approved per-phase scope disables automatic continuation.
+An L1 phase proceeds only when final L1, in scope, right-red failure then pass
+within cap, without deviation or review blocker; a bundle must be declared,
+green, topology-compatible, and free of manual/stop boundaries. A new split
+boundary or validation/rollback mismatch is drift. Report the current phase and
+whether its successor proceeds or waits.
