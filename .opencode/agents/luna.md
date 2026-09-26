@@ -1,8 +1,7 @@
 ---
 description: High-effort implementer for C++ source, tests, CMake, and CUDA checks.
 mode: all
-model: openai/gpt-5.6-luna
-reasoningEffort: high
+model: openai/gpt-6-luna#high
 steps: 60
 permission:
   external_directory: deny
@@ -45,7 +44,7 @@ CUDA test when relevant.
 
 Use at most 3 implement/fix loops per task. After **two failures on the
 same blocker**, stop blind retries and hand back to the controller for
-`sol-expert` consultation. A **third attempt is allowed only after a
+`astra-expert` consultation. A **third attempt is allowed only after a
 materially revised approach** has been agreed. Do not invoke subagents,
 broaden scope, commit, push, delete repository or user artifacts, or use
 destructive commands. Scratch files created for the active task or smoke
@@ -54,5 +53,5 @@ test may be removed.
 Command permissions are not a complete trust boundary: an allowed build
 program can mutate files or start subprocesses. Keep changes within the task,
 preserve unrelated artifacts, and leave final scope and publication decisions
-to the controller; Sol is named only for the explicit whole-phase triad route.
+to the external controller.
 Never read, print, copy, expose, or request credentials or secrets.

@@ -1,12 +1,12 @@
 # Delegation
 
-Read this immediately before an implementation delegation or a Sol-expert
+Read this immediately before an implementation delegation or an Astra-expert
 consultation. Return route evidence to the phase controller; do not start a
 new phase, pass a gate, publish, or delegate again from this reference.
 
 ## Route and evidence
 
-Apply the core's [route and selector rules](../SKILL.md#usage-correlation).
+Apply the core's [route and selector rules](../SKILL.md#routes-and-selector-stops).
 This reference adds delegation evidence: record the requested agent and
 variant, named evidence, acceptance gate, job/session identity, bound/reported
 model, and warnings. A rejected or unavailable selector/model, failed
@@ -15,16 +15,16 @@ mismatch, or silent fallback is a stop; missing resolved-model or usage
 metadata is only an observability warning after the selected route is honored
 and the requested role returns a terminal response.
 
-### Named effort variants
+### Named model binding
 
-The core's [effort-variant policy](../SKILL.md#effort-variant-exceptions) is
-authoritative. For a named exception, retain its requested agent/variant,
-bottleneck evidence, fixed gate, retry accounting, and observability warnings
-in the delegation record.
+The core's [effort and review policy](../SKILL.md#effort-and-review) is
+authoritative. Named agents bind exact GPT-6 `#high` profiles; omit per-call
+model and variant. Record requested agent, bound/reported model, retry
+accounting, and observability warnings.
 
-### Optional Astra expert escalation
+### Astra expert consultation
 
-Follow the core's [Astra eligibility and limits](../SKILL.md#usage-correlation).
+Follow the core's [Astra eligibility and limits](../SKILL.md#routes-and-selector-stops).
 For a selected consultation, record the escalation reason, named question, why
 the cheaper route is insufficient, requested/resolved model, effort, job/session
 identity, expected evidence, and stop condition. Preserve the read-only role
@@ -48,11 +48,11 @@ worktree operation, editing, publishing, or syncing.
 Use one bounded phase/subphase per Luna session; end it after green/completion.
 Start or fork a session when scope, red gate, strategy, or blocker changes
 materially. Allow at most three implementation/fix attempts. After two failures
-on the same blocker, stop blind retries and request one bounded Sol-expert
+on the same blocker, stop blind retries and request one bounded Astra-expert
 consultation; allow a third only with a materially revised approach.
 
 Give Luna the compact implementation prompt in [templates.md](templates.md).
-Give Sol-expert only the compact capsule, prior diff/test evidence, and one
+Give Astra-expert only the compact capsule, prior diff/test evidence, and one
 focused question. It is read-only: it never implements, edits, publishes,
 delegates, or invokes repository skills. Permit one initial consultation and at
 most one follow-up. Require findings, proposed approach, acceptance gate, then
@@ -62,10 +62,11 @@ symbol—never repository-wide enumeration/search or whole-file reads when a
 range suffices. Limit it to four batches; return Stop and missing evidence if
 still insufficient. Use a new session and refreshed capsule for a follow-up.
 
-## Whole-phase Sol exception
+## Controller-bound Astra orchestration exception
 
-Use `agent="sol"` only for the explicit approved whole phase. The outer
-controller retains final stop/go and publication authority. Sol returns its
+Use `agent="astra-orchestrator"` only for the explicit approved whole phase
+beneath an external Codex or Claude controller. The outer controller retains
+final stop/go, independent review, and publication authority. Astra returns its
 diff and evidence without committing, pushing, or creating a PR. Only a
-repeated blocker permits one bounded Sol-expert consultation. Report controller
+repeated blocker permits one bounded Astra-expert consultation. Report controller
 model, requested agent, job/session identity, bound/reported model, and route.

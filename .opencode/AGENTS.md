@@ -1,49 +1,34 @@
-# OpenCode Triad
+# OpenCode five-role roster
 
-This repository is `opencode_mcp`, a Python 3.12 MCP server. The main
-implementation is `server.py`; tests are under `tests/` and use pytest with
-mocked HTTP interactions. There is no compiled build. GPU access may be used
-for an explicit smoke check when relevant, but it is not required for normal
-tests.
+This repository is `minimal_autograd`, a C++17 reverse-mode automatic
+differentiation library with an optional CUDA backend. Follow the repository
+root `AGENTS.md`, existing CMake conventions, and the approved phase scope.
+Use focused CMake/CTest checks and CUDA tests when relevant.
 
 ## Roles and routing
 
-- **Sol** (`agents/sol.md`) is the explicit whole-phase triad route
-  (`agent="sol"`): planner and decider for risk, gates, delegation, and
-  stop/go. Beneath an external controller it returns diff/evidence only and
-  does not commit, push, or create a PR; the controller retains publication.
-- **Sol-expert** (`agents/sol-expert.md`) is bounded, read-only difficult
-  preflight or breakthrough analysis: one initial consultation and at most one
-  follow-up. It never edits, delegates, or publishes.
+- **Astra orchestrator** (`agents/astra-orchestrator.md`) is an explicit
+  controller-bound whole-phase route (`agent="astra-orchestrator"`). It plans,
+  gates, and recommends stop/go beneath an external Codex or Claude controller;
+  it is not a standalone primary route. The controller owns final gates,
+  independent review, and publication. This boundary is procedural, not caller
+  authentication.
+- **Astra expert** (`agents/astra-expert.md`) is fresh, bounded read-only
+  preflight or blocker analysis: one consultation and at most one follow-up.
+  It never edits, delegates, publishes, or reviews its own recommendation.
 - **Luna** (`agents/luna.md`) is the normal implementation route
   (`agent="luna"`) for mechanical/economy and standard work. It cannot publish
   or broaden scope. Follow **red -> implement -> green -> GPU** with at most 3
-  attempts; after two failures on one blocker, consult Sol-expert and attempt
+  attempts; after two failures on one blocker, consult Astra expert and attempt
   a third time only after a materially revised approach.
-- **Terra implementer** (`agents/terra-implementer.md`) is the explicit exact-
-  model implementation route (`agent="terra-implementer"`) only after an
-  explicit owner exact-model request or an already-approved recorded route.
-  Never pass a model or variant with this named agent; doing so is a route
-  contradiction and stops the phase. It is a semantic Luna clone for bounded
-  edits, focused inspection, and tests, with no planner, reviewer, delegation,
-  staging, commit, push, PR, or publication authority.
-- **Sol implementer** (`agents/sol-implementer.md`) has the same bounded Luna
-  implementation contract for an explicit exact-model Sol request
-  (`agent="sol-implementer"`). A model or variant with the named agent is a
-  contradiction and stops the phase; it cannot substitute for Sol planning,
-  Terra review, delegation, staging, commit, push, PR, or publication.
-- **Terra** (`agents/terra.md`) remains an explicit, fresh-context, read-only
-  review (`agent="terra"`) with a recorded reason. Only explicit whole-phase
-  Sol mode makes L3 preflight and non-trivial post-review mandatory; Terra is
-  never a routine external-controller review.
-- **Astra expert** (`agents/astra-expert.md`) is the named, fresh, read-only
-  Astra consultation route (`agent="astra-expert"`) for the existing bounded
-  escalation cases. Omit model and variant; selector/model/role mismatch stops
-  rather than silently falling back. It never implements, publishes, delegates,
-  waives L4 direction, resets retries, replaces required review, or self-reviews.
+- **Sol implementer** (`agents/sol-implementer.md`) is the justified strong
+  implementation route; **Astra implementer** (`agents/astra-implementer.md`)
+  is the justified hard-task implementation route. Both use Luna's bounded
+  edit/test contract, never plan, review, delegate, stage, commit, push, create
+  PRs, or publish. Omit model and variant for every named role; a conflicting
+  override stops rather than silently changing model or effort.
 - The configured default route is used only when the user explicitly requests
-  it: omit `agent`, `model`, and `variant`. Never infer it as a default Sol or
-  Terra route.
+  it: omit `agent`, `model`, and `variant`. Never infer it as a named role.
 
 ## PR lifecycle and approval
 
@@ -67,8 +52,10 @@ content retains ordinary final merge control.
 
 ## Gates and safety
 
-Role prompts are authoritative. In explicit whole-phase Sol mode, L3 requires
-Terra preflight; L4 stops before implementation. Delegated paths stay within
+Role prompts are authoritative. L3 requires fresh expert preflight and a
+distinct independent post-implementation reviewer through the external
+controller; if that reviewer is unavailable, stop. L4 requires explicit owner
+direction before implementation. Delegated paths stay within
 the caller's working directory; external paths are denied. Permissions are
 guardrails, not a complete trust boundary, so preserve repository boundaries,
 sandboxing, and diff gates. Keep unrelated artifacts untouched, and never read,

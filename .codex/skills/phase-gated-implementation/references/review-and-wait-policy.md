@@ -6,23 +6,20 @@ the core; this reference does not decide publication or continuation.
 
 ## Triggered independent review
 
-Follow the core's [review router](../SKILL.md#router-and-lazy-policy-loading) and
-[Astra policy](../SKILL.md#usage-correlation). Do not automatically launch
-OpenCode Terra for Codex-controlled L2/L3 work; use a review only for a
-recorded fresh-context, read-only concern. Before any Astra delegation, read
+Follow the core's [review router](../SKILL.md#router-and-final-gate) and
+[Astra policy](../SKILL.md#routes-and-selector-stops). Do not substitute an
+OpenCode expert for the external independent reviewer. Before any Astra
+delegation, read
 [delegation.md](delegation.md) immediately.
-Trigger one independent Claude read-only review for architecture/API
-compatibility, security, memory/concurrency, CUDA or numerical correctness,
+Trigger one independent Claude read-only review for L3 post-implementation
+review and for architecture/API, security, concurrency, numerical correctness,
 release behavior, weak tests, disagreement, suspicious red gates, or an
-explicit request. One triggered review replaces a review stack. Codex remains
-the gate; review evidence is not publication authority.
+explicit request. If unavailable at L3, stop. Codex remains the final gate;
+review evidence is not publication authority.
 
-When Luna uses a documented `xhigh` or `max` exception, apply the core's
-exactly-one-review requirement. This review checks the named bottleneck
-evidence, fixed acceptance gate, route/model/role/session lineage, retry
-accounting, and observability warnings. Whole-phase Sol retains its mandatory
-Terra review. Do not add a review stack or allow the preflight author to review
-its own recommendation.
+L3 requires fresh expert preflight and a distinct post-implementation
+independent review through the external controller. Do not add a review stack
+or let the preflight author review its own recommendation.
 
 ## Async checkpoints
 
@@ -55,7 +52,7 @@ never automatically cancel or treat a live reviewer as unavailable. Evidence is
 unavailable only for missing route/tool, terminal error/cancellation, or failed
 terminal-result retrieval. For OpenCode no-progress, use the
 `opencode-delegate` recovery, including exactly one terminal-result query
-before the controller stops. For a full Sol-expert consultation that reaches
+before the controller stops. For a full Astra-expert consultation that reaches
 `step_start` after inspection, retain the same job for a final-synthesis grace
 of at least 10 minutes; the phase maximum wait cannot be shorter.
 
