@@ -24,7 +24,7 @@
 6. On a tool-step-cap exit, fetch the terminal result, inspect the scoped
    worktree independently, and start the planned same-session continuation when
    work remains. A cap exit alone is not successful implementation evidence.
-7. For a full `sol-expert` consultation that has completed inspection work and
+7. For a full `astra-expert` consultation that has completed inspection work and
    then reports `step_start`, treat the state as final synthesis pending. Keep
    the same job through a declared final-synthesis grace of at least 10 minutes;
    its phase-defined maximum wait must be no shorter than that grace.
@@ -39,7 +39,7 @@
    record the result query. For an editing job, record whether its scoped
    worktree changed; absence of a change is supporting evidence only.
 3. Retain the same job when events or live process output advance, when full
-   `sol-expert` final synthesis remains within its declared grace, or when a
+   `astra-expert` final synthesis remains within its declared grace, or when a
    known-long task reports live output. Do not use elapsed time alone to call
    these jobs stalled.
 4. If the result remains running and no retention condition applies, cancellation
@@ -50,4 +50,7 @@
    use a stalled job as an unreported reason to pause an authorized phase.
 
 This recovery rule never treats two unchanged polls or a missing scoped diff as
-enough evidence to cancel a read-only review or Sol preflight.
+enough evidence to cancel a read-only review or Astra preflight.
+
+Usage is observational evidence only; do not introduce fixed token, price, or
+provider-private-path limits.

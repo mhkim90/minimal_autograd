@@ -7,7 +7,7 @@ description: Control approved phased work from a plan, issue, design, or checkli
 
 Codex controls scope, gates, publication, and stop/go; do not implement by
 default. Record the active controller model from invocation or runtime
-metadata—Terra is intended, not evidence about this session. References supply
+metadata—Sol is intended, not evidence about this session. References supply
 procedure and evidence; this entry remains the authority for routing, gates,
 publication, and continuation.
 
@@ -23,24 +23,25 @@ correlated workflow. Do not infer or reconstruct a missing controller identity.
 Keep safety risk (L1–L4) separate from difficulty. Mechanical/economy and
 standard implementation use `agent="luna"`; the OpenCode configured default is
 only an explicit user route and omits agent, model, and variant. Difficult work
-uses bounded read-only `agent="sol-expert"` before Luna; an explicitly approved
-whole phase may use `agent="sol"` without separately calling Luna or Terra.
+may use bounded read-only `agent="astra-expert"` before implementation. An
+explicitly approved whole phase may use `agent="astra-orchestrator"` only
+beneath this external controller, which retains final gates, independent review,
+and publication. This boundary is procedural, not caller authentication.
 
-Exact-model implementation is only `agent="terra-implementer"` or
-`agent="sol-implementer"` after explicit owner or approved-recorded selection;
+Strong or hard-task implementation uses `agent="sol-implementer"` or
+`agent="astra-implementer"` after justified approved-recorded selection;
 omit model and variant. These bounded Luna clones may edit, inspect, and test,
 but never plan, review, delegate, stage, commit, push, create/modify PRs,
 publish, or invoke subagents. A model/variant with either is a contradiction.
 
-The optional Astra escalation is fresh, read-only `agent="astra-expert"` with
-model and variant omitted, only after bounded Sol leaves a named material
-correctness/safety question, for coupled severe/irreversible boundaries, or by
+The expert route is fresh, read-only `agent="astra-expert"` with model and
+variant omitted, for a named material correctness/safety question, coupled
+severe/irreversible boundaries, a repeated blocker, or by
 explicit owner request. Record question, cheaper-route insufficiency, expected
 evidence, and stop condition; allow one consultation plus one follow-up. It
 never implements, publishes, delegates, waives L4 direction, resets retries,
-or upgrades later phases. Its `max` needs a separately named unresolved question
-and sufficient evidence; it is the only additional named expert escalation
-beyond an explicit override or approved degraded fallback.
+or upgrades later phases. It cannot review its own preflight recommendation;
+if an L3 independent reviewer is unavailable, stop the phase.
 
 Never silently replace a requested route or raw-model override. Selector/model
 unavailability or rejection, explicit contradiction, role mismatch, silent
@@ -48,20 +49,14 @@ fallback, failed execution, or mismatched continuation stops the phase. Missing
 resolved-model or usage metadata is only an observability warning after an
 honored selector returns the requested terminal role.
 
-## Effort-variant exceptions
+## Effort and review
 
-Normal Luna omits a variant. Named Luna `xhigh` requires a complex code phase,
-reasoning bottleneck, why clarification/decomposition is insufficient, and a
-fixed gate; `max` also requires relevant failure evidence or bounded Sol advice.
-It preserves agent, model/default, role, and session lineage and never resets
-retries. Sol, Sol-expert, and Terra remain high by default; their `xhigh` is
-named difficult analysis/review and `max` is owner-only. Astra keeps its
-read-only high route and evidence-backed max exception; Claude stays configured
-high. After Luna `xhigh`/`max`, require exactly one independent Claude review;
-whole-phase Sol retains Terra review. Do not stack reviews or self-review.
-Tool unavailability, missing requirements, infrastructure failure, and slow
-execution alone are not bottleneck evidence. A variant never counts as a
-materially revised approach.
+The five named profiles bind exact GPT-6 models and `#high`; omit model and
+variant on every named call. Conflicting overrides stop. A raw unnamed model
+remains an explicit user route, not a named-role substitute. Do not automatically
+escalate effort or reset retries. L3 requires fresh expert preflight and a
+distinct post-implementation independent review through the external
+controller (Claude reviewer). Do not stack reviews or self-review.
 
 Read [`references/delegation.md`](references/delegation.md) immediately before
 any implementation delegation or expert consultation. It records detailed

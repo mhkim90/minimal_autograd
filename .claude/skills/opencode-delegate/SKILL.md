@@ -1,148 +1,84 @@
 ---
 name: opencode-delegate
-description: Delegate approved, tedious, or long-running work through async-first OpenCode MCP. Route mechanical/economy and standard work to Luna, and justified difficult preflight to Sol-expert.
+description: Delegate approved work through OpenCode MCP. Use Luna by default, justified Sol/Astra implementers for harder work, and Astra expert for bounded read-only analysis.
 ---
 
 # OpenCode Delegate
 
-Use `mcp__opencode__opencode_run_async` by default; use blocking calls only for
-known-short work. Delegate execution, iteration, review, and long test runs,
-not ambiguous design decisions or single-step commands.
+Use `mcp__opencode__opencode_run_async` by default; use blocking calls only
+for known-short work. Delegate execution, iteration, review, and long test
+runs, not ambiguous design decisions or single-step commands.
 
-## Caller-working-directory boundary
+## Boundary
 
-OpenCode MCP execution uses the caller's working directory; its tools do not
-accept a caller-selected `cwd` parameter. This boundary is path-based, not
-repository-identity-based: external paths, including arbitrary `/tmp`
-worktrees, are denied. To delegate work in another repository, the controller
-must first create an isolated worktree for that repository under the caller's
-cwd, then give the delegate paths scoped to that worktree. Commits and PRs
-still belong to that repository's remote. Codex shell tools with an explicit
-`cwd` are a separate capability and do not widen OpenCode MCP's delegation
-boundary. This description states constraints only; it authorizes no
-cross-repository work, worktree operation, editing, publishing, or syncing.
+OpenCode MCP uses the caller's working directory and accepts no selected `cwd`.
+This path boundary denies external paths, including arbitrary `/tmp` worktrees.
+Another repository requires an isolated worktree under the caller's cwd; shell
+tools with explicit cwd do not widen this boundary. This is constraint text,
+not authority to create worktrees, edit, publish, sync, or cross repositories.
+An explicit request for a configured delegate authorizes necessary in-scope
+source/diff disclosure to that delegate; do not ask a duplicate disclosure
+question. Still request direction for a different repository, out-of-scope
+private material, unconfigured external service, publication, or destructive
+action.
+## Routes and evidence
 
-## Routes
+- Mechanical/economy and standard work: `agent="luna"`, omitting `model` and
+  `variant`.
+- Justified strong or hard implementation: `agent="sol-implementer"` or
+  `agent="astra-implementer"`, omitting `model` and `variant`. These are
+  bounded Luna-style editors, never reviewers or publishers.
+- Explicit configured-default route: only when the user asks for it, omit
+  `agent`, `model`, and `variant`; report it as an explicit user route, never
+  as the default.
+- Difficult preflight or blocker analysis: fresh bounded read-only
+  `agent="astra-expert"`. It never implements, publishes, delegates, waives
+  direction, resets retries, upgrades later phases, or reviews its own advice.
+- Explicit approved whole-phase route: `agent="astra-orchestrator"` only
+  beneath an external Codex or Claude controller. The controller retains final
+  gates, independent review, and publication. This is procedural, not caller
+  authentication.
+- All five named profiles bind their exact GPT-6 `#high` model. Omit model
+  and variant; a conflicting override stops. Raw unnamed models are an
+  explicit user route only; there is no automatic effort escalation.
 
-- **Mechanical/economy**: use `agent="luna"`; omit `model` and `variant`.
-- **Standard**: use `agent="luna"`; omit `model` and `variant`.
-- **Explicit Terra implementation**: use `agent="terra-implementer"` only
-  after an explicit owner exact-model request or an already-approved recorded
-  route; omit `model` and `variant`. This is a bounded Luna-clone implementer,
-  never Terra review. A model or variant with this named agent is a route
-  contradiction and stops the phase.
-- **Explicit Sol implementation**: use `agent="sol-implementer"` only after
-  an explicit owner exact-model request or an already-approved recorded route;
-  omit `model` and `variant`. This is a bounded Luna-clone implementer, never
-  Sol planning or Sol-expert consultation. A model or variant with this named
-  agent is a route contradiction and stops the phase.
-- **Explicit configured-default request**: only when the user requests this
-  route, omit `agent`, `model`, and `variant`, and report it as an explicit
-  user route rather than a default.
-- **Difficult**: use `agent="sol-expert"` only for a bounded preflight or
-  breakthrough when warranted, then use `agent="luna"` for implementation.
-- **Named effort exception**: normal Luna routes omit `model` and `variant`.
-  Only a named complex code phase may request Luna `variant="xhigh"`, with a
-  documented reasoning bottleneck, why clarification/decomposition is
-  insufficient, and a fixed acceptance gate. Luna `variant="max"` additionally
-  requires relevant failure evidence or a bounded Sol-expert recommendation.
-  Tool unavailability, missing requirements, infrastructure failure, and slow
-  execution alone do not qualify. Keep `agent="luna"`, model/default, role,
-  and session lineage unchanged; never escalate automatically.
-- Sol, Sol-expert, and Terra remain `high` by default; their `xhigh` is only
-  for named difficult analysis/review and their `max` is explicit-owner only.
-  Astra retains its existing fresh read-only high route and bounded,
-  evidence-supported max exception. Claude remains configured high with no
-  automatic override. Terra-implementer, Sol-implementer, and Astra-expert bind
-  their configured exact model and high effort by profile name; model and
-  variant are omitted and any supplied override is a contradiction.
-- Use `agent="terra"` only for a separate, fresh-context, read-only review
-  with a recorded reason; never use Terra as implementer. The optional Astra
-  escalation uses the fresh named read-only profile `agent="astra-expert"`
-  with model and variant omitted, and is allowed only for a named unresolved material
-  correctness/safety question after bounded Sol consultation, multiple coupled
-  boundaries with severe/irreversible consequence requiring integrated
-  analysis, or an explicit owner request. Record why the cheaper route is
-  insufficient, expected evidence, stop condition, role, effort,
-  requested/resolved named profile/model, and job/session. Permit one initial consultation
-  plus one follow-up maximum; `max` requires a separately named question and
-  sufficient evidence. Astra is read-only and cannot implement, publish,
-  delegate, waive L4 owner direction, reset retries, or upgrade later phases.
-  Astra may replace an optional isolated Terra review, never a required
-  cross-provider Claude/Codex review; a preflight author cannot review its own
-  recommendation.
-- Use `agent="sol"` only for explicit whole-phase triad compatibility. Do not
-  call Luna or Terra separately in that route.
-- Use a raw model only for an explicit user override or approved degraded
-  fallback. Exact-model implementation requests use the named implementer
-  profile, and Astra uses `agent="astra-expert"`; never pass model or variant
-  with either named profile. An unavailable selector or
-  selected model, failed execution, explicit model contradiction, role
-  mismatch, or silent fallback stops the phase. Missing resolved-model or usage
-  metadata is only an observability warning when the requested selector was
-  honored and a terminal response has the requested role. Retain observability
-  reporting.
+Named profiles bind their exact model and high variant; omit overrides. L3
+requires fresh preflight and a distinct independent post-implementation
+reviewer through the external controller. If unavailable, stop; do not reuse
+the same Astra expert. Tool unavailability, missing requirements,
+infrastructure failure, or slowness alone does not justify a role change.
 
-## Route evidence
+Record requested agent, job/session, bound/reported model, and route evidence.
+An honored selector plus terminal requested-role response is minimum evidence;
+missing resolved-model/usage is an observability warning only then. Selector,
+model, role, session-lineage, or fallback contradiction and failed execution
+stop the phase. Read [`references/prompt-template.md`](references/prompt-template.md)
+immediately before sending a prompt.
 
-- Record requested agent, job ID, session ID, and bound/reported model.
-- Accept an honored named selector plus a terminal role response as minimum
-  route evidence. Query normalized usage after terminal state when available.
-- Report missing resolved-model identity or partial accounting as an
-  observability warning only when the requested selector was honored and a
-  terminal response has the requested role, with no contradictory evidence.
-- For an exception, record requested agent and variant, evidence, acceptance
-  gate, job/session identity, and resolved-model/usage warnings. A variant
-  does not reset retries or count as a revised approach. Stop on any selector,
-  model, role, or session-lineage contradiction.
-- Stop on selector/model unavailability, failed execution, selector rejection,
-  mismatched continuations, explicit model contradiction, role mismatch, or
-  silent fallback. Never substitute silently.
+## Async-first bounded lifecycle
 
-## Luna and Sol-expert lifecycle
+Keep one bounded phase/subphase per same-role Luna session; fork only after a
+material scope, red-gate, strategy, or blocker change, and end it after green.
+Allow three
+implementation/fix attempts; after two same-blocker failures, obtain one
+bounded Astra-expert consultation and use a materially revised approach before
+a third. The external controller supplies independent L3 review; no named
+variant override resets retries.
 
-- Keep one bounded phase or subphase per Luna session and end it after green.
-- Start or fork a new same-role session after a material scope, red-gate,
-  strategy, or blocker change. Repeat the same named agent on continuations.
-- Allow at most three implementation/fix attempts. After two failures on the
-  same blocker, request one bounded Sol-expert consultation. Permit a third
-  attempt only after a materially revised approach is agreed.
-- After Luna `xhigh` or `max`, require exactly one existing independent review:
-  Codex Terra for Claude-controlled work. Whole-phase Sol keeps its mandatory
-  Terra review; do not stack reviews or permit preflight-author self-review.
-- Give Sol-expert approved scope, one focused question or blocker, and selected
-  compact diff/test evidence. Allow one consultation and at most one follow-up.
-  Require: findings, proposed approach, acceptance gate, stop/go. Sol-expert
-  never implements, edits, publishes, delegates, or invokes repository skills.
-  Answer from the capsule when possible. If inspection is needed, each batch
-  resolves one named decision using a relevant file range or narrow symbol;
-  never use repository-wide enumeration/search or whole-file reads when a
-  range will do. Limit it to four inspection batches; if evidence remains
-  insufficient, it returns Stop with the missing evidence. A follow-up uses a
-  new session and refreshed compact capsule rather than accumulated tool history.
+Astra-expert is read-only: one initial consultation and one follow-up maximum,
+four narrow inspection batches maximum, and a new session with refreshed
+capsule for follow-up. It returns findings, approach, gate, and stop/go; it
+never edits, publishes, delegates, or invokes skills. Read the prompt template
+immediately before its capsule.
 
-## Prompt template
+## Async stop kernel
 
-Read [`references/prompt-template.md`](references/prompt-template.md) immediately
-before sending a delegate prompt.
-
-## Async lifecycle invariants
-
-Keep the same session lineage and stable workflow ID for each role. Poll and
-fetch the terminal result, then query normalized usage. Do not end the
-controller turn or send a final response while a required job is live. Finalize
-only after terminal-result retrieval, explicit interruption/stop, or the
-declared maximum wait. Cancellation requires terminal error, the phase-defined maximum wait, or
-an explicit controller/owner stop decision, with the reason and approved
-replacement route recorded. For a full `sol-expert` consultation that has
-completed inspection work and then reports `step_start`, keep the same job
-through a declared final-synthesis grace of at least 10 minutes, and make the
-phase-defined maximum wait no shorter than that grace. Usage is observational
-evidence only. Do not add fixed token, price, or provider-private-path limits.
-
-## Async workflow and elapsed-time policy
-
-At implementation-job launch, create the active-job ledger. Read
+Keep stable workflow and same-role session lineage. Retrieve terminal output
+and normalized usage before finalization; do not send a final response while a
+required job is live. Cancel only for terminal error, declared maximum wait, or
+explicit controller/owner stop with reason and approved replacement route. A
+full Astra-expert consultation in post-inspection `step_start` receives at least a
+10-minute declared final-synthesis grace. Read
 [`references/wait-policy.md`](references/wait-policy.md) immediately before
-polling, recovering, or cancelling; it governs ledger fields, polling,
-terminal handling, step-cap continuations, and ledger removal.
+polling, recovery, cancellation, or finalization; it supplies the ledger and
+elapsed-time procedure, never route or publication authority.

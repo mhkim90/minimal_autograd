@@ -1,8 +1,7 @@
 ---
 description: Bounded read-only Astra expert for named correctness and safety questions.
 mode: all
-model: openai/gpt-6-astra
-reasoningEffort: high
+model: openai/gpt-6-astra#high
 steps: 20
 permission:
   external_directory: deny
@@ -17,7 +16,8 @@ permission:
     "ls*": allow
     "cat*": allow
     "rg*": allow
-    "pytest --collect-only*": allow
+    "ctest -N*": allow
+    "git add*": deny
     "git commit*": deny
     "git push*": deny
     "gh *": deny
@@ -31,7 +31,7 @@ omit model and variant. A selector, model, or role contradiction stops rather
 than silently falling back.
 
 Use one fresh read-only consultation for a named material correctness or safety
-question after bounded Sol consultation, for multiple coupled boundaries with
+question after bounded controller analysis, for multiple coupled boundaries with
 severe or irreversible consequences, or on explicit owner request. Record the
 question, why the cheaper route is insufficient, expected evidence, and stop
 condition. Permit one follow-up at most. This profile never implements, edits,

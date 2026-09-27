@@ -1,6 +1,6 @@
 # Templates
 
-Read this immediately before sending a delegate prompt, Sol-expert capsule, or
+Read this immediately before sending a delegate prompt, Astra-expert capsule, or
 phase report. Fill every applicable field; return the resulting evidence to the
 core.
 
@@ -14,10 +14,10 @@ Red gate: <command/check + expected failure>
 Success criteria: <checks/metrics>
 Safety risk: <L1-L4>
 Implementation difficulty: <mechanical/economy | standard | difficult>
-Implementation route: <agent="luna" with omitted model/variant | explicit owner exact-model request: agent="terra-implementer" or agent="sol-implementer" with model/variant omitted | named Luna xhigh/max exception | explicit user request: configured default | sol-expert then Luna>
+Implementation route: <luna | justified sol-implementer | justified astra-implementer | astra-expert then implementer | controller-bound astra-orchestrator | explicit user configured default>; omit named model/variant
 Expert escalation evidence: <role or none>; escalation reason/question: <...>; why cheaper route is insufficient: <...>; requested/resolved model: <...>; effort: <...>; job/session: <...>; expected evidence: <...>; stop condition: <...>
-Effort-variant evidence: <requested agent and variant; named bottleneck/evidence; why clarification/decomposition is insufficient; fixed acceptance gate; additional max evidence or Sol-expert recommendation; warnings>
-Elapsed-time checkpoint / final-synthesis grace (full Sol only) / maximum wait: <phase-defined values>
+Model binding: <named GPT-6 #high profile or explicit unnamed route; reported match/warnings>
+Elapsed-time checkpoint / final-synthesis grace (full Astra expert only) / maximum wait: <phase-defined values>
 Constraints:
 - one bounded phase/subphase; do not commit or edit outside scope
 - max attempts: <approved cap>; stop after two same-blocker failures
@@ -145,7 +145,7 @@ each sequential expected-head merge, revalidate every listed binding. Stop on
 any drift, failure, regression, or uncertain result; report partial completion
 and require fresh authority for any remainder.
 
-## Sol-expert capsule
+## Astra-expert capsule
 
 ```text
 Bounded read-only consultation; do not implement, edit, publish, or delegate.
@@ -177,7 +177,7 @@ Delivery topology: <implementation-PR count; current PR; included phases; phase-
 Scope: <approved globs>; changed files: <list>
 Controller: Claude Code; active model: <runtime evidence>
 Safety risk level: <L1-L4>; implementation difficulty: <mechanical/economy | standard | difficult>
-Implementation route: <agent="luna" with omitted model/variant | named Luna xhigh/max exception | explicit user request: configured default | sol-expert then Luna | agent="sol">
+Implementation route: <luna | justified sol-implementer | justified astra-implementer | astra-expert then implementer | controller-bound astra-orchestrator | explicit user configured default>
 Implementation sessions / retries: <count> / <count>; route evidence: <requested agent, job/session IDs, bound/reported model, warnings>
 Expert escalation: <role, reason/question, why cheaper route is insufficient, requested/resolved model, effort, job/session, expected evidence, stop condition, or none>
 Elapsed time: <per role>; checkpoints: <count>; wait-policy reviews / final-synthesis grace: <none or list>

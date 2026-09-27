@@ -1,6 +1,6 @@
 ---
 name: codex-delegate
-description: Delegate independent high-risk reasoning, adversarial review, and blocker gates from Claude Code to Codex Terra. Use it only for DISCUSS/read-only review.
+description: Delegate independent high-risk reasoning, adversarial review, and blocker gates from Claude Code to Codex Sol. Use it only for DISCUSS/read-only review.
 ---
 
 # Codex Delegate
@@ -11,11 +11,11 @@ routes. For an unfocused native git-diff/working-tree review, invoke
 approach, invoke `/codex:adversarial-review`. Keep the review target and
 context inside the caller's current repository.
 
-Every mandatory Terra review must pass `--model gpt-5.6-terra` explicitly to
+Every mandatory Codex review must pass `--model gpt-6-sol` explicitly to
 the selected review command. Never silently use the configured default or
-claim Terra when the requested model is not observed.
+claim the intended model when the requested model is not observed.
 
-Terra is the intended independent Codex review model, not an assumption about
+Sol is the intended independent Codex review model, not an assumption about
 the configured default. Record the requested model, plugin review/job
 identity, and active model when the plugin exposes it. Stop on an explicit
 mismatch; do not trust a generic self-label over invocation or runtime
@@ -29,11 +29,11 @@ plugin's `task` verb, or any write-capable/task route. Codex must not edit,
 implement, fix, or publish; implementation remains with the existing OpenCode
 routes.
 
-Claude Code orchestrates and controls publication. OpenCode's configured
-default handles mechanical work, Luna implements standard/difficult work, and
-Sol-expert supplies bounded difficult preflight or breakthrough reasoning.
-Codex Terra supplies one triggered independent review; do not duplicate it
-with routine OpenCode Terra review.
+Claude Code orchestrates and controls publication. OpenCode Luna implements
+standard work, justified Sol/Astra implementers handle harder bounded work,
+and Astra expert supplies fresh read-only preflight or blocker reasoning.
+Codex Sol supplies one triggered independent review. Do not substitute an
+OpenCode Astra review for that external independent reviewer.
 
 ## Discuss prompt
 
@@ -69,13 +69,13 @@ Return findings first or "no blocker", then stop/go.
 - Report mode, requested model, observed active model (if available), plugin
   review/job ID, elapsed time, findings, and warnings. Distinguish observed
   model evidence from unavailable model evidence; missing metadata is
-  observational and must not be filled in or treated as proof of Terra. An
+  observational and must not be filled in or treated as proof of Sol. An
   explicit model mismatch is blocking.
 
 ## Temporary review-capacity restriction
 
-Claude MCP secondary-review capacity is exhausted for this initiative. Do not
-launch Claude MCP secondary review work until the owner restores that
-capacity. If a secondary opinion is actually triggered, use one bounded,
-read-only OpenCode review only; this is not permission for routine review, a
-write-capable route, or a change to publication authority.
+If this skill's independent Codex reviewer is unavailable for an L3 phase,
+stop the phase and report the missing independent review. Neither a second
+OpenCode Astra consultation nor a review by the preflight author satisfies
+the independent-review gate. Do not silently substitute a reviewer or change
+publication authority.
