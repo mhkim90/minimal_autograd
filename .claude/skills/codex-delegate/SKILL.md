@@ -11,7 +11,7 @@ routes. For an unfocused native git-diff/working-tree review, invoke
 approach, invoke `/codex:adversarial-review`. Keep the review target and
 context inside the caller's current repository.
 
-Every mandatory Codex review must pass `--model gpt-6-sol` explicitly to
+Every mandatory Codex review must pass `--model gpt-6.1-sol` explicitly to
 the selected review command. Never silently use the configured default or
 claim the intended model when the requested model is not observed.
 

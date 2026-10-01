@@ -32,13 +32,6 @@ If a job remains live at its declared maximum wait, stop the affected phase as
 not cancel automatically. If tools are unavailable, report the missing route
 rather than silently substituting it.
 
-## Usage correlation
-
-If the controller supplies a `workflow_id`, pass it to every Claude run. After
-terminal state, query `claude_usage_get` and bind only an exact returned session
-ID once. The controller owns finish, ingest, and reporting; usage is
-observational and never changes the review gate.
-
 ## Prompt template
 
 ```text
@@ -55,5 +48,4 @@ Return: findings, acceptance concern, and stop/go.
 
 Report the job/thread identity, active/bound model, trigger reason, checkpoint
 history, maximum-wait outcome, and one state: `review pending`, `go`,
-`blocker`, or `unavailable`. Keep usage observational; do not add fixed token
-or price semantics.
+`blocker`, or `unavailable`.

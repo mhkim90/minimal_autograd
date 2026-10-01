@@ -74,8 +74,8 @@ immediately before its capsule.
 
 ## Async stop kernel
 
-Keep stable workflow and same-role session lineage. Retrieve terminal output
-and normalized usage before finalization; do not send a final response while a
+Keep same-role session and job lineage. Retrieve terminal output before
+finalization; do not send a final response while a
 required job is live. Cancel only for terminal error, declared maximum wait, or
 explicit controller/owner stop with reason and approved replacement route. A
 full Astra-expert consultation in post-inspection `step_start` receives at least a

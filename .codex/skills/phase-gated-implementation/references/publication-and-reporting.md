@@ -47,9 +47,12 @@ expected-head merge. On any drift, eligibility regression, host failure, or
 uncertain outcome, stop all remaining entries and report partial completion;
 retry, rollback, or any remainder requires fresh exact authority.
 
-Marking a PR ready is administrative after validation and review eligibility
-pass; it needs no owner approval. Readiness is not merge authority. No
-automatic merge follows from plan approval, draft state, or readiness.
+Mark a PR ready only after validation and review eligibility pass. A prior
+explicit binding (such as qualified bundle delivery) may already authorize
+readiness. Otherwise, for an eligible draft, include readiness and merge in one
+direct PR-specific request; do not infer readiness from a merge-only approval.
+Readiness is not merge authority, and no automatic merge follows from plan
+approval, draft state, or readiness.
 
 ## PR-lifecycle ledger gate
 
@@ -109,23 +112,25 @@ For the combined topology, publish each green phase on the same draft PR. A
 manual next-phase gate blocks only entry to the next phase, not this green
 phase's publication; a topology deviation or stop rule blocks the affected
 phase. Keep the plan-only PR in draft while verifying it and mark it ready only
-after validation and review eligibility pass.
+after validation, review eligibility, and explicit readiness authority.
 
 Update the PR-lifecycle ledger for each publication transition, including
 external PR changes observed during the gate. Do not enter implementation,
 complete the phase, or sync downstream while an entry is unresolved.
 
 Follow the core's [publication and merge boundaries](../SKILL.md#contextual-approval):
-bind the repository, PR, head, base, and check/review eligibility snapshot;
-request the exact final merge approval; revalidate immediately; and merge only
-with the approved-head/expected-head precondition. If a bound head, base, or
-eligibility changes or regresses, invalidate the approval and request fresh
-approval; revalidation cannot revive it. Source authority never transfers to
-target delivery or downstream sync. Separately explicit target authority must
+bind the repository, PR, draft state, head, base, and check/review eligibility
+snapshot; request the exact ready-and-merge or merge-only approval as
+applicable; revalidate immediately and again after readiness; merge only with
+the approved-head/expected-head precondition. Except for the authorized draft-
+to-ready transition, any bound state/head/base drift or eligibility regression
+invalidates approval and requires fresh authority; revalidation cannot revive
+it. Source authority never transfers to target delivery or downstream sync.
+Separately explicit target authority must
 name the target repository, exact worktree and branch, exact paths or diff, and
 permitted target actions; it authorizes only those actions and never a merge.
 For the L1 fast path, record qualification and acceptance evidence in the
-normal PR and wait for separate final merge approval.
+normal PR and wait for the applicable final PR-specific approval.
 
 ### Post-action successor evaluation
 
@@ -151,4 +156,4 @@ disposition in the phase report.
 Use [templates.md](templates.md) immediately before reporting. Include plan and
 approval state, scope/changed files, controller/model and route evidence, risk
 and difficulty, sessions/retries/wait status, reviewer state, red/green and
-validation evidence, usage warnings, deviations, publication state, and gate.
+validation evidence, deviations, publication state, and gate.

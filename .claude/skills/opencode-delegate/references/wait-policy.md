@@ -3,12 +3,12 @@
 ## Async workflow and elapsed-time policy
 
 1. Keep one session lineage per role. Repeat the same named agent on every
-   continuation or fork, and pass a stable workflow ID.
+   continuation or fork.
 2. At launch, record an active-job ledger: job ID, session ID, role, phase,
    start time, most recent completed-step or event count, and next polling
    deadline. Poll every active implementation job at least every 60 seconds;
-   update its progress and deadline. Retrieve terminal output and normalized
-   usage before removing a terminal entry.
+   update its progress and deadline. Retrieve terminal output before removing
+   a terminal entry.
 3. While the ledger has a running implementation job, keep the controller turn
    active. A user-requested status response is a non-final checkpoint: report
    the ledger snapshot and resume polling next. Do not finalize, pass a gate,

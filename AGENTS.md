@@ -90,10 +90,6 @@ See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/
 
 ## Codex Controller Rules
 
-- When `usage_mcp` is configured, use only the exact
-  `context_window.window_id` returned for the active Codex context; never use a
-  root `CODEX_THREAD_ID`, an old window, or a fallback identity for attribution
-  or terminal queries.
 - OpenCode/Codex MCP tools are available only in remote-controlled sessions.
   If a required route is unavailable, follow the active skill's stop/degrade
   rule; do not silently substitute inline work.
