@@ -76,23 +76,30 @@ boundary pauses affected work for rebinding or renewal.
 
 ## Final merge authorization prompt
 
-Marking ready is administrative after validation and review; do not request
-owner approval for readiness. At merge-request time, the controller records the
-repository, PR, head, base, and relevant check/review eligibility internally.
-Fill those fields before requesting the direct owner reply, but do not ask the
-user for a SHA:
+At the final request, record the repository, PR, draft state, head, base, and
+relevant check/review eligibility internally. Fill those fields before asking
+for the direct owner reply, but do not ask the user for a SHA. For an already-
+ready PR (mark a draft ready first when earlier explicit authority permits it):
 
 ```text
 Approve merging <repository> PR #<N>?
 ```
 
+For an eligible draft without earlier explicit readiness authority, ask once:
+
+```text
+Approve marking <repository> PR #<N> ready for review and merging it?
+```
+
 The only valid reply is exactly `approved` or `approve`, and only for the
-immediately preceding unambiguous single PR merge request. Any later head or
-base change, or eligibility-regressing check/review change, invalidates it and
-requires fresh approval. Do not use this prompt as authority for delivery,
-readiness, or target-sync delivery, or for another PR. It may be used to merge
-one independently authorized target PR; that target merge still requires its
-own bound snapshot, eligibility, and normal merge controls.
+immediately preceding unambiguous single-PR request. Revalidate before the
+readiness action, then again before expected-head merge; the authorized draft-
+to-ready transition is expected, but other state drift, head/base drift, or
+eligibility-regressing checks/reviews invalidate approval. Host rejection
+stops the sequence. Neither prompt authorizes delivery, target-sync delivery,
+or another PR; the merge-only prompt does not authorize readiness. One
+independently authorized target PR may use either prompt under its own bound
+snapshot, eligibility, and normal merge controls.
 
 ## Narrow combined content-and-merge prompts
 
@@ -112,6 +119,20 @@ Approve and merge the plan in <repository> PR #<N>?
 ```text
 Approve and merge the documentation-only PR in <repository> PR #<N>?
 ```
+
+For a qualifying draft without earlier readiness authority, use the matching
+explicit variant:
+
+```text
+Approve the plan in <repository> PR #<N>, mark it ready for review, and merge it?
+```
+
+```text
+Approve the documentation-only PR in <repository> PR #<N>, mark it ready for review, and merge it?
+```
+
+These variants bind all three actions to the same PR; qualification and drift
+rules are unchanged.
 
 The ledger entry must be resolved before successful completion; these prompts
 never grant implementation, sync, or host-control bypass authority.
@@ -184,7 +205,7 @@ Elapsed time: <per role>; checkpoints: <count>; wait-policy reviews / final-synt
 Active local sessions at gate: <none or blocked: IDs/status>
 Reviewer trigger reason: <reason or none>; reviewer/state/verdict: <details or pending>
 Red gate: <right failure then pass>; attempts: <used>/<cap>
-Validation: <commands/results>; metrics: <values>; usage: <accounting and completeness warnings, if available>
+Validation: <commands/results>; metrics: <values>
 Plan deviations: <none or rationale>
 Successor: <uniquely declared immediate successor and existing named worktree | not declared | ambiguous | none>
 Successor evidence: <advance: auto declaration, scope/route/dependency/acceptance/topology, ancestry, blocker, and live-state/preflight evidence>
@@ -192,5 +213,6 @@ Transition disposition: <auto-advanced | waiting-for-explicit-delivery | waiting
 Gate: <published; auto-proceeding | published; proceeding-within-approved-combined-topology | published; waiting-for-next-phase-approval | blocked>
 ```
 
-Usage is observational evidence only; do not introduce fixed token, price, or
-provider-private-path budgets or semantics.
+Only when requested, add native per-job usage diagnostics with their coverage
+limitations. They are observational, not total-session accounting or a quality
+gate; do not introduce fixed token, price, or provider-private-path budgets.

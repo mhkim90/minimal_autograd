@@ -1,7 +1,7 @@
 ---
-description: Bounded GPT-6 Sol implementation profile with Luna guardrails.
+description: Bounded GPT-6.1 Sol implementation profile with Luna guardrails.
 mode: all
-model: openai/gpt-6-sol#high
+model: openai/gpt-6.1-sol#high
 steps: 60
 permission:
   external_directory: deny

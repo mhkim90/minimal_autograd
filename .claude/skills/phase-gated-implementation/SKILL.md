@@ -12,13 +12,6 @@ interactive Claude Code only publishes. References supply procedure and
 evidence; this entry remains the authority for routing, gates, publication, and
 continuation.
 
-## Usage correlation
-
-When `usage_mcp` is configured, read
-[`references/usage-correlation.md`](references/usage-correlation.md)
-immediately before starting, handling terminal provider work, or closing a
-correlated workflow. Do not infer or reconstruct a missing controller identity.
-
 ## Routes and selector stops
 
 Keep safety risk (L1–L4) separate from difficulty. Mechanical/economy and
@@ -114,11 +107,15 @@ minimum metadata to its named configured destination, while binding drift,
 excluded material or action, a host rejection, or a later phase requires a stop
 and fresh authority—host policy is never bypassed.
 
-Ordinary merge remains exactly `Approve merging <repository> PR #<N>?`; bind
-repository, PR, head, base, complete file set/modes/classification, and
-eligibility before requesting it and immediately after approval; any drift
-invalidates approval and requires fresh authority, the user never supplies a
-SHA, and host/repository protections and required checks remain mandatory.
+For an already-ready PR, ordinary merge remains exactly `Approve merging
+<repository> PR #<N>?`. For an eligible draft without prior explicit readiness
+authority, ask once to mark that named PR ready for review and merge it; a
+merge-only approval never implies readiness. Bind repository, PR, draft state,
+head, base, complete file set/modes/classification, and eligibility before the
+request and immediately after approval; revalidate again between readiness and
+merge. Except for the authorized draft-to-ready transition, drift invalidates
+approval and requires fresh authority. The user never supplies a SHA, and
+host/repository protections and required checks remain mandatory.
 Read [`references/publication-and-reporting.md`](references/publication-and-reporting.md)
 immediately before plan/approval decisions, commit, push, PR action, merge, or
 report. It supplies publication order, detailed ledger/bundle rules, and report
@@ -130,8 +127,9 @@ Default to one independently releasable/revertible implementation PR. Bundle
 only compatible adjacent phases; split at material security, API/compatibility,
 release, migration, rollback, dependency, ownership, review, or validation
 boundary. An L1 fast path retains exact scope, checks, staging, evidence, stop
-rules, and final merge authority. Readiness is administrative after validation
-and review, never merge authority.
+rules, and final merge authority. Readiness requires validation and review
+eligibility and is never merge authority; obtain explicit readiness authority
+when it was not already included in the binding.
 
 Before each phase, inspect dirty state and pause files, obtain current evidence,
 run the smallest right-reason red gate, and apply the three-attempt cap unless
