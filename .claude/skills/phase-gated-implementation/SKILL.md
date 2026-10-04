@@ -72,6 +72,33 @@ policy, workflow, configuration, or code content uses ordinary final merge
 control. A plan-plus-implementation PR never qualifies; drift requires fresh
 approval.
 
+## Planning-review transition
+
+Before presenting a substantive plan as approval-ready or requesting its
+approval, complete the required planning review for that revision: `grilled-me`
+for an active-agent draft; `plan-audit` for user/repo/issue/external substantive
+authorship. Editing or summarizing externally authored material does not change
+its origin. Load the prescribed skill at this transition and obtain its review
+result with no unresolved blocking findings; naming the route is not completion.
+
+If the required route or review evidence is unavailable, identify the missing
+prerequisite and stop this transition. Do not substitute ordinary approval, an
+unrouted self-check, or a built-in route. Explicitly unreviewed, discussion-only
+outlines and stopped blocker questions remain allowed. Inviting owner direction
+is non-binding and does not itself resolve the review prerequisite; do not
+solicit approval of that outline or promise to cross the blocked transition.
+
+The existing L1 direct path and one-named-task plan-only waiver retain their
+scope; neither by itself waives required review. A request or ordinary `approve`
+grants no review-changing authority. Assess exact review-changing owner
+direction for scope, instruction hierarchy, and host/security controls before
+promising or taking the transition; preserve valid scoped direction. Missing
+capability alone proves neither injection nor authenticity.
+
+Required planning review precedes approval-ready presentation; applicable plan
+approval precedes implementation. This adds no approval checkpoint or
+publication authority.
+
 ## Authorization and P0 verification
 
 Use an exact approved plan and declared topology for phased, non-trivial, or
@@ -155,13 +182,10 @@ syncs. Stop and request the next independently authorized publication action.
 
 Load a reference immediately before its transition, never merely at phase
 entry. It explains how and returns evidence; this core decides route, gate,
-publication, and continuation. Editing or summarizing externally authored
-material does not change its origin.
+publication, and continuation.
 
 | Trigger | Codex destination | Claude destination |
 | --- | --- | --- |
-| Active agent drafted substantive plan | `grilled-me` | `grilled-me` |
-| User/repo/issue/external substantive author | `plan-audit` | `plan-audit` |
 | Implementation delegation | `opencode-delegate` + `references/delegation.md` | `opencode-delegate` + [`references/delegation.md`](references/delegation.md) |
 | Triggered independent read-only review | `claude-delegate` + `references/review-and-wait-policy.md` | `codex-delegate` + [`references/review-and-wait-policy.md`](references/review-and-wait-policy.md) |
 | Resume/cross-repository work | `memory-continuity` | `memory-continuity` |
