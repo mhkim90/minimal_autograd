@@ -67,6 +67,15 @@ PR-specific boundary-scoped owner direction, or explicitly closed. Retained is
 not an unmerged-plan exception. Stop reports may list unresolved entries but
 cannot claim success.
 
+If no task Plan PR exists, report unpublished local plan/P0 evidence and
+PR `not-created`/`not-applicable`, without inventing a ledger entry. An existing
+or duplicate task Plan PR is an actual touched PR and topology deviation:
+record its identity and resolve its ledger disposition under the rules above,
+applying the core's renewal rules before a route switch. Never report that PR
+absent or infer implementation permission from retained/reopened status;
+an unmerged Plan PR neither satisfies a merged-plan gate nor supplies
+implementation permission.
+
 For the only combined content-and-merge paths, bind and revalidate the full
 repository/PR/role/branch/head/base/eligibility/file-set/file-mode/classification
 snapshot before the prompt and immediately after approval. Exact plan-only and
@@ -78,27 +87,49 @@ requires fresh approval.
 
 ## Plan-first workflow
 
-Follow the core's [combined topology and boundary rules](../SKILL.md#authorization-and-p0-verification).
-When publication is permitted, execute the combined L2/L3 workflow in this
-order:
+Apply the core's [authorization and P0 rules](../SKILL.md#authorization-and-p0-verification)
+for route eligibility, protected boundaries, checkpoint identity, renewal, and
+exceptions. Record the rationale in the existing binding/report fields; use
+[templates.md](templates.md) for the complete authorization fields.
 
-1. Verify the approved plan identity, declared scope, phases, gates, manual
-   boundaries, and delivery topology; keep the plan-only PR free of
+**Local plan and one eventual PR**
+
+1. Complete the provenance-correct planning review for the exact revision.
+   Obtain the complete named Local Plan-and-Implementation binding, including
+   any authorized external route destinations and source/diff payload.
+2. Record the approved plan, create plan-only local P0, and verify the core's
+   entry gate before implementation. Save the durable controller evidence
+   location and original checkpoint record in the handoff.
+3. Perform bounded implementation, tests, required independent review, explicit
+   staging, and validated local commits within that envelope. No initial draft,
+   published-plan verification, per-phase push, or per-file/per-test/per-review/
+   per-phase owner confirmation is required for already authorized actions.
+4. After the local gates pass, inspect cumulative changes and original-P0
+   descent, then prepare one PR containing the plan, implementation, and tests
+   when applicable. Obtain the separate exact publication-transfer binding
+   above; local approval is not GitHub publication authority.
+
+**Optional early-published same-PR route**
+
+1. Verify the approved plan identity, scope, phases, gates, manual boundaries,
+   and topology. Obtain named Plan-and-Draft authorization for only that
+   plan's commit/push/draft PR; keep the initial plan-only diff free of
    implementation, generated output, and downstream sync.
-2. Confirm the initial diff is exactly the approved plan, the published plan
-   matches its approved revision, and entry gates pass. Record the plan path,
-   current plan-only HEAD, and immutable P0.
-3. After visible PR verification, obtain the named Implementation authorization
-   and apply its permitted in-envelope actions only.
-4. Before each delivery, perform the core's continuing P0 check and inspect
-   cumulative scope, topology, and evidence. Request approval only for the
-   exact visible plan identity and current binding.
-5. On plan, target, authorization, scope, topology, manual-boundary, or other
-   core-defined drift, stop and obtain the required rebinding or renewal.
+2. Verify the visible PR's initial diff is exactly the approved plan, its
+   published revision matches approval, and entry gates pass. Record the plan
+   path, current plan-only HEAD, and immutable published P0.
+3. After visible PR verification, obtain named Implementation authorization
+   for validated in-envelope same-PR commits/pushes under the core's entry and
+   authority limits.
+4. Before each delivery, perform the continuing P0 check and inspect cumulative
+   scope, topology, and evidence under the current exact binding.
 
-The core's [separate-boundary and L1 rules](../SKILL.md#delivery-topology) apply
-outside the combined topology. If publication is prohibited, retain all local
-scope and acceptance gates and report why no PR exists.
+For amendments, base refresh, route switches, or other drift, apply the linked
+core review/renewal and lineage rules before affected work. Other topologies
+use the core's applicable merged-plan/exception rules and
+[delivery boundaries](../SKILL.md#delivery-topology).
+If publication is prohibited, retain local scope and acceptance gates and
+report actual local and PR state.
 
 ## Per-phase publication
 
@@ -108,15 +139,24 @@ intended paths; never broad stage. Use `Phase-gate: auto (L1)`,
 `Phase-gate: bundle (P<N>)`, or `Phase-gate: manual`; present one exact pending
 delivery action and apply only the current checkpoint's bounded authorization.
 
-For the combined topology, publish each green phase on the same draft PR. A
-manual next-phase gate blocks only entry to the next phase, not this green
-phase's publication; a topology deviation or stop rule blocks the affected
-phase. Keep the plan-only PR in draft while verifying it and mark it ready only
-after validation, review eligibility, and explicit readiness authority.
+For the local route, follow the [local workflow](#plan-first-workflow) for
+validated local phases and eventual authorized delivery; no phase push is
+required. Apply the core's
+[classification rules](../SKILL.md#non-authoritative-ledger-and-classifications)
+to the plan-plus-implementation PR.
+
+For the early-published combined topology, publish each green phase on the same
+draft PR under its existing authorization. A manual next-phase gate blocks
+only entry to the next phase, not authorized publication of this green phase;
+a topology deviation or stop rule blocks the affected phase. Keep the initial
+plan-only PR in draft while verifying it. Mark a PR ready only after
+validation, review eligibility, and explicit readiness authority.
 
 Update the PR-lifecycle ledger for each publication transition, including
 external PR changes observed during the gate. Do not enter implementation,
 complete the phase, or sync downstream while an entry is unresolved.
+After authorized publication, verify remote branch/head, PR state, base, and
+payload against the binding; stop on rejection, drift, or uncertain outcome.
 
 Follow the core's [publication and merge boundaries](../SKILL.md#contextual-approval):
 bind the repository, PR, draft state, head, base, and check/review eligibility
@@ -131,6 +171,10 @@ name the target repository, exact worktree and branch, exact paths or diff, and
 permitted target actions; it authorizes only those actions and never a merge.
 For the L1 fast path, record qualification and acceptance evidence in the
 normal PR and wait for the applicable final PR-specific approval.
+
+Authorized branch/worktree housekeeping alone needs no PR. Separate code
+optimization warrants a PR only when independently justified and authorized;
+do not invent implementation work merely to accompany cleanup.
 
 ### Post-action successor evaluation
 

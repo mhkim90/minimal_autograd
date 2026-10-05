@@ -103,28 +103,72 @@ publication authority.
 
 Use an exact approved plan and declared topology for phased, non-trivial, or
 L2–L4 work. The plan declares scope, gates, risk/difficulty/routes, wait policy,
-dependencies, manual boundaries, and topology. A combined L2/L3
-draft-plan/implementation PR has exactly two
-checkpoints: named Plan-and-Draft authorization permits only that plan's
-commit/push/draft PR; named Implementation authorization permits only validated
-in-envelope commits/pushes after P0. Neither permits readiness, merge,
-deployment/release, or cross-repository delivery.
+dependencies, manual boundaries, and topology.
 
-P0 requires the initial PR diff be exactly the approved plan, the published
-plan match its revision, and first implementation head equal P0 except an
-explicitly authorized inspected pre-implementation change. Before delivery,
-inspect cumulative scope/topology/evidence and verify plan identity, expected
-P0 descent, and no drift. Plan amendment/replacement, unexpected history,
-scope/topology/risk/target/acceptance/base change, or manual boundary pauses
-the affected work. L4, material migration/security/trust/release/cross-repo,
+For ordinary eligible L2/L3 work, default to a reviewed local plan and one
+eventual plan-plus-implementation PR. After provenance-correct planning review,
+one named Local Plan-and-Implementation approval binds repository, worktree,
+branch, base, exact plan revision, scope, topology, eligibility/boundary
+rationale, gates, and local actions. When external implementation/review routes
+are used, that same approval visibly binds their configured delegate/reviewer
+destinations, authorized routes/roles, and necessary in-scope read-only
+source/diff payload. Already-bound use requires neither a second disclosure
+prompt nor separate review approval; it grants no arbitrary external disclosure.
+Missing or changed binding, or host rejection, stops the affected transfer for
+exact authority; host policy is never bypassed.
+It permits recording the plan, plan-only local P0, bounded implementation,
+tests, required review, explicit staging, and validated local commits. It
+permits no push, PR action, readiness, merge, release/deployment, or sync.
+Before implementation, verify the approved revision and immutable local P0:
+its delta from the original recorded base is exactly the approved plan
+artifact(s), with no
+implementation already staged or present in the task worktree.
+After creation, the controller durably records original local P0 identity,
+original base, approved revision/provenance, and entry/ancestry evidence in
+non-authoritative controller evidence and handoff, outside the immutable plan.
+
+Optional early publication on the same PR retains exactly two named
+checkpoints for that route: Plan-and-Draft permits only that plan's
+commit/push/draft PR; Implementation permits only validated in-envelope
+same-PR commits/pushes after visible P0 verification. Its initial published PR
+diff must be exactly the approved plan and match the approved revision.
+Neither checkpoint permits readiness, merge, release/deployment, or
+cross-repository delivery. Published-P0 requirements do not apply to local P0.
+
+For either route, first implementation HEAD equals P0 except an explicitly
+authorized inspected pre-implementation change; record that first HEAD.
+Preserve original P0,
+authorship provenance, approved revision/amendments, and expected ancestry.
+Before delivery, inspect cumulative scope/topology/evidence, plan identity,
+and P0 descent. Missing or rewritten P0, unexpected history, plan
+amendment/replacement, scope/topology/risk/target/acceptance/base drift, or a
+manual boundary stops affected work. Amendments require existing planning
+review and approval renewal before affected work, never retroactively.
+Base refresh is never automatic: required review and renewed binding precede
+an explicitly authorized history-preserving update, such as a base merge,
+retaining original P0 identity and descent. Never silently rebase, replace P0,
+or reinterpret first-implementation HEAD. A route switch is topology drift
+requiring existing renewal, not implicit authorization.
+Execution details within an unchanged envelope add no approval checkpoints.
+
+The controller records route eligibility/boundary rationale in the existing
+binding/report fields: ordinary eligibility, an important early API/architecture
+decision, or a material boundary, with its evidence.
+L4 and material API/architecture/migration/security/trust/release/cross-repo,
 rollback/ownership, and independent-decision boundaries retain a merged
-plan-only PR or explicit owner direction.
+Design/Plan PR or explicit scoped owner direction. Important API/architecture
+decisions needing early feedback call for early design; an early visibility
+draft is not a substitute for a material Design gate. Size or agent count alone
+does not require a separate Design PR for large low-risk mechanical or parallel
+established-design work; parallel work retains role/scope/ownership controls.
 
-Outside that topology, require the applicable merged plan-only PR or a complete
-active unmerged-plan exception recording its reason, implementation branch/PR
-when available, and concrete resolution event. The qualified L1 direct path or
-recorded one-named-task waiver is the only alternative and retains exact scope,
-validation, delivery, and final PR-specific merge control.
+Outside these eligible topologies, require the applicable merged plan-only PR
+or retain the complete active unmerged-plan exception under its applicable
+authorization, recording its reason, implementation branch/PR when available,
+and concrete resolution event. The local route is first-class, not such an
+exception. The qualified L1 direct path or recorded one-named-task waiver
+remains the only alternative there and retains exact scope, validation,
+delivery, and final PR-specific merge control.
 
 ## Contextual approval
 
