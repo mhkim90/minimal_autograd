@@ -35,19 +35,26 @@ and do not silently substitute a selector, model, role, or continuation.
 OpenCode MCP execution uses the caller's working directory; its tools do not
 accept a caller-selected `cwd` parameter. The boundary is path-based, not
 repository-identity-based, so external paths—including arbitrary `/tmp`
-worktrees—are denied. Another repository is reachable only when the
-controller first creates an isolated worktree for it under the caller's cwd and
-gives the delegate paths scoped to that worktree. Commits and PRs still belong
-to that repository's remote. Codex shell tools with an explicit `cwd` are a
-separate capability and do not widen OpenCode MCP's delegation boundary. This
-is descriptive constraint text; it authorizes no cross-repository work,
+worktrees—are denied. Path-contained source/worktrees do not prove access to
+linked/common Git metadata. Follow the
+[OpenCode Delegate boundary](../../opencode-delegate/SKILL.md#boundary) for
+actual-delegate technical proof, runtime/tool failure classification, and
+scoped cross-repository checkout/clone authority. Commits and PRs belong to
+the verified source repository's configured remote, not the caller repository
+or an arbitrary clone destination. Shell tools with an explicit `cwd` are a
+separate capability and do not widen OpenCode MCP's delegation boundary.
+This descriptive constraint text authorizes no cross-repository work,
 worktree operation, editing, publishing, or syncing.
 
 ## Bounded sessions and retries
 
 Use one bounded phase/subphase per Luna session; end it after green/completion.
 Start or fork a session when scope, red gate, strategy, or blocker changes
-materially. Allow at most three implementation/fix attempts. After two failures
+materially. The [OpenCode Delegate capability gate](../../opencode-delegate/SKILL.md#boundary)
+governs actual capabilities, scoped edit proof, and terminal diagnostics.
+Its immediate STOPs, including midphase, override ordinary retries and do not
+trigger an automatic expert detour. After that gate passes, allow at most three
+ordinary implementation/fix attempts. After two failures
 on the same blocker, stop blind retries and request one bounded Astra-expert
 consultation; allow a third only with a materially revised approach.
 
