@@ -16,6 +16,18 @@ Routing: <luna | justified sol-implementer | justified astra-implementer | fresh
 Expert escalation evidence: <role or none>; reason/question: <...>; why cheaper route is insufficient: <...>; requested/resolved model: <...>; effort: <...>; job/session: <...>; expected evidence: <...>; stop condition: <...>
 Model binding: <named profile GPT-6 #high or explicit unnamed user route; reported match/warnings>
 Capability proof / STOP diagnostics: <actual exposed capabilities; authorized Git/editor proof with tools/invocations/exits/readback, or terminal failure record per linked Boundary>
+
+Implementation-only capability preflight:
+Invoke the actual exposed execution/read capability, then explicitly select the
+approved worktree before read-only status, branch, HEAD, absolute Git-dir/common-
+dir, and plan-hash checks. Record and compare each result and exit; use separate
+calls or fail-fast chaining so a later success cannot mask an earlier failure.
+Actual tool calls are evidence, not printed JSON. If no native editor is exposed,
+discover an existing permitted shell editor; do not assume `patch` or install
+tools. Missing native `apply_patch` does not establish editing is unavailable.
+Listing is not proof. Only for authorized edits, prove with a minimal in-scope
+edit/readback or an authorized marker confirmed absent first, then
+create/readback/remove it. Preserve each existing distinct immediate STOP.
 Elapsed-time checkpoint / final-synthesis grace (full Astra expert only) / maximum wait: <phase-defined values>
 Constraints:
 - one bounded phase/subphase; no commit or edits outside scope
