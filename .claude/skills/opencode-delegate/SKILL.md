@@ -31,6 +31,10 @@ fixed tool names from the controller or other sessions; a listing alone is not
 editor proof. A read-only expert needs capabilities for its authorized reads,
 not an editor gate.
 
+A missing native editor such as `apply_patch` does not establish editing is
+unavailable; an exposed confined shell may invoke an existing permitted editor.
+Discover it rather than assume `patch` or install tools.
+
 Use actual exposed execution/read capabilities read-only to establish the exact
 checkout and branch, run `git status` with optional writes disabled
 (`GIT_OPTIONAL_LOCKS=0` for Git checks), resolve HEAD, and compute SHA256 of the
