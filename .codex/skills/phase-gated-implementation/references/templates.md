@@ -4,46 +4,13 @@ Read this immediately before sending a delegate prompt, Astra-expert capsule, or
 phase report. Fill every applicable field; return the resulting evidence to the
 core.
 
-For OpenCode implementation, apply the [actual-delegate capability gate](../../opencode-delegate/SKILL.md#boundary)
-and its scoped proof/STOP diagnostics; read-only experts need no editor gate.
-
 ## Implementation prompt
 
-```text
-Context: <project + phase>
-Task: <exact edit/run loop>
-Files/scope: <approved paths or globs>
-Red gate: <command/check + expected failure>
-Success criteria: <checks/metrics>
-Safety risk: <L1-L4>
-Implementation difficulty: <mechanical/economy | standard | difficult>
-Implementation route: <luna | justified sol-implementer | justified astra-implementer | astra-expert then implementer | controller-bound astra-orchestrator | explicit user configured default>; omit named model/variant
-Expert escalation evidence: <role or none>; escalation reason/question: <...>; why cheaper route is insufficient: <...>; requested/resolved model: <...>; effort: <...>; job/session: <...>; expected evidence: <...>; stop condition: <...>
-Model binding: <named GPT-6 #high profile or explicit unnamed route; reported match/warnings>
-Capability proof / STOP diagnostics: <actual exposed capabilities; authorized Git/editor proof with tools/invocations/exits/readback, or terminal failure record per linked Boundary>
-
-Implementation-only capability preflight:
-Invoke the actual exposed execution/read capability, then explicitly select the
-approved worktree before read-only status, branch, HEAD, absolute Git-dir/common-
-dir, and plan-hash checks. Record and compare each result and exit; use separate
-calls or fail-fast chaining so a later success cannot mask an earlier failure.
-Actual tool calls are evidence, not printed JSON. If no native editor is exposed,
-discover an existing permitted shell editor; do not assume `patch` or install
-tools. Missing native `apply_patch` does not establish editing is unavailable.
-Listing is not proof. Only for authorized edits, prove with a minimal in-scope
-edit/readback or an authorized marker confirmed absent first, then
-create/readback/remove it. Preserve each existing distinct immediate STOP.
-
-Elapsed-time checkpoint / final-synthesis grace (full Astra expert only) / maximum wait: <phase-defined values>
-Constraints:
-- one bounded phase/subphase; do not commit or edit outside scope
-- immediate capability STOP overrides ordinary retries, including midphase
-- after capability gate passes, max attempts: <approved cap>; stop after two ordinary same-blocker failures
-- use a materially revised approach before any third attempt
-Final response: changed files, decisions, commands, blockers, session count,
-retries, requested agent, job ID, session ID, bound/reported model, route,
-and capability proof or STOP diagnostics under the linked Boundary
-```
+Use the [canonical implementation prompt](../../opencode-delegate/references/prompt-template.md)
+with the [actual-delegate gate and recovery contract](../../opencode-delegate/SKILL.md#boundary).
+Fill the approved checkout/plan, route, scope, acceptance, candidate cap,
+wait/deadline, and expressly permitted recovery fields; do not add unapproved
+policy or arbitrary budgets. Read-only experts need no editor gate.
 
 ## Local Plan-and-Implementation authorization checkpoint
 
@@ -61,14 +28,16 @@ plan-plus-implementation PR, included phases and split boundaries>;
 eligibility/boundary rationale=<ordinary eligibility | important early
 API/architecture decision | material boundary; evidence and applicable merged
 Design/Plan gate or exact scoped owner direction>;
-gates=<risk/difficulty/routes, tests, required independent review, wait policy,
-acceptance, dependencies, and manual boundaries>.
+gates=<risk/difficulty/routes, tests, required independent review, task-specific
+wait/synthesis allowance and overall deadline, acceptance, dependencies, and
+manual boundaries>; recovery=<one controller-launched fresh same-role session
+per phase after terminal/result/diff review, retaining caps/lineage, or none>.
 External route binding=<configured delegate/reviewer destinations, authorized
 implementation/review routes and roles, necessary in-scope read-only source/diff
 payload for each, or none>.
 Permitted local actions and bound route use only: record the approved plan,
 create its immutable plan-only local P0, bounded implementation/tests/required
-review, explicit staging, and validated in-envelope local commits.
+review, explicit staging, and validated in-envelope controller-local commits.
 P0 entry gate=<original-base delta exactly approved plan artifact(s), no
 implementation already staged or present; approved revision/checkpoint verified
 before implementation; first implementation HEAD recorded as P0 or an existing
@@ -135,7 +104,11 @@ authorize a changed destination, payload, or action.
 For the early-published same-PR route, after visible PR verification present
 this exact named action. P0 is the controller-recorded immutable published
 plan checkpoint; do not ask the user to provide a SHA. The local route uses
-its Local Plan-and-Implementation binding instead.
+its Local Plan-and-Implementation binding instead. When the ledger gate
+requires retaining the still-active draft, include explicit PR-specific owner
+retention and its declared resolution event here, not in a separate prompt.
+Retention does not waive entry/P0 checks or authorize success or merge of an
+unmerged Plan PR.
 
 ```text
 Authorize Implementation for repository=<repository>; PR=<number/URL>;
@@ -144,6 +117,9 @@ Visible PR verification=<initial diff is exactly the approved plan;
 published plan matches approved revision; entry gates pass>.
 First implementation head=<P0, or explicitly authorized and inspected
 pre-implementation change>.
+PR-specific retention disposition=<when required by the ledger: explicitly
+retain this named draft within the implementation boundary; declared concrete
+resolution event; otherwise not-applicable>.
 Permitted actions only: validated in-envelope commits and pushes to this same
 draft PR. Not permitted: a new PR, readiness, merge, deployment/release,
 cross-repository delivery, target sync, or any out-of-envelope change.
@@ -256,48 +232,28 @@ Evidence: <compact diff/test evidence>
 Answer from this capsule when possible. If inspection is needed, each batch
 resolves one named decision using a relevant file range or narrow symbol; never
 use repository-wide enumeration/search or whole-file reads when a range will do.
-Use at most four inspection batches; if evidence remains insufficient, return
-Stop and name the missing evidence. A follow-up starts a new session with a
+Inspect within declared wait/stop limits, not a universal batch ceiling; stop
+when evidence is unavailable or further inspection no longer addresses the
+question, naming missing evidence. A follow-up starts a new session with a
 refreshed compact capsule.
 Return: findings; proposed approach; acceptance gate; stop/go.
 ```
 
 ## Phase report
 
-```text
-Phase <N>: <complete | in progress | blocked>; local state: <commit or uncommitted state>
-Publication: <local/unpublished | published | stopped before prohibited action>
-Plan preflight: <artifact/revision, provenance-correct review, freshness, selected route and applicable manual-gate evidence | L1 fast path: behavior-preserving qualification and waiver>
-Plan PR disposition: <merged | unmerged-exception | explicitly-retained | closed | not-created | not-applicable | unknown>; plan identity: <local path/revision plus P0 | title plus actual PR | unique commit title | named ingredients | not-applicable | unknown>; owner approval: <plan-scope/content/route evidence | L1 waiver | pending | invalidated | not-applicable | unknown>; controller binding: <plan path, provenance, approved revision/amendments, original and current bound base, original plan-only P0, durable non-authoritative evidence/handoff location; base-update review/renewal and authorized history-preserving action or none; current-head/expected-ancestry verification: verified | stale | ambiguous | not-applicable | unknown>
-Local L2/L3 binding: <Local Plan-and-Implementation fields: repository, worktree, branch, base, exact plan revision, scope, topology, eligibility/boundary rationale and applicable gate/direction, gates, permitted local actions, configured external destinations/routes/roles and source/diff payload or none; status | not-applicable>; task Plan PRs: <none: not-created/not-applicable | existing/duplicate: actual identities and ledger links | unknown>
-Early-published L2/L3 binding: <Plan-and-Draft fields: repository, worktree, branch, base, plan path/revision, exact plan diff, one draft PR; status | not-applicable>
-Implementation authorization: <local: exact local binding and permitted actions, no GitHub publication authority | early-published: repository, PR, branch, immutable published P0, visible PR verification, permitted same-PR commits/pushes; status>
-P0 verification: <local: original-base delta exactly approved plan artifact(s), no implementation already staged/present, approved revision/checkpoint verified before implementation | early-published: initial PR diff exactly approved plan, published revision matches, visible entry gates pass>; recorded first implementation HEAD: <P0 or named authorized inspected exception>; original P0/provenance/revision/amendments/expected descent and cumulative scope/topology/evidence: <verified | stale | ambiguous>
-Publication-transfer binding: <separately bound repository, configured destination, base, branch, reviewed payload, minimum metadata, permitted actions; authority/status and verified remote state | not-authorized | not-created | not-applicable>
-Unmerged-plan exception: <applicable original route and authorization; reason; implementation branch: <name or not-created/not-applicable/unknown>; implementation PR: <number/URL or not-created/not-applicable/unknown>; resolution event: <event or not-created/not-applicable/unknown>; resolution state: <resolved | pending | renewed | not-applicable | unknown>>; local route: <not an exception>
-Implementation branch/PR: <branch and PR or not-created | not-applicable | unknown>; readiness: <draft | ready | not-created | not-applicable | unknown>; merge state: <merged | not-merged | not-created | not-applicable | unknown>
-Delivery topology: <local one eventual plan-plus-implementation PR | early-published same-PR | separate Design/Plan route | direct L1 PR qualification>; implementation-PR count/current PR/included phases/phase-to-PR mapping: <actual state, including existing/duplicate task PRs>; split boundary/rationale: <evidence or none>; topology deviation: <none | existing/duplicate Plan PR | route switch | other; existing renewal evidence or blocked>; actual touched-PR ledger/dispositions: <resolved evidence or blockers>
-Scope: <approved globs>; changed files: <list>
-Controller: Codex; intended default: Sol; active model: <runtime evidence>
-Safety risk level: <L1-L4>; implementation difficulty: <mechanical/economy | standard | difficult>
-Implementation route: <luna | justified sol-implementer | justified astra-implementer | astra-expert then implementer | controller-bound astra-orchestrator | explicit user configured default>
-Implementation sessions / retries: <count> / <count>; route evidence: <requested agent, job/session IDs, bound/reported model, warnings>
-Capability proof / STOP diagnostics: <actual tools/invocations/exits/Git/editor readback or terminal failure record per linked Boundary>
-Expert escalation: <role, reason/question, why cheaper route is insufficient, requested/resolved model, effort, job/session, expected evidence, stop condition, or none>
-Elapsed time: <per role>; checkpoints: <count>; wait-policy reviews / final-synthesis grace: <none or list>
-Active local sessions at gate: <none or blocked: IDs/status>
-Reviewer trigger reason: <reason or none>; reviewer/state/verdict: <details or pending>
-Red gate: <right failure then pass>; attempts: <used>/<cap>
-Validation: <commands/results>; metrics: <values>
-Plan deviations: <none or rationale>
-Successor: <uniquely declared immediate successor and existing named worktree | not declared | ambiguous | none>
-Successor evidence: <advance: auto declaration, scope/route/dependency/acceptance/topology, ancestry, blocker, and live-state/preflight evidence>
-Transition disposition: <auto-advanced | waiting-for-explicit-delivery | waiting-for-manual-boundary | blocked>
-Gate: <local validated; proceeding-within-approved-local-envelope | local validated; waiting-for-explicit-delivery | published; auto-proceeding | published; proceeding-within-approved-combined-topology | published; waiting-for-next-phase-approval | blocked>
-```
+Keep chat brief; retain applicable detailed binding and evidence fields in
+[durable phase evidence](publication-and-reporting.md#durable-phase-evidence).
+Never omit a blocker or substitute a summary for the exact evidence.
 
-Only when requested or required for a capability-failure record, add native
-normalized per-job usage diagnostics when available, otherwise unavailable
-with coverage limitations. They are observational, not total-session accounting
-or a quality gate; do not fabricate totals, use `usage_mcp`, read private provider
-paths, or introduce fixed token, price, or provider-private-path budgets.
+```text
+Phase <N>: <complete | in progress | blocked/pending>; local/publication state: <actual>
+Scope/changes: <files>; red/green and validation: <commands/results>
+Route/candidates: <role, job/session, used/cap, warnings, recovery lineage or none>
+Review/resources: <verdict or pending; every unresolved job/command and result state>
+Time: <per-job launch-to-terminal or runtime-to-date, controller/owner time,
+overall deadline and wait expiry if applicable>
+Evidence: <durable binding/plan/P0/ancestry, capability proof or narrow STOP>
+Unresolved issues/deviations: <none or exact blockers>
+Gate/successor: <controller verdict; proceeding within existing local authority,
+waiting for unbound action/manual boundary, or blocked>
+```

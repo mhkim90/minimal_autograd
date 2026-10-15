@@ -23,45 +23,41 @@ or let the preflight author review its own recommendation.
 
 ## Async checkpoints
 
-Declare expected elapsed-time checkpoints and a maximum wait for every async
-delegate/reviewer. At each checkpoint recover status and classify it as
-measurable activity or liveness only. For OpenCode, advancing completed-step
-or event count is material progress even without partial text; never duplicate
-a slow job. A Claude reviewer exposing only `running` is live but not measurable:
-missing partial text does not increment no-progress. Keep its job through the
-declared maximum wait and report `review pending`.
+Declare task-specific checkpoints, maximum wait, and a final-synthesis
+allowance before launching each delegate/reviewer, bounded by any explicit
+overall wall-clock deadline. Use the canonical
+[async ledger, polling, accounting, and recovery procedure](../../opencode-delegate/references/wait-policy.md).
+It separates actual job launch-to-terminal runtime from controller and owner
+wait, retains job lineage and caps, and never converts timeout into authority.
 
-While a required async job is live, keep the controller turn active. A
-commentary checkpoint reports state and the next poll only; it is never a final
-response, implicit owner handoff, phase stop, gate, or publication action.
-Finalize only after the terminal result has been retrieved, the owner explicitly
-interrupts/stops the work, or the declared maximum wait has been reached.
+For OpenCode, advancing completed steps/events are progress without partial
+text. A reviewer exposing only `running` is live but not measurable; missing
+partial text does not increment no-progress. Keep the same job, poll and retrieve
+terminal results. Expert synthesis uses the declared task-specific allowance,
+not a mandatory ten-minute grace. Two unchanged measurable checkpoints trigger
+a wait-policy review, not abandonment, duplication, or automatic cancellation.
 
 ## Active OpenCode implementation jobs
 
-Operational polling is defined in
-[`opencode-delegate`'s wait policy](../../opencode-delegate/references/wait-policy.md).
-Before every phase gate and final response, the implementation-job ledger must
-be empty; an unrecoverable job state blocks the gate.
-
-After two unchanged measurable checkpoints, record a wait-policy review; do
-not stop, abandon, or cancel solely for that state. On terminal `done`, fetch
-the terminal result before a verdict. At maximum wait, stop the affected phase
-as `review pending at maximum wait` and request controller/owner direction;
-never automatically cancel or treat a live reviewer as unavailable. Evidence is
-unavailable only for missing route/tool, terminal error/cancellation, or failed
-terminal-result retrieval. For OpenCode no-progress, use the
-`opencode-delegate` recovery, including exactly one terminal-result query
-before the controller stops. For a full Astra-expert consultation that reaches
-`step_start` after inspection, retain the same job for a final-synthesis grace
-of at least 10 minutes; the phase maximum wait cannot be shorter.
+The linked wait policy owns active-resource accounting. Before a successful
+gate or final success response, all required jobs must be terminal with results
+retrieved and no unresolved active resource. Keep the controller turn active
+while work is live; commentary checkpoints are not owner handoffs or gates.
+At explicit owner stop or hard expiry, report the phase **blocked/pending** and
+every live/unknown job, command, result-retrieval state, and next required decision.
+That exceptional stop report does not assert an empty ledger or completion.
+Cancellation requests alone never enable replacement; unconfirmed resource
+state blocks the gate. Evidence unavailable from missing route/tool, terminal
+error/cancellation, or failed retrieval is a narrow blocker, not proof that a
+running reviewer failed. No automatic reviewer substitution or live duplication.
 
 ## Local commands
 
 Treat every `exec_command` `session_id` as an active phase resource. Record it,
 poll it at least every 60 seconds until exit, and never duplicate a slow local
-command. Do not answer finally, evaluate/pass a gate, commit, publish, change
-phase, or claim validation while any active session exists. Before every gate
-and final response verify the list is empty; unrecoverable state is unknown and
-blocks the gate. On user interruption, report each session and resume polling
-unless explicitly stopped.
+command. Do not evaluate/pass a gate, commit, publish, change phase, or claim validation
+while an active/unknown session exists. Before success, verify the list is
+empty. An owner stop or hard expiry permits only a blocked/pending final report
+accounting for each live/unknown session, not an empty-list or completion claim.
+On user interruption, report each session and resume polling unless explicitly
+stopped. A cancellation request is not terminal exit evidence.

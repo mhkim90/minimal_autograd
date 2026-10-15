@@ -8,10 +8,10 @@ new phase, pass a gate, publish, or delegate again from this reference.
 
 Apply the core's [route and selector rules](../SKILL.md#routes-and-selector-stops).
 This reference adds delegation evidence: record the requested agent and
-variant, named evidence, acceptance gate, job/session identity, bound/reported
-model, and warnings. A rejected or unavailable selector/model, failed
-execution, mismatched continuation, explicit model contradiction, role
-mismatch, or silent fallback is a stop; missing resolved-model or usage
+variant (omitted for named routes), acceptance gate, job/session identity,
+bound/reported model, and warnings. A rejected or unavailable selector/model,
+mismatched continuation, explicit model contradiction, role mismatch, or silent
+fallback is a stop; missing resolved-model or usage
 metadata is only an observability warning after the selected route is honored
 and the requested role returns a terminal response.
 
@@ -48,26 +48,22 @@ worktree operation, editing, publishing, or syncing.
 
 ## Bounded sessions and retries
 
-Use one bounded phase/subphase per Luna session; end it after green/completion.
-Start or fork a session when scope, red gate, strategy, or blocker changes
-materially. The [OpenCode Delegate capability gate](../../opencode-delegate/SKILL.md#boundary)
-governs actual capabilities, scoped edit proof, and terminal diagnostics.
-Its immediate STOPs, including midphase, override ordinary retries and do not
-trigger an automatic expert detour. After that gate passes, allow at most three
-ordinary implementation/fix attempts. After two failures
-on the same blocker, stop blind retries and request one bounded Astra-expert
-consultation; allow a third only with a materially revised approach.
+Load the [delegate capability/recovery contract](../../opencode-delegate/SKILL.md#boundary)
+before delegation and its [bounded lifecycle](../../opencode-delegate/SKILL.md#bounded-lifecycle)
+for candidate accounting and expert limits. Return failure evidence to the
+controller, not an automatic expert detour or a delegate-owned recovery launch.
+Preserve prior jobs, scoped partial diff, caps, and original plan/P0 provenance
+in any expressly preauthorized controller recovery.
 
-Give Luna the compact implementation prompt in [templates.md](templates.md).
-Give Astra-expert only the compact capsule, prior diff/test evidence, and one
-focused question. It is read-only: it never implements, edits, publishes,
-delegates, or invokes repository skills. Permit one initial consultation and at
-most one follow-up. Require findings, proposed approach, acceptance gate, then
-stop/go. Answer from the capsule when possible. If inspection is necessary,
-each batch must resolve one named decision using a relevant range or narrow
-symbol—never repository-wide enumeration/search or whole-file reads when a
-range suffices. Limit it to four batches; return Stop and missing evidence if
-still insufficient. Use a new session and refreshed capsule for a follow-up.
+Give the implementer the [canonical prompt](../../opencode-delegate/references/prompt-template.md);
+[templates.md](templates.md#implementation-prompt) retains its loader. Give
+Astra-expert only the compact capsule, relevant prior diff/test evidence, and
+one focused question. Record question, cheaper-route insufficiency, expected
+evidence, and stop condition; return findings, proposed approach, acceptance
+gate, then stop/go. Its inspection is scoped and decision-driven within the
+declared wait/stop limits; stop when evidence is unavailable or further work no
+longer addresses the question. The delegate contract owns its read-only role
+and one-consultation/one-follow-up limit.
 
 ## Controller-bound Astra orchestration exception
 
