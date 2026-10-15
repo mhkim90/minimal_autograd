@@ -39,9 +39,12 @@ if an L3 independent reviewer is unavailable, stop the phase.
 
 Never silently replace a requested route or raw-model override. Selector/model
 unavailability or rejection, explicit contradiction, role mismatch, silent
-fallback, failed execution, or mismatched continuation stops the phase. Missing
+fallback, or mismatched continuation stops the phase. Missing
 resolved-model or usage metadata is only an observability warning after an
-honored selector returns the requested terminal role.
+honored selector returns the requested terminal role. Classify execution
+failures under the [delegate recovery contract](../opencode-delegate/SKILL.md#failure-classification-and-recovery):
+ordinary in-envelope repairs are automatic, essential absence suspends edits,
+and authoritative mismatch or denial is a hard stop.
 
 ## Effort and review
 
@@ -117,7 +120,10 @@ prompt nor separate review approval; it grants no arbitrary external disclosure.
 Missing or changed binding, or host rejection, stops the affected transfer for
 exact authority; host policy is never bypassed.
 It permits recording the plan, plan-only local P0, bounded implementation,
-tests, required review, explicit staging, and validated local commits. It
+tests, required review, explicit staging, and validated controller-local commits.
+The same envelope may explicitly permit one controller-launched fresh same-role
+runtime recovery per phase after terminal result/diff review, retaining caps
+and lineage; it never permits denial evasion or delegate self-relaunch. It
 permits no push, PR action, readiness, merge, release/deployment, or sync.
 Before implementation, verify the approved revision and immutable local P0:
 its delta from the original recorded base is exactly the approved plan
@@ -130,7 +136,11 @@ non-authoritative controller evidence and handoff, outside the immutable plan.
 Optional early publication on the same PR retains exactly two named
 checkpoints for that route: Plan-and-Draft permits only that plan's
 commit/push/draft PR; Implementation permits only validated in-envelope
-same-PR commits/pushes after visible P0 verification. Its initial published PR
+same-PR commits/pushes after visible P0 verification. Where the ledger requires
+retention of the still-active draft, include explicit PR-specific retention and
+its declared resolution event in that same Implementation binding, not a
+separate approval prompt. Retention does not waive entry/P0 checks or authorize
+success or merge of an unmerged Plan PR. Its initial published PR
 diff must be exactly the approved plan and match the approved revision.
 Neither checkpoint permits readiness, merge, release/deployment, or
 cross-repository delivery. Published-P0 requirements do not apply to local P0.
@@ -149,7 +159,10 @@ an explicitly authorized history-preserving update, such as a base merge,
 retaining original P0 identity and descent. Never silently rebase, replace P0,
 or reinterpret first-implementation HEAD. A route switch is topology drift
 requiring existing renewal, not implicit authorization.
-Execution details within an unchanged envelope add no approval checkpoints.
+Execution details and routine repair within unchanged acceptance/scope and
+remaining caps add no approval checkpoints. Do not strengthen delegate prompts
+with unapproved policy or arbitrary budgets; task-specific technical constraints
+must express approved scope, acceptance, or genuine runtime limits.
 
 The controller records route eligibility/boundary rationale in the existing
 binding/report fields: ordinary eligibility, an important early API/architecture
@@ -175,8 +188,11 @@ delivery, and final PR-specific merge control.
 `approve`/`approved` authorizes only the immediately preceding exact visible
 action; publication may send only its prompt's enumerated approved payload and
 minimum metadata to its named configured destination, while binding drift,
-excluded material or action, a host rejection, or a later phase requires a stop
-and fresh authority—host policy is never bypassed.
+excluded material or action, a host rejection, or an unbound later action or
+phase requires a stop and fresh authority—host policy is never bypassed.
+Already-bound local successors and in-envelope same-PR work need no fresh
+approval absent binding drift or a manual boundary; publication and merge
+retain their separate exact authority.
 
 For an already-ready PR, ordinary merge remains exactly `Approve merging
 <repository> PR #<N>?`. For an eligible draft without prior explicit readiness
@@ -203,11 +219,15 @@ eligibility and is never merge authority; obtain explicit readiness authority
 when it was not already included in the binding.
 
 Before each phase, inspect dirty state and pause files, obtain current evidence,
-run the smallest right-reason red gate, and apply the three-attempt cap unless
-the plan says otherwise. Validate in-scope diff and green evidence before
-publication; stage explicit paths only. Stop on stale/missing preflight, failed
-gate, scope expansion, unavailable evidence, contradiction, review blocker,
-maximum wait, unrelated blocker, or attempt-cap exhaustion. Memory is
+run the smallest right-reason red gate, and apply the default three substantive
+candidate edit/validation-cycle cap unless the plan says otherwise. Use the
+[delegate contract](../opencode-delegate/SKILL.md#failure-classification-and-recovery)
+for ordinary repair, runtime suspension/recovery, and authority/security stops.
+A repairable validation failure blocks the gate, not in-envelope correction.
+Validate scoped diff and green evidence before publication; stage explicit
+paths only. Stale/missing preflight, scope expansion, contradiction, review
+blocker, exhausted cap, unrelated blocker, or hard wait expiry blocks advancement.
+Unavailable essential evidence suspends affected execution. Memory is
 discovery-only and never approval.
 
 ## Automatic successor transition
@@ -218,9 +238,12 @@ successor has exact scope/route/dependency/gate/topology, an existing worktree,
 valid plan/ancestry, no drift, retry/gate/review/pause/session/wait blocker, no
 manual/owner boundary, remains in the approved repository/worktree/initiative,
 and needs no new publication. Automatic transition may only refresh state and
-perform allowed bounded preflight/in-scope work; it never creates worktrees,
-commits, pushes, mutates PRs, changes readiness, merges, releases, deploys, or
-syncs. Stop and request the next independently authorized publication action.
+perform already-authorized bounded local preflight/in-scope work, including
+validated local commits **by the controller only**, never by delegates. Transition
+does not create a new worktree, grant remote authority, push, mutate PRs, change
+readiness, merge, release, deploy, or sync. Stop before any unbound action and
+request its independently required authority; a manual boundary still stops
+advancement.
 
 ## Router and final gate
 

@@ -57,27 +57,69 @@ shell may invoke an existing patch command only after discovering it; prove it
 through the same authorized edit/readback, not its listing alone. Record exact
 editor invocations, exits, readback, and marker cleanup.
 
-If any essential capability is missing whenever discovered, including midphase,
-STOP immediately as `MCP_RUNTIME_TOOL_UNAVAILABLE` and name the capability.
-Denied command/edit/path access also STOPs immediately with distinct failure
-evidence, not `MCP_RUNTIME_TOOL_UNAVAILABLE`. An observed external Git-metadata
-permission rejection instead STOPs as `GIT_METADATA_PERMISSION_FAILURE`; only
-this supports proposing the separately owner-approved independent clone below.
-Other capability failures are not a clone remedy.
-Wrong status, HEAD, hash, or path, missing files, and other failures each STOP
-with distinct failure evidence. Do not blindly retry or bypass controls.
-For capability failures, also do not invent tools, repeat identical attempts,
-automatically detour to an expert, substitute roles, or bypass controls. Resume
-only with materially changed capability/runtime evidence or a separately
-owner-approved revised route, preserving attempt history.
+A model-reported missing tool is cause-unconfirmed, distinct from a natively
+observed invocation failure. Neither uncertainty nor wrapper completion grants
+permission to continue past a required absence or denial.
+
+### Failure classification and recovery
+
+Classify the failing operation, not merely a failed job or command:
+
+- **Routine execution mistake:** an incidental approved-path typo, malformed
+  in-scope patch, or ordinary fixture/test/API error is automatically repairable
+  within unchanged scope, acceptance, and remaining attempt cap. A typo in an
+  intended approved path is not identity/role/destination drift; never search
+  outside approved paths to repair a guess or count a broken fixture as a
+  right-reason red gate.
+- **Essential capability absent/interrupted:** suspend affected execution and
+  edits immediately as `MCP_RUNTIME_TOOL_UNAVAILABLE`, including midphase.
+  A model report alone is cause-unconfirmed, not native proof of absence.
+  Do not continue on uncertainty, invent tools, repeat identical probes, install,
+  switch roles, or detour automatically to an expert. Resume only after
+  materially changed approved runtime/capability evidence proves the gate.
+  When the initial envelope expressly permits it, the controller may launch
+  **one fresh same-named-role recovery per phase**, only after confirmed prior
+  terminal state, result retrieval, and scoped diff review. Retain job lineage,
+  partial edits, provenance, elapsed budgets, and attempt history. The delegate
+  does not launch its own recovery. Failed/unavailable recovery ends affected
+  execution and returns narrow evidence to the controller; no cap reset.
+- **Authority/security stop:** wrong authoritative checkout, branch, HEAD,
+  plan hash, unexpected dirty work, scope/acceptance/model/role/destination drift,
+  or host/access denial stops affected work. Denied command/edit/path access is
+  distinct from tool absence. Observed external Git-metadata rejection is
+  `GIT_METADATA_PERMISSION_FAILURE`; only that failure supports proposing the
+  separately owner-approved independent clone below. No fresh-session denial
+  evasion, permission bypass, unapproved clone, or blind retry is allowed.
+
+An essential missing file is a narrow blocker; distinguish an incidental
+approved-path typo from genuinely unavailable evidence. No failed execution
+implicitly changes authority. Read
+[`references/wait-policy.md`](references/wait-policy.md) before runtime recovery
+for terminal-resource accounting; a cancellation request is not terminal proof.
+
+### Native evidence and diagnostics
 
 Capability failures return terminal evidence: reason, job/session, role,
 exposed tools, failing operation/invocation, exits/error, readback if any, and
 attempt counts. Include native normalized per-job usage when available,
 otherwise unavailable with coverage limitations. This is observational only:
 no fabricated totals, budgets, `usage_mcp`, private-provider-path reads, or
-usage-availability gate. Skills detect and stop; they cannot restore MCP tools
+usage-availability gate. Skills suspend or stop affected execution; they cannot restore MCP tools
 or runtime.
+
+For reported absence, distinguish model report, native invocation/failure,
+preprompt connection/permission observations, and accepted-turn coverage.
+Unsupported schema visibility, native exits, and loaded-code provenance remain
+unknown; disk HEAD/hash is not loaded-code attestation. Wrapper done/exit 0,
+printed JSON, and assistant prose are not native execution proof. Never treat
+uncertainty as proof of absence, denial, execution, or repair.
+Normalized native diagnostics contain only bounded redacted identities,
+name/state, optional boolean executed, and error presence. Never expose raw
+private provider tool input/output, commands, prompts, reasoning, provider
+state, private errors/logs, or credentials. This restriction does not remove
+already-authorized exact manual capability-proof invocation/exit/readback
+reporting; redact credentials. Known native absence/denial remains a suspension
+or hard stop respectively; unconfirmed cause must be labelled as such.
 
 Only that observed external Git-metadata permission failure supports proposing
 a separately owner-approved independent clone beneath the caller's cwd. Name
@@ -96,6 +138,7 @@ source/diff disclosure to that delegate; do not ask a duplicate disclosure
 question. Still request direction for a different repository, out-of-scope
 private material, unconfigured external service, publication, or destructive
 action.
+
 ## Routes and evidence
 
 - Mechanical/economy and standard work: `agent="luna"`, omitting `model` and
@@ -126,35 +169,48 @@ infrastructure failure, or slowness alone does not justify a role change.
 Record requested agent, job/session, bound/reported model, and route evidence.
 An honored selector plus terminal requested-role response is minimum evidence;
 missing resolved-model/usage is an observability warning only then. Selector,
-model, role, session-lineage, or fallback contradiction and failed execution
-stop the phase. Read [`references/prompt-template.md`](references/prompt-template.md)
+model, role, session-lineage, or fallback contradiction stops the phase.
+Classify execution failures under [Boundary](#boundary); ordinary repair is
+not selector drift. Read [`references/prompt-template.md`](references/prompt-template.md)
 immediately before sending a prompt.
 
 ## Async-first bounded lifecycle
 
-Keep one bounded phase/subphase per same-role Luna session; fork only after a
-material scope, red-gate, strategy, or blocker change, and end it after green.
-The [Boundary](#boundary) immediate capability STOP overrides ordinary retries;
-it never triggers an automatic expert detour. After that gate passes, allow
-three ordinary implementation/fix attempts; after two same-blocker failures, obtain one
-bounded Astra-expert consultation and use a materially revised approach before
-a third. The external controller supplies independent L3 review; no named
-variant override resets retries.
+Keep one bounded phase/subphase per same-role session and end it after green.
+A materially changed scope/red gate/strategy/blocker may justify a planned
+continuation or fork only within existing authority. Runtime recovery instead
+uses the explicit [failure classification](#failure-classification-and-recovery),
+never a cap reset or a duplicate live job.
 
-Astra-expert is read-only: one initial consultation and one follow-up maximum,
-four narrow inspection batches maximum, and a new session with refreshed
-capsule for follow-up. It returns findings, approach, gate, and stop/go; it
-never edits, publishes, delegates, or invokes skills. Read the prompt template
-immediately before its capsule.
+Default to at most three substantive candidate edit-and-validation cycles,
+not three commands, reads, polls, or capability-discovery calls. Record failed
+candidates/validation honestly. After two failures on one blocker, return
+specific evidence to the controller for bounded Astra-expert consultation;
+attempt a third only after a materially revised approach. Expert help grants
+no new implementation authority. Essential absence suspends edits; authority
+and denial stops override ordinary retries.
+
+Astra-expert is read-only: one initial consultation plus at most one follow-up,
+using a new session and refreshed capsule for the follow-up. Inspection is
+scoped and decision-driven under declared wait/stop limits, not a universal
+batch ceiling. Each batch resolves a named question with a relevant range or
+narrow symbol; no whole-repository/secret enumeration or whole-file reads when
+a range suffices. Stop with missing evidence when unavailable or when further
+inspection no longer addresses the question. Return findings, approach, gate,
+and stop/go; never edit, publish, delegate, or invoke skills. Read the prompt
+template immediately before its capsule.
 
 ## Async stop kernel
 
-Keep same-role session and job lineage. Retrieve terminal output before
-finalization; do not send a final response while a
-required job is live. Cancel only for terminal error, declared maximum wait, or
-explicit controller/owner stop with reason and approved replacement route. A
-full Astra-expert consultation in post-inspection `step_start` receives at least a
-10-minute declared final-synthesis grace. Read
+Keep same-role session and job lineage. Continue polling and retrieve terminal
+output; silence alone is not failure. Required live/unknown resources block
+gates and success. A final blocked/pending report is allowed at an explicit
+owner stop or declared hard expiry, with each pending resource accounted for;
+it never claims an empty ledger or completion. Cancellation/replacement follow
+controller authority and confirmed terminal state, not a timeout alone.
+Declare task-specific checkpoints, maximum wait, and final-synthesis allowance
+within any approved overall wall-clock deadline; no universal ten-minute grace
+or unexplained short sub-budgets. Read
 [`references/wait-policy.md`](references/wait-policy.md) immediately before
-polling, recovery, cancellation, or finalization; it supplies the ledger and
-elapsed-time procedure, never route or publication authority.
+polling, recovery, cancellation, or finalization; it owns ledger and elapsed-time
+procedure, never route or publication authority.

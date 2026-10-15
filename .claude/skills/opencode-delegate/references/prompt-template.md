@@ -1,53 +1,75 @@
 # Prompt Template
 
-For implementation, apply the [actual-delegate capability gate](../SKILL.md#boundary)
-and its scoped proof/STOP diagnostics; read-only experts need no editor gate.
+Canonical implementation prompt; phase templates link here rather than copy it.
+Load the [actual-delegate capability gate](../SKILL.md#boundary),
+[failure taxonomy and recovery](../SKILL.md#failure-classification-and-recovery),
+[native evidence rules](../SKILL.md#native-evidence-and-diagnostics), and
+[wait procedure](wait-policy.md) at their transitions. Read-only experts need
+capabilities for authorized reads, not an editor gate.
 
 ```text
-Context: <project + phase>
-Task: <exact edit/run loop>
-Files/scope: <approved paths or globs>
-Relevant files and required commands: <narrow list>
-Red gate: <check + expected failure>
-Success criteria: <checks/metrics>
-Safety risk: <L1-L4>
-Implementation difficulty: <mechanical/economy | standard | difficult>
-Routing: <luna | justified sol-implementer | justified astra-implementer | fresh read-only astra-expert | controller-bound astra-orchestrator | explicit user configured default>; omit model/variant for named agents
-Expert escalation evidence: <role or none>; reason/question: <...>; why cheaper route is insufficient: <...>; requested/resolved model: <...>; effort: <...>; job/session: <...>; expected evidence: <...>; stop condition: <...>
-Model binding: <named profile GPT-6 #high or explicit unnamed user route; reported match/warnings>
-Capability proof / STOP diagnostics: <actual exposed capabilities; authorized Git/editor proof with tools/invocations/exits/readback, or terminal failure record per linked Boundary>
+Context/task: <project, one bounded phase, exact edit/run loop>
+Binding: <repository, exact worktree/branch, expected HEAD, approved dirty state,
+absolute Git-dir/common-dir, immutable plan path/SHA256, original P0/provenance>
+Files/scope and required commands: <approved paths, narrow relevant reads/checks>
+Red gate: <check and expected right-reason failure; fixture error is not red>
+Acceptance: <green checks/metrics; approved scope and acceptance remain fixed>
+Safety risk: <L1-L4>; difficulty: <mechanical/economy | standard | difficult>
+Route: <luna | justified sol-implementer | justified astra-implementer |
+fresh read-only astra-expert | controller-bound astra-orchestrator |
+explicit user configured default>; named roles omit model/variant
+Route evidence: <requested role, job/session lineage, bound/reported model,
+warnings; selector contradiction stops, missing observation alone warns>
+Expert evidence, if applicable: <question/reason, cheaper-route insufficiency,
+expected evidence, stop condition, prior diff/test evidence>
 
-Implementation-only capability preflight:
-Invoke the actual exposed execution/read capability, then explicitly select the
-approved worktree before read-only status, branch, HEAD, absolute Git-dir/common-
-dir, and plan-hash checks. Record and compare each result and exit; use separate
-calls or fail-fast chaining so a later success cannot mask an earlier failure.
-Actual tool calls are evidence, not printed JSON. If no native editor is exposed,
-discover an existing permitted shell editor; do not assume `patch` or install
-tools. Missing native `apply_patch` does not establish editing is unavailable.
-Listing is not proof. Only for authorized edits, prove with a minimal in-scope
-edit/readback or an authorized marker confirmed absent first, then
-create/readback/remove it. Preserve each existing distinct immediate STOP.
-Elapsed-time checkpoint / final-synthesis grace (full Astra expert only) / maximum wait: <phase-defined values>
+Capability preflight (implementation only):
+Use actual exposed execution/read tools and explicitly select the approved
+worktree. Fail-fast compare status (optional Git writes disabled), branch, HEAD,
+absolute Git-dir/common-dir and exact plan SHA256; preserve original checkout,
+metadata, plan/P0 and other dirty work. Actual invocations/exits are evidence,
+not printed JSON, wrapper completion, supplied visibility, or prose.
+If no native editor is exposed, discover an existing permitted shell editor;
+missing apply_patch is not proof editing is unavailable. Do not assume patch,
+install, or bypass permissions. Listing is not proof: first authorized minimal
+in-scope edit plus immediate readback, or expressly authorized absent-marker
+create/readback/removal, proves editing. Record exact invocation/exit/readback.
+Recheck after relevant checkout/runtime context changes, not on every command.
+
+Time: <actual launch; progress checkpoints; task-specific synthesis allowance;
+maximum wait; explicit overall deadline if any; no unexplained micro-budgets>
+Recovery: <one controller-launched fresh same-named-role session per phase after
+confirmed terminal/result/diff review, or none; retain caps, lineage and budgets>
+Candidate cap: <default three substantive candidate edit/validation cycles>
 Constraints:
-- one bounded phase/subphase; no commit or edits outside scope
-- include relevant files, commands, and stop rules in the cold capsule
-- immediate capability STOP overrides ordinary retries, including midphase
-- after capability gate passes, stop after two ordinary same-blocker failures; revise materially before a third attempt
-- disclose only necessary in-scope source/diff to the configured delegate
-Final response: changed files, decisions, commands, blockers, session count,
-retries, requested agent, job ID, session ID, bound/reported model, route,
-and capability proof or STOP diagnostics under the linked Boundary
+- one bounded phase; no commit/stage/push/PR/delegation or out-of-scope edits
+- automatically repair incidental approved-path typos, patch or fixture errors
+  within unchanged acceptance/scope and remaining cap; no new owner prompt
+- suspend affected edits for essential absence/interruption, even midphase;
+  authoritative checkout/HEAD/plan mismatch, access denial or drift is hard STOP
+- after two same-blocker failures return evidence for controller expert help;
+  a third candidate requires a materially revised approach
+- no self-launched recovery, live-job duplication, role/model/destination change,
+  denial evasion, invented tool execution, or cap/deadline reset
+- only necessary in-scope source/diff to the bound configured destination
+Return briefly: changed files, candidate attempts, commands/results, unresolved
+issues, route/job/session evidence, and capability proof or narrow STOP.
+Use the linked native-evidence contract: distinguish model report from native
+absence/denial and uncertain cause; normalized diagnostics are bounded/redacted,
+never raw private provider content. Retain exact authorized manual invocation,
+exit and readback evidence with credentials redacted. Never treat uncertainty
+as proof or resume absent capability without approved fresh proof.
 ```
 
 ## Astra-expert capsule guard
 
-Use this only after the entry skill has selected the bounded read-only
-Astra-expert route. Give one focused question or blocker, approved scope, and
-selected compact diff/test evidence. Require findings, proposed approach,
-acceptance gate, and stop/go. Answer from the capsule when possible; an
-inspection batch resolves one named decision using a relevant range or narrow
-symbol, never repository-wide enumeration/search or a whole-file read when a
-range suffices. Limit inspection to four batches and return Stop with missing
-evidence if it remains insufficient. A follow-up uses a new session and a
-refreshed capsule, not accumulated tool history.
+Only after the entry skill selects the bounded read-only route, give one focused
+question, approved scope, and compact relevant diff/test evidence. Require
+findings, proposed approach, acceptance gate, and stop/go. Answer from the
+capsule when possible; inspect only to resolve named decisions with relevant
+ranges/narrow symbols, never repository-wide/secret enumeration or whole-file
+reads when a range suffices. Use declared wait/stop limits, not a universal
+batch ceiling. Stop when evidence is unavailable or further inspection no
+longer addresses the question. One consultation plus at most one follow-up;
+follow-up uses a new session and refreshed capsule, not accumulated tool history.
+Never implement, edit, publish, delegate, or invoke repository skills.
