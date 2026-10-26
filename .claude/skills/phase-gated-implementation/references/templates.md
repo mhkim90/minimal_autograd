@@ -8,9 +8,12 @@ core.
 
 Use the [canonical implementation prompt](../../opencode-delegate/references/prompt-template.md)
 with the [actual-delegate gate and recovery contract](../../opencode-delegate/SKILL.md#boundary).
-Fill the approved checkout/plan, route, scope, acceptance, candidate cap,
-wait/deadline, and expressly permitted recovery fields; do not add unapproved
-policy or arbitrary budgets. Read-only experts need no editor gate.
+Fill the approved checkout/plan, route, scope, acceptance, and candidate allocation
+(including counting unit, used/remaining, and applicable shared limit), wait/deadline,
+and permitted recovery fields; do not add unapproved policy or arbitrary budgets.
+The [delegate candidate-accounting contract](../../opencode-delegate/SKILL.md#candidate-accounting)
+defines counting and expected-RED treatment. Read-only experts
+need no editor gate.
 
 ## Local Plan-and-Implementation authorization checkpoint
 
@@ -30,7 +33,9 @@ API/architecture decision | material boundary; evidence and applicable merged
 Design/Plan gate or exact scoped owner direction>;
 gates=<risk/difficulty/routes, tests, required independent review, task-specific
 wait/synthesis allowance and overall deadline, acceptance, dependencies, and
-manual boundaries>; recovery=<one controller-launched fresh same-role session
+manual boundaries, allocation scope (shared | stage-specific), candidate cap
+and used/remaining, applicable shared-limit cap and used/remaining>;
+recovery=<one controller-launched fresh same-role session
 per phase after terminal/result/diff review, retaining caps/lineage, or none>.
 External route binding=<configured delegate/reviewer destinations, authorized
 implementation/review routes and roles, necessary in-scope read-only source/diff
@@ -248,7 +253,9 @@ Never omit a blocker or substitute a summary for the exact evidence.
 ```text
 Phase <N>: <complete | in progress | blocked/pending>; local/publication state: <actual>
 Scope/changes: <files>; red/green and validation: <commands/results>
-Route/candidates: <role, job/session, used/cap, warnings, recovery lineage or none>
+Route/candidates: <role, job/session, candidate unit and allocation used/remaining
+plus applicable shared limit used/remaining; retain counts across review fixes;
+warnings, recovery lineage or none>
 Review/resources: <verdict or pending; every unresolved job/command and result state>
 Time: <per-job launch-to-terminal or runtime-to-date, controller/owner time,
 overall deadline and wait expiry if applicable>

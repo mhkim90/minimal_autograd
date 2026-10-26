@@ -13,7 +13,8 @@ Binding: <repository, exact worktree/branch, expected HEAD, approved dirty state
 absolute Git-dir/common-dir, immutable plan path/SHA256, original P0/provenance>
 Files/scope and required commands: <approved paths, narrow relevant reads/checks>
 Red gate: <check and expected right-reason failure; fixture error is not red>
-Acceptance: <green checks/metrics; approved scope and acceptance remain fixed>
+Acceptance: <GREEN checks/metrics, or explicitly required preparation RED
+milestone; never treat RED as implementation GREEN; approved scope remains fixed>
 Safety risk: <L1-L4>; difficulty: <mechanical/economy | standard | difficult>
 Route: <luna | justified sol-implementer | justified astra-implementer |
 fresh read-only astra-expert | controller-bound astra-orchestrator |
@@ -40,11 +41,17 @@ Time: <actual launch; progress checkpoints; task-specific synthesis allowance;
 maximum wait; explicit overall deadline if any; no unexplained micro-budgets>
 Recovery: <one controller-launched fresh same-named-role session per phase after
 confirmed terminal/result/diff review, or none; retain caps, lineage and budgets>
-Candidate cap: <default three substantive candidate edit/validation cycles>
+Candidate allocation: <counting unit and scope; bound-phase default three cycles
+unless approved plan allocates otherwise; each declared stage allocation cap and
+used/remaining; every applicable shared-limit cap and used/remaining; no implicit
+fresh allowance per stage>
 Constraints:
 - one bounded phase; no commit/stage/push/PR/delegation or out-of-scope edits
-- automatically repair incidental approved-path typos, patch or fixture errors
-  within unchanged acceptance/scope and remaining cap; no new owner prompt
+- follow the [canonical candidate-accounting contract](../SKILL.md#candidate-accounting)
+  for repair, counting, preparation RED, and applicable shared limits; ordinary
+  in-scope repairs need no new owner prompt
+- preserve consumed history; carry counts only through already-bound shared limits,
+  not into a separately approved successor's own allocation
 - suspend affected edits for essential absence/interruption, even midphase;
   authoritative checkout/HEAD/plan mismatch, access denial or drift is hard STOP
 - after two same-blocker failures return evidence for controller expert help;

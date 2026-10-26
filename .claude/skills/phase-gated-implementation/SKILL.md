@@ -219,8 +219,14 @@ eligibility and is never merge authority; obtain explicit readiness authority
 when it was not already included in the binding.
 
 Before each phase, inspect dirty state and pause files, obtain current evidence,
-run the smallest right-reason red gate, and apply the default three substantive
-candidate edit/validation-cycle cap unless the plan says otherwise. Use the
+and run the smallest right-reason red gate. When separately testable exits matter,
+declare stage scopes, acceptance, and shared or stage-specific candidate
+allocation upfront; simple tasks need no added stage. Apply the default three
+substantive candidate edit/validation-cycle cap unless the plan says otherwise. The
+[delegate candidate-accounting contract](../opencode-delegate/SKILL.md#candidate-accounting)
+owns counting; successors require their approved remaining allocation and every
+applicable shared limit,
+with no retroactive split or reset. Use the
 [delegate contract](../opencode-delegate/SKILL.md#failure-classification-and-recovery)
 for ordinary repair, runtime suspension/recovery, and authority/security stops.
 A repairable validation failure blocks the gate, not in-envelope correction.
