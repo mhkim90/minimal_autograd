@@ -114,7 +114,9 @@ unknown; disk HEAD/hash is not loaded-code attestation. Wrapper done/exit 0,
 printed JSON, and assistant prose are not native execution proof. Never treat
 uncertainty as proof of absence, denial, execution, or repair.
 Normalized native diagnostics contain only bounded redacted identities,
-name/state, optional boolean executed, and error presence. Never expose raw
+name/state, optional boolean executed, and error presence. The normalized
+`executed` flag reflects `providerExecuted`, not local-process success; use bridge
+exit provenance and tool state for local execution evidence. Never expose raw
 private provider tool input/output, commands, prompts, reasoning, provider
 state, private errors/logs, or credentials. This restriction does not remove
 already-authorized exact manual capability-proof invocation/exit/readback
@@ -174,9 +176,29 @@ Classify execution failures under [Boundary](#boundary); ordinary repair is
 not selector drift. Read [`references/prompt-template.md`](references/prompt-template.md)
 immediately before sending a prompt.
 
+### Candidate accounting
+
+A candidate is a materially changed in-scope artifact submitted to its relevant
+validation; partial substantive edits still count when validation fails, including
+guard or fixture failures. Reads, probes, polls, and a malformed patch that
+changes no artifact are not candidates; record their errors and elapsed/resource
+use. When separately testable preparation and implementation exits matter,
+declare scopes, acceptance, and candidate allocation before execution as shared
+or stage-specific; simple tasks need no added stage. An explicitly required
+preparation RED completes that milestone and consumes a candidate, but is neither
+a failed candidate nor another same-blocker failure, and is never implementation
+GREEN. Preserve consumed history across stages and review fixes, but do not charge
+a separately approved successor for its prerequisite's spent allocation; only an
+already-bound shared limit carries that count forward. A successor proceeds only
+within its own approved allocation and every applicable shared limit. No renamed
+stage, session, file, or role retroactively splits or resets an exhausted shared
+limit; a new allowance needs a separately scoped amendment.
+
 ## Bounded lifecycle
 
-Keep one bounded phase/subphase per same-role session and end it after green.
+Keep one bounded phase/subphase per same-role session and end it after its
+approved acceptance milestone (GREEN, or explicitly required preparation RED).
+Preparation RED is never implementation GREEN.
 A materially changed scope/red gate/strategy/blocker may justify a planned
 continuation or fork only within existing authority. Runtime recovery instead
 uses the explicit [failure classification](#failure-classification-and-recovery),
