@@ -192,7 +192,12 @@ a separately approved successor for its prerequisite's spent allocation; only an
 already-bound shared limit carries that count forward. A successor proceeds only
 within its own approved allocation and every applicable shared limit. No renamed
 stage, session, file, or role retroactively splits or resets an exhausted shared
-limit; a new allowance needs a separately scoped amendment.
+limit; a new allowance needs a separately scoped amendment. A fresh, otherwise-
+unallocated phase defaults to five substantive candidates prospectively; an
+explicitly bound lower limit still controls. Reloading policy never reopens,
+replenishes, or changes an existing allocation. An approved cap3-to-cap5
+amendment preserves candidates already used (3 used means 2 remaining), and must
+address any applicable shared limit.
 
 ## Async-first bounded lifecycle
 
@@ -204,13 +209,15 @@ continuation or fork only within existing authority. Runtime recovery instead
 uses the explicit [failure classification](#failure-classification-and-recovery),
 never a cap reset or a duplicate live job.
 
-Default to at most three substantive candidate edit-and-validation cycles,
-not three commands, reads, polls, or capability-discovery calls. Record failed
-candidates/validation honestly. After two failures on one blocker, return
-specific evidence to the controller for bounded Astra-expert consultation;
-attempt a third only after a materially revised approach. Expert help grants
-no new implementation authority. Essential absence suspends edits; authority
-and denial stops override ordinary retries.
+Apply the [candidate-accounting contract](#candidate-accounting) for defaults,
+explicit/shared allocations, prospective binding, and amendment arithmetic.
+Record failed candidates/validation honestly.
+After two failures on one blocker, return specific evidence to the controller for
+bounded Astra-expert consultation. Every further candidate on that blocker needs
+a materially revised approach and remaining applicable allowance; revision alone
+does not authorize another unchanged attempt. Expert help grants no new
+implementation authority or consultation allotment. Essential absence
+suspends edits; authority and denial stops override ordinary retries.
 
 Astra-expert is read-only: one initial consultation plus at most one follow-up,
 using a new session and refreshed capsule for the follow-up. Inspection is

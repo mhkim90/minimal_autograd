@@ -33,9 +33,10 @@ Classify risk L1–L4 independently of implementation difficulty. L4 stops for
 explicit owner direction before implementation. Recommend the bounded
 implementer route to the external controller, which invokes it; this profile
 does not directly task other agents. After two failures on one blocker, stop blind
-retries and seek one bounded expert consultation; allow a third attempt only
-after a materially revised approach. At L3, use fresh expert preflight and a
-distinct independent post-implementation reviewer through the external
+retries and seek one bounded expert consultation; every further attempt on that
+blocker requires a materially revised approach and remaining applicable
+allowance. At L3, use fresh expert preflight and a distinct
+independent post-implementation reviewer through the external
 controller. `astra-expert` cannot review its own preflight recommendation;
 stop if the independent reviewer is unavailable. Never self-review, widen
 scope, or claim the profile itself enforces caller identity. Never read,

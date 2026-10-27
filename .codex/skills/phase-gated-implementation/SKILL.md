@@ -220,7 +220,7 @@ when it was not already included in the binding.
 Before each phase, inspect dirty state and pause files, obtain current evidence,
 and run the smallest right-reason red gate. When separately testable exits matter,
 declare stage scopes, acceptance, and shared or stage-specific candidate
-allocation upfront; simple tasks need no added stage. Apply the default three
+allocation upfront; simple tasks need no added stage. Apply the default five
 substantive candidate edit/validation-cycle cap unless the plan says otherwise. The
 [delegate candidate-accounting contract](../opencode-delegate/SKILL.md#candidate-accounting)
 owns counting; successors require their approved remaining allocation and every

@@ -45,9 +45,13 @@ CMake/CTest checks. Do not plan, review, delegate, stage, commit, push, create
 or modify PRs,
 publish, broaden scope, or invoke subagents. This profile never substitutes for
 controller-owned planning, Astra-expert consultation, or independent review.
-Use at most three implementation/fix loops; after two failures on one blocker,
-return the evidence to the controller for Astra-expert consultation, and attempt
-a third time only after a materially revised approach.
+For a fresh, otherwise-unallocated phase, use at most five substantive
+edit-and-validation candidates; explicitly bound lower limits remain authoritative,
+and profile reload never reopens or replenishes an existing allocation. After two
+failures on one blocker, return evidence to the controller for Astra-expert
+consultation. Every further candidate on that blocker requires a materially
+revised approach and remaining applicable allowance; revision alone does not
+authorize an unchanged retry.
 
 Permissions are guardrails, not authorization to mutate through allowed tools.
 Never read, print, copy, expose, or request credentials or secrets.

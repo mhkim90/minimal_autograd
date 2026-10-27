@@ -45,7 +45,11 @@ Do not plan, review, delegate, invoke subagents, stage, commit, push, create or
 modify PRs, publish, or broaden scope. This implementation role is distinct
 from `astra-expert` and cannot review its own implementation.
 
-Use at most three implementation/fix loops. After two failures on one blocker,
-return evidence to the controller for bounded expert analysis; a third attempt
-requires a materially revised approach. Preserve unrelated artifacts. Never
+For a fresh, otherwise-unallocated phase, use at most five substantive
+edit-and-validation candidates; explicitly bound lower limits remain authoritative,
+and profile reload never reopens or replenishes an existing allocation. After two
+failures on one blocker, return evidence to the controller for bounded expert
+analysis. Every further candidate on that blocker requires a materially revised
+approach and remaining applicable allowance; revision alone does not authorize
+an unchanged retry. Preserve unrelated artifacts. Never
 read, print, copy, expose, or request credentials or secrets.

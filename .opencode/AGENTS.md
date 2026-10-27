@@ -18,9 +18,11 @@ Use focused CMake/CTest checks and CUDA tests when relevant.
   It never edits, delegates, publishes, or reviews its own recommendation.
 - **Luna** (`agents/luna.md`) is the normal implementation route
   (`agent="luna"`) for mechanical/economy and standard work. It cannot publish
-  or broaden scope. Follow **red -> implement -> green -> GPU** with at most 3
-  attempts; after two failures on one blocker, consult Astra expert and attempt
-  a third time only after a materially revised approach.
+  or broaden scope. Follow **red -> implement -> green -> GPU** with at most 5
+  substantive edit/validation candidates for a fresh, otherwise-unallocated phase; explicitly
+  bound lower limits and existing allocations remain unchanged. After two failures
+  on one blocker, consult Astra expert; every further candidate on that blocker
+  requires a materially revised approach and remaining applicable allowance.
 - **Sol implementer** (`agents/sol-implementer.md`) is the justified strong
   implementation route; **Astra implementer** (`agents/astra-implementer.md`)
   is the justified hard-task implementation route. Both use Luna's bounded

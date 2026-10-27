@@ -41,10 +41,11 @@ Time: <actual launch; progress checkpoints; task-specific synthesis allowance;
 maximum wait; explicit overall deadline if any; no unexplained micro-budgets>
 Recovery: <one controller-launched fresh same-named-role session per phase after
 confirmed terminal/result/diff review, or none; retain caps, lineage and budgets>
-Candidate allocation: <counting unit and scope; bound-phase default three cycles
-unless approved plan allocates otherwise; each declared stage allocation cap and
-used/remaining; every applicable shared-limit cap and used/remaining; no implicit
-fresh allowance per stage>
+Candidate allocation: <counting unit and scope; otherwise-unallocated phase
+default five cycles, prospectively; explicit lower bounds still control, and reload
+never reopens an allocation; each declared stage allocation cap and used/remaining;
+every applicable shared-limit cap and used/remaining; no implicit fresh allowance
+per stage>
 Constraints:
 - one bounded phase; no commit/stage/push/PR/delegation or out-of-scope edits
 - follow the [canonical candidate-accounting contract](../SKILL.md#candidate-accounting)
@@ -54,8 +55,9 @@ Constraints:
   not into a separately approved successor's own allocation
 - suspend affected edits for essential absence/interruption, even midphase;
   authoritative checkout/HEAD/plan mismatch, access denial or drift is hard STOP
-- after two same-blocker failures return evidence for controller expert help;
-  a third candidate requires a materially revised approach
+- after two same-blocker failures return evidence for controller expert help; every
+  further candidate on that blocker requires a materially revised approach and
+  remaining allowance; expert help grants no new consultation allotment
 - no self-launched recovery, live-job duplication, role/model/destination change,
   denial evasion, invented tool execution, or cap/deadline reset
 - only necessary in-scope source/diff to the bound configured destination
