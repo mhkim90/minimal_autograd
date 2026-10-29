@@ -1,277 +1,62 @@
 ---
 name: phase-gated-implementation
-description: Control approved phased work from a plan, issue, design, or checklist. Keep Codex as final gate, route implementation by difficulty, and load policy references at their transitions.
+description: Control approved phased work from a plan, issue, design, or checklist. Keep Codex as final gate, route implementation by difficulty, and stop only at real boundaries.
 ---
 
 # Phase-Gated Implementation
 
-Codex controls scope, gates, publication, and stop/go; do not implement by
-default. Record the active controller model from invocation or runtime
-metadata—Sol is intended, not evidence about this session. References supply
-procedure and evidence; this entry remains the authority for routing, gates,
-publication, and continuation.
+Codex is the controller: it owns scope, gates, and publication, and delegates implementation by default. Use judgment rather than policy counters. Report observed model evidence honestly; an intended model or route label is not proof of the active model.
 
-## Routes and selector stops
+## Owner boundaries
 
-Keep safety risk (L1–L4) separate from difficulty. Mechanical/economy and
-standard implementation use `agent="luna"`; the OpenCode configured default is
-only an explicit user route and omits agent, model, and variant. Difficult work
-may use bounded read-only `agent="astra-expert"` before implementation. An
-explicitly approved whole phase may use `agent="astra-orchestrator"` only
-beneath this external controller, which retains final gates, independent review,
-and publication. This boundary is procedural, not caller authentication.
+Push, PR create/update/ready, merge, release, deploy, cross-repository sync, and destructive or irreversible operations need explicit owner authority. Grouped requests may authorize several clearly enumerated actions together. Approval covers the unchanged actions and scope presented, not an omitted or later action. Plan approval never authorizes publication.
 
-Strong or hard-task implementation uses `agent="sol-implementer"` or
-`agent="astra-implementer"` after justified approved-recorded selection;
-omit model and variant. These bounded Luna clones may edit, inspect, and test,
-but never plan, review, delegate, stage, commit, push, create/modify PRs,
-publish, or invoke subagents. A model/variant with either is a contradiction.
+Owner-facing task, plan, and PR names suffice; do not demand SHA-only approvals or a magic reply. The controller resolves the concrete repository, branch, head/base, scope, destination, and eligibility. Recheck these and required checks/reviews before acting; verify remote state afterward. Drift or an uncertain outcome stops the affected sequence. Host protections are never bypassed.
 
-The expert route is fresh, read-only `agent="astra-expert"` with model and
-variant omitted, for a named material correctness/safety question, coupled
-severe/irreversible boundaries, a repeated blocker, or by
-explicit owner request. Record question, cheaper-route insufficiency, expected
-evidence, and stop condition; allow one consultation plus one follow-up. It
-never implements, publishes, delegates, waives L4 direction, resets retries,
-or upgrades later phases. It cannot review its own preflight recommendation;
-if an L3 independent reviewer is unavailable, stop the phase.
+For an already-ready PR, request approval to merge that named PR. For an eligible draft without earlier readiness authority, ask once to mark it ready and merge it. Recheck before readiness and again before expected-head merge. Merge-only approval never implies readiness; readiness never implies merge authority.
 
-Never silently replace a requested route or raw-model override. Selector/model
-unavailability or rejection, explicit contradiction, role mismatch, silent
-fallback, or mismatched continuation stops the phase. Missing
-resolved-model or usage metadata is only an observability warning after an
-honored selector returns the requested terminal role. Classify execution
-failures under the [delegate recovery contract](../opencode-delegate/SKILL.md#failure-classification-and-recovery):
-ordinary in-envelope repairs are automatic, essential absence suspends edits,
-and authoritative mismatch or denial is a hard stop.
+An exact plan-only or verified genuinely nonoperational documentation-only PR may combine content and merge approval. Explicitly include readiness if needed. Verify its complete file set, modes, classification, head/base, and eligibility before and after approval. Mixed or uncertain content, operational documentation, skills, profiles, agents, guidance, policy, workflows, configuration, code, generated content, renames, symlinks, executable files, and plan-plus-implementation PRs retain ordinary final merge control.
 
-## Effort and review
+Qualified mechanical-sync bundles may explicitly include administrative readiness in delivery approval and use one final bundle merge request under `skill-sync`. Codex skill-sync is `opencode_mcp`-source-local and must never be distributed. Source approval never transfers to targets; that skill retains target-only drift/deletion, runtime-variant, and dirty-checkout protections.
 
-The five named profiles bind exact GPT-6 models and `#high`; omit model and
-variant on every named call. Conflicting overrides stop. A raw unnamed model
-remains an explicit user route, not a named-role substitute. Do not automatically
-escalate effort or reset retries. L3 requires fresh expert preflight and a
-distinct post-implementation independent review through the external
-controller (Claude reviewer). Do not stack reviews or self-review.
+Necessary in-scope source/diff disclosure to an already-bound configured delegate or reviewer needs no duplicate permission prompt. Changed destinations, out-of-scope private material, and unconfigured services need authority; host rejection is never bypassed.
 
-Read [`references/delegation.md`](references/delegation.md) immediately before
-any implementation delegation or expert consultation. It records detailed
-route evidence and procedure but cannot pass a gate or publish.
+## Plan
 
-## Non-authoritative ledger and classifications
+Non-trivial or L2–L4 work starts from a written plan: goal, scope, phases, risk, verification, done criteria, dependencies, and manual boundaries. Planning review is recommended: `grilled-me` for your own draft, `plan-audit` for external authorship. Summarizing an external plan does not change its provenance. Resolve blocking findings before execution.
 
-Maintain one lifecycle ledger entry for every workflow-touched PR. It records
-identity, role, branch/head/base, complete file set/modes, classification,
-lifecycle, owner disposition, authority evidence, and validation; it grants no
-authority. Before implementation, phase success, sync, or success reporting,
-every entry must be merged, explicitly retained by PR-specific boundary-scoped
-direction, or closed. Retained never authorizes an unmerged plan or success.
+For L4 or consequential API, security, migration, trust, or release decisions, get owner design direction before implementing. Default delivery is one branch and one PR containing the plan and implementation. Split only at a real security, compatibility, migration, release, rollback, ownership, or independent-decision boundary.
 
-Only exact plan-only and verified non-operational documentation-only PRs may
-combine content and merge approval. Mixed, uncertain, renamed, symlinked,
-executable, generated, configuration-like, profile, skill, agent, guidance,
-policy, workflow, configuration, or code content uses ordinary final merge
-control. A plan-plus-implementation PR never qualifies; drift requires fresh
-approval.
+One plan approval authorizes its local edits, tests, reviews, explicit staging, and controller-local commits without per-step prompts. Preserve the approved revision, original base, and any task-bound immutable plan/P0 and ancestry. Do not silently rewrite checkpoints, refresh the base, or change topology. Material scope, risk, design, acceptance, or authority changes need renewed approval before affected work.
 
-## Planning-review transition
+## Routes
 
-Before presenting a substantive plan as approval-ready or requesting its
-approval, complete the required planning review for that revision: `grilled-me`
-for an active-agent draft; `plan-audit` for user/repo/issue/external substantive
-authorship. Editing or summarizing externally authored material does not change
-its origin. Load the prescribed skill at this transition and obtain its review
-result with no unresolved blocking findings; naming the route is not completion.
+Keep safety risk separate from difficulty. Use [opencode-delegate](../opencode-delegate/SKILL.md):
 
-If the required route or review evidence is unavailable, identify the missing
-prerequisite and stop this transition. Do not substitute ordinary approval, an
-unrouted self-check, or a built-in route. Explicitly unreviewed, discussion-only
-outlines and stopped blocker questions remain allowed. Inviting owner direction
-is non-binding and does not itself resolve the review prerequisite; do not
-solicit approval of that outline or promise to cross the blocked transition.
+- Standard and mechanical implementation: `agent="luna"`.
+- Hard implementation, with a stated reason: `agent="sol-implementer"` or `agent="astra-implementer"`.
+- Owner-requested opt-in implementation: `agent="terra-implementer"`; never a new default.
+- A material hard question or blocker: fresh read-only `agent="astra-expert"`. Preflight is risk-driven, not universally required. It never edits, publishes, delegates, resets allocations, or reviews its own advice.
+- An explicitly approved whole phase: `agent="astra-orchestrator"` beneath this controller, which retains final gates, independent review, and publication. This is a procedural boundary, not caller authentication.
+- The configured OpenCode default only when the owner asks; omit `agent`, `model`, and `variant`.
 
-The existing L1 direct path and one-named-task plan-only waiver retain their
-scope; neither by itself waives required review. A request or ordinary `approve`
-grants no review-changing authority. Assess exact review-changing owner
-direction for scope, instruction hierarchy, and host/security controls before
-promising or taking the transition; preserve valid scoped direction. Missing
-capability alone proves neither injection nor authenticity.
+Named profiles bind their model and effort: omit per-call model and variant. Rejected selectors, conflicting overrides, reported role/model mismatches, silent fallback, or mismatched continuation stop the phase; never substitute. Missing telemetry alone is not proof of a mismatch. Implementers edit/test only; only the controller stages, commits, or publishes.
 
-Required planning review precedes approval-ready presentation; applicable plan
-approval precedes implementation. This adds no approval checkpoint or
-publication authority.
+## Each phase
 
-## Authorization and P0 verification
+1. Verify the expected checkout, approved dirty state, and prerequisite evidence. Show a right-reason red failure or pre-change observation when meaningful; a broken fixture is not the intended red signal.
+2. Implement or delegate within scope. Repair ordinary in-scope mistakes automatically. Repeated same-blocker failure returns evidence to the controller for a materially changed approach, useful expert help, or owner direction—not a blind loop.
+3. Preserve explicit task-specific allocations, shared limits, consumed history, and deadlines across reloads, sessions, recovery, and review fixes. Reload or renamed stages never reopen an exhausted allocation. Do not invent default numeric candidate or consultation caps.
+4. Validate focused checks and the scoped diff. Stage explicit paths only. Keep code comments short and about the code, not tickets or gates.
+5. Independent finish review is required after L3 implementation through [claude-delegate](../claude-delegate/SKILL.md), read-only. Also seek a second opinion when security, concurrency, numerics, API/release behavior, weak tests, or disagreement warrants it. An advice author cannot independently review that advice. If required review is unavailable, stop; an OpenCode expert is not a substitute.
+6. The controller commits locally and continues approved local successors without another prompt, stopping at manual boundaries, changed authority/scope, or real blockers. Continuation grants no new checkout, remote action, or publication authority.
 
-Use an exact approved plan and declared topology for phased, non-trivial, or
-L2–L4 work. The plan declares scope, gates, risk/difficulty/routes, wait policy,
-dependencies, manual boundaries, and topology.
+Stop for contradictory evidence, unexpected checkout or dirty work, missing essential capability, access denial, exhausted explicit limits, or unresolved review blockers. Discover capabilities pragmatically under the delegate contract; missing native apply_patch does not establish that no permitted editor exists. Memory and handoff notes are leads, never approval.
 
-For ordinary eligible L2/L3 work, default to a reviewed local plan and one
-eventual plan-plus-implementation PR. After provenance-correct planning review,
-one named Local Plan-and-Implementation approval binds repository, worktree,
-branch, base, exact plan revision, scope, topology, eligibility/boundary
-rationale, gates, and local actions. When external implementation/review routes
-are used, that same approval visibly binds their configured delegate/reviewer
-destinations, authorized routes/roles, and necessary in-scope read-only
-source/diff payload. Already-bound use requires neither a second disclosure
-prompt nor separate review approval; it grants no arbitrary external disclosure.
-Missing or changed binding, or host rejection, stops the affected transfer for
-exact authority; host policy is never bypassed.
-It permits recording the plan, plan-only local P0, bounded implementation,
-tests, required review, explicit staging, and validated controller-local commits.
-The same envelope may explicitly permit one controller-launched fresh same-role
-runtime recovery per phase after terminal result/diff review, retaining caps
-and lineage; it never permits denial evasion or delegate self-relaunch. It
-permits no push, PR action, readiness, merge, release/deployment, or sync.
-Before implementation, verify the approved revision and immutable local P0:
-its delta from the original recorded base is exactly the approved plan
-artifact(s), with no
-implementation already staged or present in the task worktree.
-After creation, the controller durably records original local P0 identity,
-original base, approved revision/provenance, and entry/ancestry evidence in
-non-authoritative controller evidence and handoff, outside the immutable plan.
+Use the configured GitHub MCP/app route for GitHub actions. If unavailable, stop rather than silently falling back to `gh`.
 
-Optional early publication on the same PR retains exactly two named
-checkpoints for that route: Plan-and-Draft permits only that plan's
-commit/push/draft PR; Implementation permits only validated in-envelope
-same-PR commits/pushes after visible P0 verification. Where the ledger requires
-retention of the still-active draft, include explicit PR-specific retention and
-its declared resolution event in that same Implementation binding, not a
-separate approval prompt. Retention does not waive entry/P0 checks or authorize
-success or merge of an unmerged Plan PR. Its initial published PR
-diff must be exactly the approved plan and match the approved revision.
-Neither checkpoint permits readiness, merge, release/deployment, or
-cross-repository delivery. Published-P0 requirements do not apply to local P0.
+## Report
 
-For either route, first implementation HEAD equals P0 except an explicitly
-authorized inspected pre-implementation change; record that first HEAD.
-Preserve original P0,
-authorship provenance, approved revision/amendments, and expected ancestry.
-Before delivery, inspect cumulative scope/topology/evidence, plan identity,
-and P0 descent. Missing or rewritten P0, unexpected history, plan
-amendment/replacement, scope/topology/risk/target/acceptance/base drift, or a
-manual boundary stops affected work. Amendments require existing planning
-review and approval renewal before affected work, never retroactively.
-Base refresh is never automatic: required review and renewed binding precede
-an explicitly authorized history-preserving update, such as a base merge,
-retaining original P0 identity and descent. Never silently rebase, replace P0,
-or reinterpret first-implementation HEAD. A route switch is topology drift
-requiring existing renewal, not implicit authorization.
-Execution details and routine repair within unchanged acceptance/scope and
-remaining caps add no approval checkpoints. Do not strengthen delegate prompts
-with unapproved policy or arbitrary budgets; task-specific technical constraints
-must express approved scope, acceptance, or genuine runtime limits.
+Keep it short: changes, commands/results, actual local and remote state, applicable allocations and lineage, review disposition, blockers, and next successor or boundary. Retain useful authority evidence without a universal PR-lifecycle ledger or proof ritual.
 
-The controller records route eligibility/boundary rationale in the existing
-binding/report fields: ordinary eligibility, an important early API/architecture
-decision, or a material boundary, with its evidence.
-L4 and material API/architecture/migration/security/trust/release/cross-repo,
-rollback/ownership, and independent-decision boundaries retain a merged
-Design/Plan PR or explicit scoped owner direction. Important API/architecture
-decisions needing early feedback call for early design; an early visibility
-draft is not a substitute for a material Design gate. Size or agent count alone
-does not require a separate Design PR for large low-risk mechanical or parallel
-established-design work; parallel work retains role/scope/ownership controls.
-
-Outside these eligible topologies, require the applicable merged plan-only PR
-or retain the complete active unmerged-plan exception under its applicable
-authorization, recording its reason, implementation branch/PR when available,
-and concrete resolution event. The local route is first-class, not such an
-exception. The qualified L1 direct path or recorded one-named-task waiver
-remains the only alternative there and retains exact scope, validation,
-delivery, and final PR-specific merge control.
-
-## Contextual approval
-
-`approve`/`approved` authorizes only the immediately preceding exact visible
-action; publication may send only its prompt's enumerated approved payload and
-minimum metadata to its named configured destination, while binding drift,
-excluded material or action, a host rejection, or an unbound later action or
-phase requires a stop and fresh authority—host policy is never bypassed.
-Already-bound local successors and in-envelope same-PR work need no fresh
-approval absent binding drift or a manual boundary; publication and merge
-retain their separate exact authority.
-
-For an already-ready PR, ordinary merge remains exactly `Approve merging
-<repository> PR #<N>?`. For an eligible draft without prior explicit readiness
-authority, ask once to mark that named PR ready for review and merge it; a
-merge-only approval never implies readiness. Bind repository, PR, draft state,
-head, base, complete file set/modes/classification, and eligibility before the
-request and immediately after approval; revalidate again between readiness and
-merge. Except for the authorized draft-to-ready transition, drift invalidates
-approval and requires fresh authority. The user never supplies a SHA, and
-host/repository protections and required checks remain mandatory.
-Read [`references/publication-and-reporting.md`](references/publication-and-reporting.md)
-immediately before plan/approval decisions, commit, push, PR action, merge, or
-report. It supplies publication order, detailed ledger/bundle rules, and report
-fields; it cannot expand this authority.
-
-## Delivery topology
-
-Default to one independently releasable/revertible implementation PR. Bundle
-only compatible adjacent phases; split at material security, API/compatibility,
-release, migration, rollback, dependency, ownership, review, or validation
-boundary. An L1 fast path retains exact scope, checks, staging, evidence, stop
-rules, and final merge authority. Readiness requires validation and review
-eligibility and is never merge authority; obtain explicit readiness authority
-when it was not already included in the binding.
-
-Before each phase, inspect dirty state and pause files, obtain current evidence,
-and run the smallest right-reason red gate. When separately testable exits matter,
-declare stage scopes, acceptance, and shared or stage-specific candidate
-allocation upfront; simple tasks need no added stage. Apply the default five
-substantive candidate edit/validation-cycle cap unless the plan says otherwise. The
-[delegate candidate-accounting contract](../opencode-delegate/SKILL.md#candidate-accounting)
-owns counting; successors require their approved remaining allocation and every
-applicable shared limit,
-with no retroactive split or reset. Use the
-[delegate contract](../opencode-delegate/SKILL.md#failure-classification-and-recovery)
-for ordinary repair, runtime suspension/recovery, and authority/security stops.
-A repairable validation failure blocks the gate, not in-envelope correction.
-Validate scoped diff and green evidence before publication; stage explicit
-paths only. Stale/missing preflight, scope expansion, contradiction, review
-blocker, exhausted cap, unrelated blocker, or hard wait expiry blocks advancement.
-Unavailable essential evidence suspends affected execution. Memory is
-discovery-only and never approval.
-
-## Automatic successor transition
-
-After a successful authorized action or verified merge, evaluate the ordered
-successor but do not advance unless exactly one declared `advance: auto`
-successor has exact scope/route/dependency/gate/topology, an existing worktree,
-valid plan/ancestry, no drift, retry/gate/review/pause/session/wait blocker, no
-manual/owner boundary, remains in the approved repository/worktree/initiative,
-and needs no new publication. Automatic transition may only refresh state and
-perform already-authorized bounded local preflight/in-scope work, including
-validated local commits **by the controller only**, never by delegates. Transition
-does not create a new worktree, grant remote authority, push, mutate PRs, change
-readiness, merge, release, deploy, or sync. Stop before any unbound action and
-request its independently required authority; a manual boundary still stops
-advancement.
-
-## Router and final gate
-
-Load a reference immediately before its transition, never merely at phase
-entry. It explains how and returns evidence; this core decides route, gate,
-publication, and continuation.
-
-| Trigger | Codex destination | Claude destination |
-| --- | --- | --- |
-| Implementation delegation | `opencode-delegate` + [`references/delegation.md`](references/delegation.md) | `opencode-delegate` + `references/delegation.md` |
-| Triggered independent read-only review | `claude-delegate` + [`references/review-and-wait-policy.md`](references/review-and-wait-policy.md) | `codex-delegate` + `references/review-and-wait-policy.md` |
-| Resume/cross-repository work | `memory-continuity` | `memory-continuity` |
-| Transfer to a fresh session | `handoff` | `handoff` |
-
-Read [`references/review-and-wait-policy.md`](references/review-and-wait-policy.md)
-immediately before a review, polling, or gate with local commands, and
-[`references/templates.md`](references/templates.md) immediately before a
-prompt, capsule, or report. Inspect active sessions, contiguous trailers, and
-evidence before the gate. Two consecutive `Phase-gate: auto` trailers force the
-next L1 phase manual; bundle trailers do not count and unexpected interleaving
-is scope drift. Missing approved per-phase scope disables automatic continuation.
-An L1 phase proceeds only when final L1, in scope, right-red failure then pass
-within cap, without deviation or review blocker; a bundle must be declared,
-green, topology-compatible, and free of manual/stop boundaries. A new split
-boundary or validation/rollback mismatch is drift. Report the current phase and
-whether its successor proceeds or waits.
+Wait required jobs and commands to terminal and retrieve their output before success, commits, publication, or phase advancement. Never duplicate live or unknown work. Wrapper completion or prose is not tool-execution evidence. At owner stop or a declared deadline, report unresolved resources honestly as pending; do not claim success or infer their cause.

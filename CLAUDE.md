@@ -67,9 +67,9 @@ Use these skills only when their named trigger applies:
 - **opencode-delegate**: For approved tedious, mechanical, or long-running
   work; follow its async lifecycle and stop/degrade rules.
 
-For phased work, use `plan-audit` for an external artifact and `grilled-me` for
-a plan drafted in-session. Resolve blocking findings and obtain owner approval
-for required scope and gates before relying on continuation.
+For substantive plans, planning review is recommended: `plan-audit` for
+external authorship, `grilled-me` for your own draft. Resolve blocking findings
+and retain owner-approved scope and gates before automatic continuation.
 
 Use Caveman `full` / `korean-full` by default; load `caveman` only to change
 mode or apply its ambiguity safeguards.
