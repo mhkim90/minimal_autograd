@@ -5,47 +5,31 @@ description: Delegate a triggered independent, read-only review to Claude throug
 
 # Claude Delegate
 
-Use Claude only for a bounded second opinion or independent gate. Claude may
-inspect accessible files with `Read`, `Glob`, and `Grep`; it must not execute
-commands, edit, publish, access credentials, or use network/filesystem writes.
+Claude gives a second opinion or the required L3 independent review. It can
+read the caller's files with `Read`, `Glob`, and `Grep` and nothing else: no
+commands, edits, publication, network, or credentials.
 
-## Trigger and boundary
+Use it for required L3 review and when architecture/API compatibility,
+security, memory or concurrency, CUDA/numerical correctness, release
+behavior, weak tests, or a disagreement make a second opinion worth its
+cost. Report the model Claude actually ran on; do not infer it from the
+route name.
 
-Trigger review for architecture/API compatibility, security, memory or
-concurrency, CUDA/numerical correctness, release behavior, weak tests,
-reviewer disagreement, suspicious red gates, or explicit request. Record the
-reviewer trigger reason and the active Claude model; do not infer identity from
-the route label.
-
-Use async for meaningful reviews; use blocking calls only for known-short
-reviews. At launch, record the job ID, requested/bound model evidence,
-phase-declared checkpoint interval, and maximum wait. Poll the same job at each
-checkpoint; a `running` status with no activity telemetry is live and must be
-reported as `review pending`, not unavailable. Missing partial text alone never
-permits a duplicate, cancellation, or no-progress inference.
-
-When a terminal `done` status arrives, fetch `claude_job_result` before
-reporting the verdict. Report `review unavailable` only for a missing
-route/tool, terminal error/cancellation, or failed terminal-result retrieval.
-If a job remains live at its declared maximum wait, stop the affected phase as
-`review pending at maximum wait` and request controller/owner direction; do
-not cancel automatically. If tools are unavailable, report the missing route
-rather than silently substituting it.
-
-## Prompt template
+## Prompt
 
 ```text
 Context: <project + phase and relevant files>
 Question: <specific claim, failure mode, or design fork>
 Current evidence: <compact red/green/diff evidence>
-Reviewer trigger reason: <reason>
-Checkpoint / maximum wait: <phase-declared values>
-Constraints:
-- DISCUSS/read-only; no shell, edits, publication, network, or credentials
-- be concise; cite inspected paths when relevant
+Constraints: read-only; be concise; cite inspected paths
 Return: findings, acceptance concern, and stop/go.
 ```
 
-Report the job/thread identity, active/bound model, trigger reason, checkpoint
-history, maximum-wait outcome, and one state: `review pending`, `go`,
-`blocker`, or `unavailable`.
+## Job
+
+Use `claude_run_async` for anything meaningful and poll the same job. A
+`running` job is pending, not unavailable; do not start a duplicate or
+cancel it without a stated reason. Fetch `claude_job_result` before
+reporting the verdict. Report one state: `review pending`, `go`, `blocker`,
+or `unavailable` (missing tool, terminal error, or failed result
+retrieval). If the required L3 review is unavailable, stop the phase.

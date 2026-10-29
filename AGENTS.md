@@ -70,11 +70,11 @@ Use these skills only when their named trigger applies:
   Claude may inspect files with `Read`, `Glob`, and `Grep` but has no shell,
   editing, or network tools.
 
-For phased work, use `plan-audit` for an external artifact and `grilled-me`
-for a plan drafted by the active agent. Resolve blocking findings and obtain
-owner approval for required scope globs and gates before relying on automatic
-continuation. Re-audit only after a material revision, then run
-`phase-gated-implementation`.
+For substantive plans, planning review is recommended: `plan-audit` for
+external authorship, `grilled-me` for your own draft. Resolve blocking findings
+and retain owner-approved scope and gates before automatic continuation.
+Re-audit only after a material revision; use `phase-gated-implementation` for
+approved phased work.
 
 See [.codex/skills/karpathy/SKILL.md](.codex/skills/karpathy/SKILL.md), [.codex/skills/grilled-me/SKILL.md](.codex/skills/grilled-me/SKILL.md), [.codex/skills/plan-audit/SKILL.md](.codex/skills/plan-audit/SKILL.md), [.codex/skills/handoff/SKILL.md](.codex/skills/handoff/SKILL.md), [.codex/skills/caveman/SKILL.md](.codex/skills/caveman/SKILL.md), [.codex/skills/phase-gated-implementation/SKILL.md](.codex/skills/phase-gated-implementation/SKILL.md), [.codex/skills/opencode-delegate/SKILL.md](.codex/skills/opencode-delegate/SKILL.md), [.codex/skills/claude-delegate/SKILL.md](.codex/skills/claude-delegate/SKILL.md), and [.claude/skills/phase-gated-implementation/SKILL.md](.claude/skills/phase-gated-implementation/SKILL.md).
 

@@ -5,20 +5,32 @@ description: Audit or compact always-loaded root agent guides and on-demand skil
 
 # Instruction Compactification
 
-Use only to audit or compact instruction material. It is not permission to
-change policy, authority, approval boundaries, or publication state.
+Audit or compact instruction material without changing policy, authority,
+approval boundaries, or publication state. A requested policy change is a
+different task; say so and get explicit approval for it.
 
-Read [`references/preservation-checklist.md`](references/preservation-checklist.md)
-immediately before making an audit or compactification decision.
+1. **Inventory** the approved paths and classify each file as a root guide
+   (always loaded), a skill (loaded on trigger), or a reference (loaded on
+   demand). Keep each file's class and trigger unless the scope changes
+   them.
+2. **Preserve** meaning: triggers, exclusions, authority and stop rules,
+   gates, ordering, and output contracts. Do not soften, expand, or imply a
+   new requirement, and do not move a required rule from an always-loaded
+   guide into a place where it would no longer be found.
+3. **Relocate deliberately.** For every moved section, record where it went
+   and keep a working link from the entry point that says when to read it.
+   Do not merge guides, skills, and references just because they look
+   alike.
+4. **Pair runtimes.** Treat `.claude` and `.codex` copies as one artifact
+   with approved differences (frontmatter, `agents/` metadata, controller
+   and reviewer names). Compare meaning, not bytes, and explain any
+   variant.
+5. **Validate**: only approved paths changed, `git diff --check`,
+   `quick_validate.py` for each changed skill, links and anchors resolve,
+   and a re-read of entry point plus moved detail together. Line counts and
+   byte comparison alone do not prove meaning was preserved.
 
-1. Inventory the approved files and classify every artifact as a **root guide**
-   (always loaded), **skill** (on demand), or **reference** (supporting detail).
-2. Preserve semantics, authority, triggers, exclusions, links, stop rules,
-   validation gates, and required ordering. Move detail only with an explicit
-   relocation map and a working link from the retained entry point.
-3. Treat Codex and Claude material as paired runtime artifacts. Preserve
-   approved runtime-specific variants; do not infer synchronization, deletion,
-   publication, semantic change, or byte-equality normalization.
-4. Validate the exact approved paths and stop on ambiguity, lost coverage,
-   broken links, unapproved drift, or failed checks. Report evidence and leave
-   publication and follow-on synchronization to explicit approval.
+Stop and ask when the scope, authority, or runtime pairing is unclear, an
+edit would change semantics, a rule would lose its trigger or link, or a
+validator fails. Leave commit, publication, and syncing to explicit
+approval.

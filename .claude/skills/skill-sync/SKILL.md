@@ -5,190 +5,55 @@ description: Safely prepare, validate, and deliver an approved shared-skill sync
 
 # Skill Sync
 
-Synchronize only an approved shared-skill manifest. Treat repository-specific
-guidance and every active worktree as protected.
+Synchronize only an approved shared-skill manifest across explicitly named repositories. Repository-local guidance and every active worktree are protected.
 
-## Applicability
+Claude applicability is approved-manifest based. The Codex coordination skill remains `opencode_mcp`-source-local: never copy `.codex/skills/skill-sync/` to targets or include it in a distribution manifest. Target-only drift and deletion safeguards are the same across runtimes.
 
-Use this skill only for an approved shared-skill manifest across explicitly
-named repositories. Claude runtime applicability intentionally remains named
-approved-manifest based, while Codex is opencode_mcp-local and excludes
-copying `.codex/skills/skill-sync/`. The target-only drift and deletion
-safeguards below are otherwise equal across the runtime variants. Do not use it
-to discover targets or to synchronize unapproved repository-local guidance.
+## Inputs
 
-## Required inputs
+Before writing, have the authoritative source repository and immutable revision, exact selected source manifest, target repositories and base branches, expected changed paths, validation, and explicit authority for the requested actions. Never assume the current repository is the source or reuse an earlier target list.
 
-Before writing, require all of the following:
+An owner discovery scope such as `../` permits direct-child read-only discovery only. Show each child as usable Git, non-Git, or inaccessible/broken, with its canonical path and available cached remote/base information. No recursion, fetch, active-worktree inspection, or worktree creation during discovery. Obtain confirmation or exclusions before target preflight; confirmation selects targets, not delivery authority. List drift needs renewed confirmation.
 
-- authoritative source repository and source revision;
-- exact source paths to synchronize;
-- target repositories and each target's remote base branch, or an explicit
-  owner candidate-discovery scope pending confirmation;
-- whether the request is plan-only, source implementation, target delivery, or
-  review/merge;
-- explicit authority for the requested publication action.
+## Preflight
 
-The current repository is never an implicit source. Do not reuse a target list
-from an earlier task.
+Before target writes:
 
-## Candidate discovery
+1. Confirm every selected source path at the named revision and freeze the exact manifest.
+2. Fetch confirmed targets and verify their remote bases and evaluated revisions.
+3. Compare the manifest with each target, including target-only files inside the selected source-skill folders. Missing files are expected; distinguish approved variants from unexplained drift. Never widen the manifest to make a target pass.
+4. Inspect active-worktree state only to preserve it and select task-owned isolated worktrees.
+5. State expected changes and trusted validation commands. Stop on unexplained drift, ambiguous authority, or unavailable required evidence.
 
-An explicit owner scope expression such as `../` authorizes **read-only
-candidate discovery only**. Enumerate direct-child directories only; never
-recurse. Classify each child as a usable Git repository, non-Git directory, or
-inaccessible/broken Git entry without creating worktrees, fetching, inspecting
-active-worktree state, or changing a repository. Show every candidate with its
-canonical path, Git validity, cached discoverable remote/default base when
-available, and blocker/exclusion reason.
+## Delivery
 
-Then ask the owner to name exclusions or confirm the exact displayed candidate
-set. Confirmation freezes target selection only for the next read-only
-preflight; it never authorizes source selection, delivery, PR actions, merge,
-or reuse after the candidate list changes. An ambiguous scope or inaccessible
-parent stops discovery.
+- Use one isolated worktree/branch per target from its approved base. Never checkout, reset, clean, stash, or otherwise modify a target's active worktree.
+- Copy only the approved manifest. Preserve approved metadata and runtime variants, comparing meaning rather than blindly forcing byte parity. Preserve existing or required runtime metadata, including approved Codex `agents/openai.yaml`; do not invent Claude metadata or silently add paths.
+- Never sync `AGENTS.md`, `CLAUDE.md`, `.opencode/`, application files, or repository-specific guidance/skills unless those exact paths were approved.
+- Delete target-only content only under explicit exact-source-parity authority naming the path and expected deletion. Verify resulting parity. Do not copy target-only content into the source or silently retain it as an undocumented variant.
+- Validate `git diff --check`, trusted `quick_validate.py` for each copied skill, relative links, and exact manifest scope. Failed validation or unresolved required review blocks delivery; do not substitute an untrusted target validator.
+- Use local Git for local inspection and authorized local work; stage explicit paths only. Use the repository's authorized GitHub route (GitHub MCP/app or authenticated `gh`). A workflow specifically requiring GitHub MCP permits no silent fallback. Neither route grants publication authority or expands a read-only reviewer's permissions.
 
-## Context-bound publication approval
+For source changes, follow `phase-gated-implementation`: normally one plan-plus-implementation PR, with approved local phases/reviews/controller commits covered by the plan approval. A pure target copy skips source implementation, not target preflight. Explicitly authorized local-only preparation stops locally and reports unpublished state; do not invent a remote branch or PR.
 
-Normal source and target publication remains per-PR: delivery authority names
-one repository/worktree, branch, exact paths or diff, and permitted actions;
-the final request is `Approve merging <repository> PR #<N>?`. A plan never
-authorizes delivery or merge. Readiness is administrative only after validation
-and eligibility pass.
+## Approval
 
-## PR-lifecycle ledger and combined classification
+A scoped delivery request may group its named copy, validation, commit, push, and PR actions. Resolve source revision, configured destination, target, base, worktree/branch, exact payload, metadata, and actions before requesting approval. Owner-facing task/plan/PR names suffice; the controller resolves concrete revisions. No SHA-only approval or duplicate disclosure prompt for already-bound in-scope payloads. Local or source authority never implicitly authorizes target publication, readiness, or merge.
 
-Maintain a non-authoritative lifecycle ledger for every workflow-touched source
-or target PR, including created, adopted, updated, readied, reopened, closed,
-and merged events. Each entry records host/repository/PR, source-or-target
-role, branch, head, base, complete file set and file modes, artifact
-classification, lifecycle state, owner disposition, authority evidence, and
-last validation. It grants no delivery, implementation, readiness, close,
-merge, exception, or sync authority.
+For an eligible draft without earlier readiness authority, one explicit request may cover marking that named PR ready and merging it. For an already-ready PR, request merge approval. Merge-only never implies readiness. Recheck scope, head/base, eligibility, and required checks/reviews before readiness and again before expected-head merge. Drift invalidates the affected approval; protections are never bypassed. Eligible exact plan-only or genuinely nonoperational documentation-only content may use the combined content-and-merge route in `phase-gated-implementation`; skills, profiles, policy, mixed, uncertain, or operational content do not qualify.
 
-Before source implementation, successful phase completion, downstream sync, or
-success reporting, every entry must be merged, explicitly retained by
-PR-specific boundary-scoped owner direction, or explicitly closed. Retained is
-not an unmerged-plan exception. A terminal Stop report may list unresolved
-entries but cannot claim success.
+### Qualified mechanical shared-skill bundle
 
-The only combined content-and-merge exceptions are an exact plan-only PR and a
-verified non-operational documentation-only PR. Bind and revalidate
-repository/PR/role/branch/head/base/eligibility, the complete file set, file
-modes, and classification immediately before and after approval. Mixed,
-renamed, symlinked, executable, generated, configuration-like, operational, or
-uncertain documentation, plus profiles, skills, agents, local guidance, policy,
-workflows, configuration, and code, uses ordinary per-PR merge control. A
-plan-plus-implementation PR never qualifies. Drift requires fresh approval.
+For a pure copy of shared skills from one already-merged source revision, freeze a stable bundle ID, exact portable manifest and content digests, every target/base and evaluated revision, task-owned worktree/branch, expected copy-only diff, applicability, trusted validation, exclusions, and permitted actions before any target write.
 
-The sole cross-repository exception is a **qualified mechanical-sync bundle**.
-Its frozen record must bind one already-merged source revision, exhaustive
-portable manifest and content digests, every target/base and evaluated base
-revision, task-owned isolated branch/worktree, expected copy-only diff,
-trusted validation, and exclusions. It also confirms downstream applicability:
-upstream approval alone never authorizes local guidance, permission, or policy
-adaptation. Missing paths, target-only files, variants, semantic edits,
-untrusted validation, code/configuration/generated/local-guidance changes, or
-any unlisted action disqualify the bundle.
+Local adaptation, runtime-variant edits, unexplained target-only drift, missing/extra files, untrusted validation, application/configuration/generated changes, or local guidance disqualify this shortcut. Preserve variants through the normal scoped route instead. Never add an unlisted repository or infer deletion authority.
 
-One explicit bundle-delivery authorization may name that unchanged record and
-permit only isolated copy, trusted validation, explicit staging, commit, push,
-draft-PR creation/update, and administrative readiness for all listed entries.
-It expires on any record-field change and never permits force-push, settings or
-protection changes, auto-merge, bypass, retry, adaptation, merge, release, or
-an unlisted target. Source-side authority still never transfers implicitly.
+One explicit bundle delivery approval may cover listed copying, validation, explicit staging, commits, pushes, draft-PR create/update, and administrative readiness. Readiness must be expressly included and still waits for validation/review eligibility. It grants no merge, retry, adaptation, force-push, settings/protection changes, auto-merge, bypass, release, or deployment authority.
 
-One final bundle-merge request lists a stable bundle ID and every eligible
-`repository / PR / expected head / base plus evaluated revision / checks and
-reviews / merge method` snapshot. A direct `approve` is valid only for that
-unchanged prompt. Revalidate every entry immediately before its sequential
-expected-head merge. Cross-repository merges are non-atomic: on drift, failed
-validation, eligibility regression, host failure, or uncertain outcome, stop
-all remaining merges and report merged, unmerged, and uncertain entries.
-Read-only reconciliation is allowed; retry, rollback, or a remaining subset
-requires fresh exact bundle authority. Host protections remain mandatory.
+Then request one final bundle merge approval listing the stable ID and every repository, PR, expected head, base plus evaluated revision, checks/reviews, and merge method. Merge sequentially, revalidating each binding immediately before expected-head merge. On drift, failure, eligibility regression, host rejection, or uncertain outcome, stop all remaining entries and report partial completion. Any remainder or retry needs fresh scoped authority; never silently narrow the bundle.
 
-Before source implementation, require either a merged plan PR or a complete
-unmerged-plan exception recording its reason, implementation branch/PR when
-available, and a concrete resolution event. Pause at that event until the
-exception is resolved or explicitly renewed.
+## Stop and report
 
-## Always-required read-only preflight
+Stop on ambiguous source/paths/targets/bases, unconfirmed lists, unexplained drift, out-of-manifest changes, failed validation/review, missing required MCP or authority, or risk to active worktrees/protected guidance. Keep useful authority and actual PR-state evidence, not a compulsory lifecycle ledger.
 
-After target selection is explicit or confirmed, complete this read-only
-preflight before any target write. Do not write until all five steps are
-recorded:
-
-1. Confirm every source path exists at the named revision and derive the
-   manifest from those exact paths.
-2. Fetch each named target and confirm its named remote base branch exists.
-3. Compare the manifest against each target. Also enumerate target-only files
-   inside every approved source-skill folder; do not treat repository-local
-   skills outside those folders as manifest extras. Classify a difference as
-   missing, approved drift, or unexpected drift; stop on unexpected drift.
-4. Inspect target active-worktree state only to preserve it. Use isolated
-   worktrees for all target changes, even when an active worktree is clean.
-5. State the expected changed-file list and validation commands before edits.
-
-## Protected guidance, worktrees, and drift
-
-Never widen the manifest to make a target pass. Never synchronize `AGENTS.md`,
-`CLAUDE.md`, `.opencode/`, application files, or repository-specific skills
-unless the owner named those paths in the approved manifest.
-
-A target-only file inside an approved source-skill folder is unexpected drift
-by default. Do not copy it into the source or retain it as an undocumented
-variant. Delete it only when an owner-approved source-parity intent names the
-exact path and explicitly requires exact source parity. Before deletion, include
-that exact path in the expected changed-file list; after copying, record
-post-copy comparison evidence showing exact source parity.
-
-Unexpected drift remains a stop condition; do not make the manifest broader to
-absorb it.
-
-Do not checkout, reset, clean, stash, or otherwise modify a target's active
-worktree. Use an isolated worktree for target changes.
-
-## Publication authority and required route
-
-Stage explicit approved manifest paths only. Apply one exact pending delivery
-action and only its separate explicit bounded delivery authority. Readiness is
-mechanical after validation and review; it is not an owner action. Final merge
-uses the bound per-PR prompt above unless the qualified mechanical-bundle record
-and its fully enumerated final snapshot apply. A draft PR never authorizes
-automatic merging of an implementation PR.
-
-Use GitHub MCP for required PR creation, update, readiness, comments, and merge
-actions. If it is unavailable, stop and report the missing capability; do not
-silently use another publication route. A target validation or publication
-failure blocks that target only unless it exposes a source-manifest defect.
-
-## Source-side publication
-
-Read [`references/source-workflow.md`](references/source-workflow.md)
-immediately before source-side publication work.
-
-## Target delivery
-
-Read [`references/target-workflow.md`](references/target-workflow.md)
-immediately before target worktree or PR work.
-
-## Stop rules
-
-Stop and request direction for:
-
-- missing or ambiguous source authority, revision, paths, targets, or bases;
-- ambiguous candidate-discovery scope, an inaccessible parent, or an unconfirmed
-  candidate list;
-- diff outside the approved manifest or unexplained target drift;
-- validation failure, unresolved review blocker, or unavailable required MCP;
-- a request to merge without explicit owner approval;
-- any action that would alter an active target worktree or protected local
-  guidance.
-
-## Completion report
-
-Report the source revision, approved manifest, each target/base/branch/PR,
-validation evidence, approved variants, skipped or blocked targets, and merge
-state. Return the source repository to its original branch when its work is
-complete; do not delete temporary worktrees unless explicitly authorized.
+Report source revision, manifest, each target/base/branch/PR, validation, approved variants, skipped/blocked targets, and actual local/publication/readiness/merge state. Wait required jobs and commands to terminal and retrieve output before success; never duplicate live/unknown work. At owner stop or declared deadline, account for pending resources honestly. Return the source repository to its original branch when applicable; no worktree cleanup without explicit authority.

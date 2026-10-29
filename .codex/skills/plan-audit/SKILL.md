@@ -5,25 +5,16 @@ description: Audit an externally authored implementation plan before execution. 
 
 # Plan Audit
 
-Audit an externally authored plan before implementation. Find the smallest
-repairs needed to make the plan executable, and produce a structured handoff
-for phase-gated implementation.
+Find the smallest repairs that make an externally authored plan
+executable, and produce a structured handoff for
+`phase-gated-implementation`. Read-only: do not edit the plan, approve
+proposed boundaries, begin implementation, or silently fill consequential
+gaps.
 
-This is a read-only review skill. Do not edit the plan, approve proposed
-boundaries, begin implementation, or silently fill consequential gaps.
-
-## Relationship to Other Skills
-
-- Use `plan-audit` for a plan or execution artifact authored outside the active
-  agent.
-- Use `grilled-me` to stress-test a plan drafted by the active agent before it
-  is presented.
-- Use `phase-gated-implementation` only after blocking audit findings are
-  resolved and the user has approved any required phase boundaries and gates.
-
-Do not combine these skills into one loop. A plan audit is normally a one-time
-preflight for a specific artifact revision, not a review repeated at every
-implementation phase.
+It is a one-time preflight per artifact revision, not a per-phase review
+and not a loop with `grilled-me`. Implementation starts only after
+blocking findings are resolved and the owner approves any required phase
+boundaries and gates.
 
 ## Authority Boundary
 

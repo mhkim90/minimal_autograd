@@ -1,4 +1,4 @@
-# OpenCode five-role roster
+# OpenCode roles
 
 This repository is `minimal_autograd`, a C++17 reverse-mode automatic
 differentiation library with an optional CUDA backend. Follow the repository
@@ -7,58 +7,35 @@ Use focused CMake/CTest checks and CUDA tests when relevant.
 
 ## Roles and routing
 
-- **Astra orchestrator** (`agents/astra-orchestrator.md`) is an explicit
-  controller-bound whole-phase route (`agent="astra-orchestrator"`). It plans,
-  gates, and recommends stop/go beneath an external Codex or Claude controller;
-  it is not a standalone primary route. The controller owns final gates,
-  independent review, and publication. This boundary is procedural, not caller
-  authentication.
-- **Astra expert** (`agents/astra-expert.md`) is fresh, bounded read-only
-  preflight or blocker analysis: one consultation and at most one follow-up.
-  It never edits, delegates, publishes, or reviews its own recommendation.
-- **Luna** (`agents/luna.md`) is the normal implementation route
-  (`agent="luna"`) for mechanical/economy and standard work. It cannot publish
-  or broaden scope. Follow **red -> implement -> green -> GPU** with at most 5
-  substantive edit/validation candidates for a fresh, otherwise-unallocated phase; explicitly
-  bound lower limits and existing allocations remain unchanged. After two failures
-  on one blocker, consult Astra expert; every further candidate on that blocker
-  requires a materially revised approach and remaining applicable allowance.
-- **Sol implementer** (`agents/sol-implementer.md`) is the justified strong
-  implementation route; **Astra implementer** (`agents/astra-implementer.md`)
-  is the justified hard-task implementation route. Both use Luna's bounded
-  edit/test contract, never plan, review, delegate, stage, commit, push, create
-  PRs, or publish. Omit model and variant for every named role; a conflicting
-  override stops rather than silently changing model or effort.
-- The configured default route is used only when the user explicitly requests
-  it: omit `agent`, `model`, and `variant`. Never infer it as a named role.
+- [Luna](agents/luna.md) is the normal standard/mechanical implementation route, `agent="luna"`.
+- [Sol implementer](agents/sol-implementer.md) handles justified strong implementation, `agent="sol-implementer"`.
+- [Terra implementer](agents/terra-implementer.md) is owner-requested opt-in implementation, `agent="terra-implementer"`, never a new default.
+- [Astra implementer](agents/astra-implementer.md) handles justified hard implementation, `agent="astra-implementer"`.
+- [Astra expert](agents/astra-expert.md) supplies fresh, focused read-only advice on material questions or blockers. It never edits, publishes, delegates, or reviews its own recommendation.
+- [Astra orchestrator](agents/astra-orchestrator.md) supplies explicitly approved whole-phase planning/gate advice beneath an external Codex or Claude controller. It does not itself invoke other roles or publish; this is not a standalone primary route or caller-authentication mechanism.
 
-## PR lifecycle and approval
+Named profiles bind their exact model and high effort. Omit model and variant on calls, continuations, and forks; conflicting overrides, rejected selectors, role/model contradictions, or silent fallback stop the phase. Use the configured default only when the owner requests it, omitting agent/model/variant. Missing telemetry alone is not proof of another model.
 
-Maintain a non-authoritative lifecycle ledger entry for every workflow-touched
-PR, including created, adopted, updated, readied, reopened, closed, and merged
-events. Record the host/repository/PR, source-or-target role, branch, head,
-base, complete file set and modes, classification, lifecycle state, owner
-disposition, authority evidence, and last validation. The ledger grants no authority. Every
-entry must be merged, explicitly retained by PR-specific boundary-scoped owner
-direction, or explicitly closed before successful phase completion, entering
-implementation, downstream sync, or success reporting; unresolved entries may
-only appear in a terminal Stop report.
+Implementers edit/test one bounded phase, following **red -> implement -> green -> GPU** when relevant. They never plan, review, delegate, invoke subagents, stage, commit, or publish. Fix ordinary in-scope mistakes automatically. Preserve explicit task allocations, shared limits, consumed history, and deadlines across reloads and review fixes; reload never reopens an exhausted allocation. No default numeric candidate/consultation cap applies. Repeated same-blocker failure returns evidence to the controller for a changed approach or useful help, not blind retries.
 
-Combined plan-only approval and verified non-operational documentation-only
-approval are narrow exceptions. Bind and revalidate repository, PR, head, base,
-eligibility, complete file set, file modes, and classification immediately
-before and after approval. Plan-plus-implementation, operational or uncertain
-documentation, profiles, skills, agents, AGENTS.md, CLAUDE.md, `.opencode`, policy,
-workflow, configuration, code, generated, renamed, symlinked, or executable
-content retains ordinary final merge control.
+## Gates and approval
 
-## Gates and safety
+The external controller owns scope, final gates, independent review, and publication. Planning review is recommended for substantive plans: `grilled-me` for self-authored plans, `plan-audit` for external authorship. Expert preflight is risk-driven. L3 independent finish review remains required: Claude for a Codex controller, Codex for a Claude controller. Neither an OpenCode expert nor an advice author's self-review replaces it; unavailable required review stops the phase. L4 requires explicit owner design direction before implementation.
 
-Role prompts are authoritative. L3 requires fresh expert preflight and a
-distinct independent post-implementation reviewer through the external
-controller; if that reviewer is unavailable, stop. L4 requires explicit owner
-direction before implementation. Delegated paths stay within
-the caller's working directory; external paths are denied. Permissions are
-guardrails, not a complete trust boundary, so preserve repository boundaries,
-sandboxing, and diff gates. Keep unrelated artifacts untouched, and never read,
-print, copy, expose, or request credentials or secrets.
+One approved plan covers its local edits, tests, reviews, and controller commits without per-step prompts, normally in one plan-plus-implementation branch/PR. Continue approved local successors until a manual boundary, changed scope/authority, or real blocker; this supplies no new checkout or publication authority.
+
+Publication requires explicit authority for the named actions. Grouped requests may cover enumerated actions together. An eligible draft may use one request to mark it ready and merge it; merge-only approval never implies readiness. Exact plan-only or genuinely nonoperational documentation-only PRs may combine content and merge approval, explicitly including readiness if needed. Skills, profiles, guidance, policy, mixed, uncertain, or operational content do not qualify for that exception.
+
+Qualified mechanical shared-skill bundles may explicitly include administrative readiness in delivery approval and use one final bundle merge request under `skill-sync`. Codex skill-sync remains `opencode_mcp`-source-local and is never distributed. Source approval never transfers to targets. Preserve target-only drift/deletion, approved variants, and dirty active-worktree protections.
+
+Owner-facing task/plan/PR names suffice; the controller resolves concrete scope, head/base, eligibility, and permitted actions and rechecks required checks/reviews before acting. No SHA-only approval, magic reply, or duplicate disclosure prompt for necessary in-scope material already bound to a configured delegate/reviewer. Host protections remain unchanged. Keep useful actual-state and authority evidence, not a compulsory PR-lifecycle ledger. GitHub routes follow the active runtime skill; workflows requiring GitHub MCP never silently fall back to `gh`.
+
+## Capability and safety
+
+Confirm the expected checkout and relevant capabilities using actual delegate tools. Missing native apply_patch does not prove editing is unavailable; discover permitted alternatives and verify authorized edit results. Do not impose universal marker/hash probes, invent extra writes, install tools, or assume fixed tool names.
+
+Delegated paths stay within the caller's working directory; contained source does not guarantee access to linked/common Git metadata. Access denial stops affected work. Never copy/redirect metadata, widen permissions, or relaunch to evade it. A separately owner-approved independent clone is an option after metadata-access failure, not automatic recovery; preserve original dirty work and plan/P0 provenance and reverify capabilities there.
+
+Wrapper completion, printed JSON, and prose are not evidence of native tool execution. Distinguish observed invocation failure, reported absence, denial, and unknown cause; unknown stays unknown. Wait required jobs and commands to terminal and retrieve output before success, commits, publication, or advancement. Never duplicate live/unknown work or treat cancellation requests as terminal proof. At owner stop or declared deadline, report each unresolved resource and retrieval state honestly as pending.
+
+Role prompts and task scope remain authoritative. Permissions are guardrails, not authorization or a complete sandbox. Preserve unrelated artifacts and checkout boundaries. Never read, print, copy, expose, or request credentials or secrets.
