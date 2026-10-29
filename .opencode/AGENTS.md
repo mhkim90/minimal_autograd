@@ -7,9 +7,9 @@ Use focused CMake/CTest checks and CUDA tests when relevant.
 
 ## Roles and routing
 
-- [Luna](agents/luna.md) is the normal standard/mechanical implementation route, `agent="luna"`.
+- [Luna](agents/luna.md) is available for implementation only on explicit request, `agent="luna"`; never an implicit fallback.
 - [Sol implementer](agents/sol-implementer.md) handles justified strong implementation, `agent="sol-implementer"`.
-- [Terra implementer](agents/terra-implementer.md) is owner-requested opt-in implementation, `agent="terra-implementer"`, never a new default.
+- [Terra implementer](agents/terra-implementer.md) is the normal standard/mechanical implementation route, `agent="terra-implementer"`.
 - [Astra implementer](agents/astra-implementer.md) handles justified hard implementation, `agent="astra-implementer"`.
 - [Astra expert](agents/astra-expert.md) supplies fresh, focused read-only advice on material questions or blockers. It never edits, publishes, delegates, or reviews its own recommendation.
 - [Astra orchestrator](agents/astra-orchestrator.md) supplies explicitly approved whole-phase planning/gate advice beneath an external Codex or Claude controller. It does not itself invoke other roles or publish; this is not a standalone primary route or caller-authentication mechanism.

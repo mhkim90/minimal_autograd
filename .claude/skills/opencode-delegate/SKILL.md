@@ -1,6 +1,6 @@
 ---
 name: opencode-delegate
-description: Delegate approved work through OpenCode MCP. Use Luna by default, justified Sol/Astra implementers for harder work, and Astra expert for bounded read-only analysis.
+description: Delegate approved work through OpenCode MCP. Use Terra by default, Luna only on explicit request, justified Sol/Astra implementers for harder work, and Astra expert for bounded read-only analysis.
 ---
 
 # OpenCode Delegate
@@ -23,9 +23,9 @@ Implementers edit and test only: no planning, review, staging, commits, pushes, 
 
 ## Routes
 
-- Standard and mechanical work: `agent="luna"`.
+- Standard and mechanical work: `agent="terra-implementer"`.
 - Hard implementation, with a stated reason: `agent="sol-implementer"` or `agent="astra-implementer"`.
-- Owner-requested opt-in implementation: `agent="terra-implementer"`; never a new default.
+- Explicitly requested Luna implementation only: `agent="luna"`; never an implicit fallback.
 - Hard question or blocker analysis: fresh read-only `agent="astra-expert"`. Return findings, proposed approach, acceptance gate, and stop/go. Inspect only evidence needed for the named decision and stop when evidence is missing or further inspection cannot make meaningful progress. Never edit, delegate, publish, or review its own advice.
 - Explicitly approved whole phase: `agent="astra-orchestrator"` beneath an external Codex/Claude controller retaining final gates, independent review, and publication.
 - Configured default only when the owner asks: omit `agent`, `model`, and `variant`.

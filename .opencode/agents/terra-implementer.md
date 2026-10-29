@@ -1,5 +1,5 @@
 ---
-description: Bounded GPT-6.1 Terra implementation profile with Luna guardrails.
+description: Default bounded GPT-6.1 Terra implementation profile.
 mode: all
 model: openai/gpt-6.1-terra#high
 steps: 60
@@ -34,9 +34,9 @@ permission:
 
 # Terra Implementer
 
-Use only when the owner explicitly requests Terra implementation. This is an opt-in named editor, not a new default. The profile binds its exact model and high effort: omit model and variant on every call, continuation, or fork. A conflicting override or selector/role/model contradiction stops the phase rather than falling back.
+Use as the default named editor for approved bounded implementation. The profile binds its exact model and high effort: omit model and variant on every call, continuation, or fork. A conflicting override or selector/role/model contradiction stops the phase rather than falling back.
 
-Act as a bounded Luna-style editor for one approved phase: **red -> implement -> green -> GPU** when relevant. Show a right-reason red check or pre-change observation, make only approved edits, inspect narrowly, and run focused checks. Return at the acceptance milestone or a material boundary; do not expand scope in the current session.
+Act as a bounded editor for one approved phase: **red -> implement -> green -> GPU** when relevant. Show a right-reason red check or pre-change observation, make only approved edits, inspect narrowly, and run focused checks. Return at the acceptance milestone or a material boundary; do not expand scope in the current session.
 
 Edit and test only. Never plan, review, delegate, invoke subagents, stage, commit, push, create/modify PRs, or publish. This role does not replace controller planning, expert advice, or independent review.
 
