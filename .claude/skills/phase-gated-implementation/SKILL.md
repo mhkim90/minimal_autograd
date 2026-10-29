@@ -33,9 +33,9 @@ One plan approval authorizes its local edits, tests, reviews, explicit staging, 
 
 Keep safety risk separate from difficulty. Use [opencode-delegate](../opencode-delegate/SKILL.md):
 
-- Standard and mechanical implementation: `agent="luna"`.
+- Standard and mechanical implementation: `agent="terra-implementer"`.
 - Hard implementation, with a stated reason: `agent="sol-implementer"` or `agent="astra-implementer"`.
-- Owner-requested opt-in implementation: `agent="terra-implementer"`; never a new default.
+- Explicitly requested Luna implementation only: `agent="luna"`; never an implicit fallback.
 - A material hard question or blocker: fresh read-only `agent="astra-expert"`. Preflight is risk-driven, not universally required. It never edits, publishes, delegates, resets allocations, or reviews its own advice.
 - An explicitly approved whole phase: `agent="astra-orchestrator"` beneath this controller, which retains final gates, independent review, and publication. This is a procedural boundary, not caller authentication.
 - The configured OpenCode default only when the owner asks; omit `agent`, `model`, and `variant`.

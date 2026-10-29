@@ -60,8 +60,9 @@ right engine, verify results (the relevant test binaries above), decide keep/rev
 and report.
 
 - **Codex/Sol** ← independent high-risk reasoning and final read-only blocker gate.
-- **OpenCode default / Luna** ← bulk implementation / evidence-based escalation.
-- **Terra** ← focused read-only review of important L2/L3 diffs.
+- **Terra implementer** (`agent="terra-implementer"`) ← default bounded implementation.
+- **Luna** (`agent="luna"`) ← explicit-request-only implementation; never an implicit fallback.
+- **Astra expert** (`agent="astra-expert"`) ← bounded read-only advice, not the independent L3 review.
 - **Claude Code** ← routing, evidence verification, publication, and user decisions.
 
 Before a large phase, classify risk and follow `phase-gated-implementation`;
