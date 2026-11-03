@@ -51,7 +51,7 @@ Named profiles bind model and effort; omit per-call model and variant. Rejected 
 5. After L3 implementation, independent read-only finish review through [codex-delegate](../codex-delegate/SKILL.md) is required. Seek a second opinion when security, concurrency, numerics, API/release behavior, weak tests or disagreement warrants it. An advice author cannot independently review that advice. Stop if required review is unavailable; an OpenCode expert is no substitute.
 6. The controller commits locally and continues approved local successors without another prompt, stopping at manual boundaries, changed authority/scope or real blockers. Continuation grants no new checkout, remote action or publication authority.
 
-Stop for contradictory evidence, missing essential capability, access denial or unresolved review blockers. Discover capabilities pragmatically under the delegate contract: missing native apply_patch does not prove no permitted editor exists. Memory and handoff notes are leads, not approval.
+Stop for contradictory evidence, access denial or unresolved review blockers; suspend edits for missing capability and use opencode-delegate controller recovery. Missing native apply_patch does not prove no permitted editor exists. Memory and handoff notes are leads, not approval.
 
 Use the repository's authorized GitHub route. A workflow specifically requiring GitHub MCP/app does not permit silent `gh` fallback; neither route expands a read-only reviewer's authority.
 
