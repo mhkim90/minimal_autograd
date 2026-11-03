@@ -9,7 +9,7 @@ Use `mcp__opencode__opencode_run_async` for non-trivial work, blocking calls onl
 
 ## Boundary
 
-OpenCode MCP runs in the caller's working directory and accepts no selected `cwd`; external paths, including arbitrary `/tmp` worktrees, are denied. Explicit-cwd shell tools do not widen this boundary. Another repository requires an owner-authorized isolated checkout inside the caller's boundary; these constraints authorize no checkout, clone, edit or publication.
+OpenCode MCP has no selectable `cwd`; explicit-cwd tools cannot widen the caller-directory boundary. External paths, including arbitrary `/tmp` worktrees, remain denied. Controller and target repositories may differ; approved contained checkouts need no repeat approval. This grants no checkout, clone, edit or publication authority.
 
 Explicitly requesting a configured delegate authorizes necessary in-scope source/diff disclosure to it without a duplicate prompt. Changed destinations, out-of-scope private material, unconfigured services, destructive actions and publication retain their own authority requirements.
 
@@ -17,7 +17,7 @@ Before editing, confirm expected checkout and task-relevant capabilities using t
 
 Missing native `apply_patch` does not prove editing impossible: discover an existing permitted shell editor rather than assuming tool names, and verify an authorized edit. Do not install tools, widen permissions or invent probe writes.
 
-Missing essential capability suspends affected edits. Distinguish model-reported absence, observed invocation failure, denial and unknown cause; unknown stays unknown. Wrapper exit, printed JSON or prose is not proof of native tool execution. No role swaps, denial workarounds, blind probes or self-launched recovery. Only expressly approved controller recovery may proceed after prior terminal state, result retrieval and scoped partial-diff inspection, retaining lineage, limits and provenance and freshly verifying capabilities.
+Reported absence is not observed failure or denial; wrapper/prose/JSON is not native execution proof. Suspend affected edits. After terminal result retrieval and scoped state/diff checks, controller recovery may use a fresh same-role session within existing authorization, preserving pending work/effects, history, limits and provenance and verifying capabilities. Unchanged local recovery needs no repeat approval. No delegate self-relaunch, model/scope switch, denial workaround or blind replay; repeated unavailability stops for diagnosis.
 
 Access denial stops affected work. For denied Git metadata, do not copy or redirect metadata, change git-dir/work-tree or symlinks, widen permissions or relaunch to evade controls. Only after that failure may a separately owner-approved independent clone be used: bind source/ref/revision, destination, task branch, scope and actions; preserve original dirty work and plan/P0 provenance and reverify capabilities. Never create or substitute it automatically.
 
