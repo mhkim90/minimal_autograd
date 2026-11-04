@@ -243,6 +243,19 @@ a recorded optional dependency when it was enabled at library build time. A
 CUDA-built static normal target records only the link-time `CUDA::cudart`
 requirement; a shared CUDA library resolves that runtime itself.
 
+The normal target also exposes build-capability metadata in both installed and
+embedded builds, for static and shared libraries:
+
+```cmake
+get_target_property(cuda_enabled autograd::autograd AUTOGRAD_CUDA_ENABLED)
+# Exactly "0" for a CPU build, or "1" for a CUDA build.
+```
+
+This describes what was compiled, not device visibility, runtime availability,
+architecture support, or CPU exclusivity. Missing or other values are not a
+valid capability result. The legacy expert definition remains supported for
+compatibility; its retirement is not part of this change.
+
 Legacy or custom Eigen/CUDA consumers must opt in explicitly:
 
 ```cmake

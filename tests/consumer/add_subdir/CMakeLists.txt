@@ -18,6 +18,17 @@ endif()
 
 add_subdirectory("${AUTOGRAD_SRC_DIR}" autograd_build)
 
+get_target_property(_autograd_cuda_enabled
+    autograd::autograd AUTOGRAD_CUDA_ENABLED)
+if(NOT "${_autograd_cuda_enabled}" STREQUAL "0" AND
+   NOT "${_autograd_cuda_enabled}" STREQUAL "1")
+    message(FATAL_ERROR "autograd AUTOGRAD_CUDA_ENABLED must be 0 or 1")
+endif()
+if(DEFINED AUTOGRAD_EXPECT_CUDA_ENABLED AND
+   NOT "${_autograd_cuda_enabled}" STREQUAL "${AUTOGRAD_EXPECT_CUDA_ENABLED}")
+    message(FATAL_ERROR "autograd AUTOGRAD_CUDA_ENABLED does not match expected value")
+endif()
+
 add_executable(autograd_smoke main.cpp)
 target_link_libraries(autograd_smoke PRIVATE autograd::autograd)
 
