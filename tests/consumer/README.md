@@ -9,15 +9,14 @@ boundaries of `minimal_autograd`:
   opt-in Eigen extension header for a copied custom operation.
 - `cuda_custom/` explicitly requests the `expert` component and uses the
   installed CUDA package with an external CUDA kernel.
-- `legacy_expert/` is a source-preserving `autograd.h`/`Mat`/`VarPtr` fixture;
-  it requests the expert target and uses the existing CUDA runtime helper only
-  for a CUDA-enabled install.
+- `api_freeze/` checks installed headers/aliases and intentional removed-surface
+  failures, including with explicit Eigen expert, plus version selection.
 - `find_package/unknown_component/` is expected to fail at configure time.
 
 The `find_package` and `add_subdir` smoke programs are identical. They use the
 replacement Tensor/Variable API, `nn::Module` modules, canonical free
-functions, and `optim::Adam`. They intentionally do not include the umbrella
-header or any legacy graph and Eigen surface. The smoke check covers a fixed
+functions, and `optim::Adam`. They include both normal umbrellas and direct core headers without
+any legacy graph or Eigen surface. The smoke check covers a fixed
 forward/backward pass, registered parameter names and traversal, an Adam step,
 and an AdamState snapshot/load_state round trip with deterministic values.
 
@@ -33,7 +32,7 @@ be exactly `0` or `1`, including when embedded. Pass the independent
 `-DAUTOGRAD_EXPECT_CUDA_ENABLED=0` or `=1` to verify provider polarity. This
 metadata describes build capability only, not runtime or GPU availability.
 The CUDA custom consumer requires `1` and still links the expert target for
-its extension. The existing expert CUDA definition remains available.
+its extension. Neither target exports private backend/test definitions.
 
 ## CPU Checks
 
@@ -67,10 +66,6 @@ cmake -S tests/consumer/eigen_custom -B .scratch/eigen_custom_build \
 cmake --build .scratch/eigen_custom_build
 .scratch/eigen_custom_build/autograd_eigen_custom
 
-cmake -S tests/consumer/legacy_expert -B .scratch/legacy_expert_build \
-    -DCMAKE_PREFIX_PATH="$PWD/.scratch/install"
-cmake --build .scratch/legacy_expert_build
-.scratch/legacy_expert_build/autograd_legacy_expert
 ```
 
 The unknown required component must reject configuration:
@@ -132,5 +127,43 @@ PATH=/usr/local/cuda/bin:$PATH \
 The CUDA custom consumer keeps ownership in `Tensor`, obtains only borrowed
 device views from `autograd/extension/cuda.h`, launches and synchronizes its
 own kernels, and checks forward and backward results through host copies.
-The CUDA-enabled `legacy_expert` fixture can be run with the same installed
-prefix; it prints `SKIP` when no device is visible.
+No legacy fixture remains; API-freeze negative controls prove expert opt-in
+does not restore removed names. CUDA qualification requires a visible device.
+
+## Installed API freeze and version controls
+
+Use a fresh prefix/build for every candidate (never install over old headers).
+The freeze fixture first compiles valid package/umbrella/header controls, then
+requires removed names, all twelve old headers, and private graph/state fields
+to fail with matching diagnostics. The negative matcher is GCC-diagnostic-qualified;
+Clang and other diagnostic formats are not qualified (Clang is not installed
+on the qualification host). Expert mode first proves explicit Eigen
+copies compile, then repeats removed-name controls with Eigen included.
+
+```sh
+cmake -S tests/consumer/api_freeze -B .scratch/freeze-normal \
+  -DCMAKE_PREFIX_PATH="$PWD/.scratch/install" \
+  -DCMAKE_DISABLE_FIND_PACKAGE_Eigen3=TRUE \
+  -DCMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit=TRUE
+cmake --build .scratch/freeze-normal --parallel 4
+ctest --test-dir .scratch/freeze-normal --output-on-failure
+cmake -S tests/consumer/api_freeze -B .scratch/freeze-expert \
+  -DCMAKE_PREFIX_PATH="$PWD/.scratch/install" -DAUTOGRAD_FREEZE_EXPERT=ON
+cmake --build .scratch/freeze-expert --parallel 4
+ctest --test-dir .scratch/freeze-expert --output-on-failure
+```
+
+For fresh configure directories, pass `-DAUTOGRAD_REQUEST_VERSION=1.0`, or
+`-DAUTOGRAD_REQUEST_VERSION=1.0.0 -DAUTOGRAD_REQUEST_EXACT=ON`; both must accept.
+Omitting the request must accept. Requests 1.1, 1.0.1, 0.9 and 2.0 must reject
+through the actual installed ConfigVersion file (not a compiler/SDK error).
+A SHARED install must report SONAME `libautograd.so.1` via `readelf -d`.
+These are package-selection controls, not a general ABI compatibility promise.
+Host CMake 3.28 was used; actual 3.14 runtime remains untested.
+
+Local qualification completed all four CPU/CUDA STATIC/SHARED boundaries:
+installed and embedded normal consumers, explicit Eigen expert and actual CUDA
+custom-device checks, plus API-freeze/version controls. Eight default/advanced
+provider configurations and versioned downstream 32/32/41 passed locally. The
+corrected downstream driver is unmerged and belongs to a separate delivery;
+these local results do not claim merged/released status.

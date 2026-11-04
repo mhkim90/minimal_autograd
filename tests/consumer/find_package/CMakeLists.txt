@@ -25,13 +25,13 @@ endif()
 get_target_property(_autograd_normal_links
     autograd::autograd INTERFACE_LINK_LIBRARIES)
 if(_autograd_normal_links MATCHES "Eigen3::Eigen" OR
-   _autograd_normal_links MATCHES "AUTOGRAD_USE_CUDA")
+   _autograd_normal_links MATCHES "AUTOGRAD_(USE_CUDA|TEST_CUDA_ENABLED)")
     message(FATAL_ERROR
         "normal autograd target leaks an expert dependency or CUDA macro")
 endif()
 get_target_property(_autograd_normal_definitions
     autograd::autograd INTERFACE_COMPILE_DEFINITIONS)
-if(_autograd_normal_definitions MATCHES "AUTOGRAD_USE_CUDA")
+if(_autograd_normal_definitions MATCHES "AUTOGRAD_(USE_CUDA|TEST_CUDA_ENABLED)")
     message(FATAL_ERROR
         "normal autograd target leaks AUTOGRAD_USE_CUDA")
 endif()

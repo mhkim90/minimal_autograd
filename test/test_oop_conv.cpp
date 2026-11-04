@@ -16,6 +16,12 @@
 //   * Public-header hygiene: the consumer TU must compile without ever
 //     pulling Eigen or CUDA macros through the new headers.
 
+#ifndef AUTOGRAD_TEST_CUDA_ENABLED
+#error "AUTOGRAD_TEST_CUDA_ENABLED must be defined as 0 or 1"
+#elif AUTOGRAD_TEST_CUDA_ENABLED != 0 && AUTOGRAD_TEST_CUDA_ENABLED != 1
+#error "AUTOGRAD_TEST_CUDA_ENABLED must be 0 or 1"
+#endif
+
 #include "autograd/core/module.h"
 #include "autograd/core/ops.h"
 #include "autograd/core/loss.h"
@@ -633,7 +639,7 @@ void test_zero_batch_spatial_backward_shapes() {
     report("zero-batch conv2d/max_pool2d backward preserves input gradient shapes");
 }
 
-#ifdef AUTOGRAD_USE_CUDA
+#if AUTOGRAD_TEST_CUDA_ENABLED
 bool replacement_cuda_available() {
     try {
         (void)ag::Tensor::empty(ag::Shape{0}, ag::Device::cuda(0));
@@ -1249,6 +1255,74 @@ void test_spatial_extra_invalid_arguments() {
     report("spatial extras reject invalid arguments");
 }
 
+
+// Each sample contributes to the SAME filter derivative, including weighted VJPs.
+void test_depthwise_batch_weight_accumulation() {
+    auto run = [](int N, int C, int H, int W, int K, int stride, int pad,
+                  bool weighted) {
+        const int OH = (H + 2*pad - K)/stride + 1;
+        const int OW = (W + 2*pad - K)/stride + 1;
+        std::vector<float> input(N*C*H*W), weights(C*K*K, .5f), bias(C, 0.f);
+        std::vector<float> upstream(N*C*OH*OW, 1.f), expected(C*K*K, 0.f);
+        for (int n = 0; n < N; ++n)
+            for (int i = 0; i < C*H*W; ++i)
+                input[n*C*H*W+i] = weighted ? (n+1)*.2f + .03f*(i%11-5) : float(n+1);
+        if (weighted)
+            for (size_t i = 0; i < upstream.size(); ++i)
+                upstream[i] = .125f * (int(i%9)-4);
+        // Independent scalar derivative of cross-correlation, including padding.
+        for (int n = 0; n < N; ++n)
+            for (int c = 0; c < C; ++c)
+                for (int oh = 0; oh < OH; ++oh)
+                    for (int ow = 0; ow < OW; ++ow)
+                        for (int kh = 0; kh < K; ++kh)
+                            for (int kw = 0; kw < K; ++kw) {
+                                int ih = oh*stride+kh-pad, iw = ow*stride+kw-pad;
+                                if (ih >= 0 && ih < H && iw >= 0 && iw < W)
+                                    expected[(c*K+kh)*K+kw] +=
+                                        input[((n*C+c)*H+ih)*W+iw] *
+                                        upstream[((n*C+c)*OH+oh)*OW+ow];
+                            }
+        ag::Variable x(make_tensor(input, ag::Shape{N,C,H,W}), true);
+        ag::Variable w(make_tensor(weights, ag::Shape{C,K,K}), true);
+        ag::Variable b(make_tensor(bias, ag::Shape{C}), true);
+        auto y = ag::depthwise_conv2d(x, w, b, stride, pad);
+        y.backward(make_tensor(upstream, ag::Shape{N,C,OH,OW}));
+        auto analytic = read_values(w.grad());
+        ag::Tensor storage = w.value();
+        auto evaluate = [&] {
+            auto out = read_values(ag::depthwise_conv2d(x, w, b, stride, pad).value());
+            float total = 0.f;
+            for (size_t i = 0; i < out.size(); ++i) total += out[i]*upstream[i];
+            return total;
+        };
+        std::vector<float> numeric(weights.size());
+        for (size_t i = 0; i < weights.size(); ++i) {
+            float original = weights[i];
+            weights[i] = original + 1e-3f; storage.copy_from_host(weights.data(), weights.size());
+            float plus = evaluate();
+            weights[i] = original - 1e-3f; storage.copy_from_host(weights.data(), weights.size());
+            float minus = evaluate();
+            weights[i] = original; storage.copy_from_host(weights.data(), weights.size());
+            numeric[i] = (plus-minus)/(2e-3f);
+        }
+        check_near(numeric, expected, 5e-2f);
+        if (!weighted && N == 2) {
+            CHECK(expected[0] == 27.f);
+            std::printf("  depthwise N2: reference=%g FD=%g backward=%g\n",
+                        expected[0], numeric[0], analytic[0]);
+        }
+        check_near(analytic, expected, 1e-4f);
+        std::printf("  depthwise N%d weighted=%d stride=%d pad=%d passed\n", N, weighted, stride, pad);
+        std::fflush(stdout);
+    };
+    run(1, 1, 3, 3, 1, 1, 0, false); // positive control before discriminating RED
+    run(2, 1, 3, 3, 1, 1, 0, false); // 27, not last-sample-only 18
+    run(2, 2, 5, 5, 3, 1, 1, true);
+    run(3, 2, 5, 5, 3, 2, 1, true);
+    report("depthwise batch weight gradients match naive oracle and finite differences");
+}
+
 }  // namespace
 
 int main() {
@@ -1265,7 +1339,7 @@ int main() {
     test_conv2d_rank1_bias_backward_shape();
     test_maxpool2d_invalid_arguments();
     test_zero_batch_spatial_backward_shapes();
-#ifdef AUTOGRAD_USE_CUDA
+#if AUTOGRAD_TEST_CUDA_ENABLED
     if (replacement_cuda_available()) {
         test_cuda_replacement_conv_and_pool_parity();
     } else {
@@ -1286,6 +1360,8 @@ int main() {
     test_nearest_upsample2d_gradient_finite_difference();
     test_nearest_upsample2d_module_zero_parameters();
     test_spatial_extra_invalid_arguments();
+
+    test_depthwise_batch_weight_accumulation();
 
     std::printf("\nALL OOP CONV TESTS PASSED (%d)\n", passed);
     return 0;

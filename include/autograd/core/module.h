@@ -1,12 +1,7 @@
 #pragma once
 // Module stack on the Tensor/Variable API.
 //
-// Declarations live in the ag::nn namespace to avoid colliding with the
-// legacy ag::Module / ag::Linear declarations in autograd/module.h.
-// Once the legacy facade is removed in Phase 11, these declarations can
-// be exposed under flat ag::Module / ag::Linear aliases. Until then,
-// including autograd/core/module.h is the entry point for the new
-// replacement stack.
+// Declarations remain in ag::nn; flat ag names below are identity aliases.
 //
 // Header hygiene:
 //   * No Eigen include.
@@ -301,4 +296,17 @@ private:
 };
 
 }  // namespace nn
+
+using NamedParameter = nn::NamedParameter;
+using Module = nn::Module;
+using Linear = nn::Linear;
+using ReLU = nn::ReLU;
+using Sequential = nn::Sequential;
+using Conv2d = nn::Conv2d;
+using MaxPool2d = nn::MaxPool2d;
+using DepthwiseConv2d = nn::DepthwiseConv2d;
+using AvgPool2d = nn::AvgPool2d;
+using NearestUpsample2d = nn::NearestUpsample2d;
+using GroupNorm = nn::GroupNorm;
+
 }  // namespace ag

@@ -37,7 +37,7 @@ add_test(NAME autograd_add_subdir_smoke COMMAND autograd_smoke)
 
 get_target_property(_autograd_normal_definitions
     autograd::autograd INTERFACE_COMPILE_DEFINITIONS)
-if(_autograd_normal_definitions MATCHES "AUTOGRAD_USE_CUDA")
+if(_autograd_normal_definitions MATCHES "AUTOGRAD_(USE_CUDA|TEST_CUDA_ENABLED)")
     message(FATAL_ERROR
         "embedded normal autograd target leaks AUTOGRAD_USE_CUDA")
 endif()
@@ -63,6 +63,16 @@ mark_as_advanced(
 if(NOT AUTOGRAD_CONSUMER_ALLOW_TARGET_LEAK)
     set(_autograd_consumer_forbidden_targets
         test_core
+        test_shape_device
+        test_tensor
+        test_autograd_core
+        test_cpu_ops
+        test_oop_training
+        test_oop_conv
+        test_oop_norm
+        test_oop_diffusion
+        test_oop_fft
+        test_api_freeze
         test_nn
         test_conv
         test_fft

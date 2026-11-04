@@ -2,14 +2,7 @@
 // diffusion.h — diffusion-model primitives on the replacement
 // Tensor/Variable API.
 //
-// The helpers live in the transitional namespace `ag::diffusion`
-// to avoid signature collisions with the legacy `ag::diffusion.h`
-// free functions (which expose `ag::sinusoidal_time_embedding(int,
-// int)`). Until the legacy facade is retired, callers of the
-// replacement surface must write `ag::diffusion::randn(...)` etc.,
-// mirroring the `ag::nn::*` and `ag::optim::*` collision strategy.
-// The flat `ag::*` aliases will be re-introduced at the end of the
-// refactor.
+// Both ag::diffusion and flat ag names refer to these same functions.
 //
 // The helpers split into two groups:
 //
@@ -89,4 +82,10 @@ Variable q_sample(const Variable& x0,
                   uint32_t seed = 0);
 
 }  // namespace diffusion
+
+using diffusion::randn;
+using diffusion::randn_like;
+using diffusion::sinusoidal_time_embedding;
+using diffusion::q_sample;
+
 }  // namespace ag

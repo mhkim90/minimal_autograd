@@ -20,3 +20,10 @@ target_link_libraries(autograd_cuda_custom PRIVATE autograd::autograd_expert)
 
 enable_testing()
 add_test(NAME autograd_cuda_custom_smoke COMMAND autograd_cuda_custom)
+
+foreach(_target autograd::autograd autograd::autograd_expert)
+    get_target_property(_definitions ${_target} INTERFACE_COMPILE_DEFINITIONS)
+    if(_definitions MATCHES "AUTOGRAD_(USE_CUDA|TEST_CUDA_ENABLED)")
+        message(FATAL_ERROR "${_target} leaks a private backend/test macro")
+    endif()
+endforeach()
