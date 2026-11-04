@@ -175,9 +175,11 @@ future same-major binary compatibility. No release/tag is published here.
 Local qualification completed all eight default/advanced CPU/CUDA STATIC/SHARED
 configurations, installed/embedded normal consumers, explicit Eigen expert and
 actual CUDA device consumers, and versioned downstream 32/32/41. The downstream
-checks use a corrected consumer driver, still unmerged and a separate delivery.
+checks use the corrected consumer driver merged separately in
+[CppResist #174](https://github.com/mhkim90/CppResist/pull/174) at `befe0e5`;
+its merged tree matches the qualified consumer candidate.
 Final controller review and local commit/publication status are recorded in the
-root plan and controller journal; no merged/released status is claimed here.
+root plan and controller journal; no provider merge/release is claimed here.
 Actual minimum CMake 3.14 execution has not been tested on the current 3.28 host;
 the minimum is unchanged.
 Historical guarantees and explicit retirement mapping are appended to

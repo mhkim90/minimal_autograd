@@ -549,3 +549,23 @@ Controller-local commits are authorized; push, PR creation/readiness/merge,
 release/tag and upstream coordination remain separate owner boundaries.
 Consumer correction is a separate, currently unmerged delivery and must merge
 before provider publication is represented against a merged consumer contract.
+
+## Consumer prerequisite merged and provider publication approved — 2026-11-05
+
+CppResist PR174 was explicitly approved for Ready and merge, then squash-merged
+at `befe0e5f5722dd5195b72448fa702f5cf876486d` (parent merged173 `bc23730`).
+The remote merged tree `b548762a7997226c6a152cbe7899937072546a0b` is identical
+to the qualified consumer candidate `5b2476e`. Its exact two-file scope and
+merged state were verified through GitHub. The consumer prerequisite is now
+satisfied; the unmerged status above remains a dated historical record.
+
+The owner then approved factual provider status-document updates, a local
+documentation commit on the existing branch, branch push and draft PR creation.
+This update touches only this plan, README and tests/consumer/README; production
+code, headers, CMake, tests, fixtures and all qualified library bytes are unchanged
+from the reviewed local implementation commit `032aba8`. Existing native144-test
+and versioned downstream32/32/41 results remain byte-bound, not newly rerun claims.
+Original approved plan prefixes, base `c7216e4`, review records and old evidence
+remain unchanged. Ready, merge, release/tag, branch deletion and further scope
+are not authorized by this publication approval. Exact publication outcome is
+recorded in the controller journal after remote verification.

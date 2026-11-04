@@ -165,5 +165,7 @@ Local qualification completed all four CPU/CUDA STATIC/SHARED boundaries:
 installed and embedded normal consumers, explicit Eigen expert and actual CUDA
 custom-device checks, plus API-freeze/version controls. Eight default/advanced
 provider configurations and versioned downstream 32/32/41 passed locally. The
-corrected downstream driver is unmerged and belongs to a separate delivery;
-these local results do not claim merged/released status.
+corrected downstream driver merged separately in
+[CppResist #174](https://github.com/mhkim90/CppResist/pull/174) at `befe0e5`,
+with the same tree as the qualified candidate. These local results do not claim
+provider merge/release.
