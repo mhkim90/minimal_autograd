@@ -9,10 +9,10 @@ find_package(autograd CONFIG REQUIRED COMPONENTS expert)
 if(NOT TARGET autograd::autograd_expert)
     message(FATAL_ERROR "expert component did not provide autograd::autograd_expert")
 endif()
-get_target_property(_autograd_expert_definitions
-    autograd::autograd_expert INTERFACE_COMPILE_DEFINITIONS)
-if(NOT _autograd_expert_definitions MATCHES "AUTOGRAD_USE_CUDA")
-    message(FATAL_ERROR "CUDA expert target does not provide AUTOGRAD_USE_CUDA")
+get_target_property(_autograd_cuda_enabled
+    autograd::autograd AUTOGRAD_CUDA_ENABLED)
+if(NOT "${_autograd_cuda_enabled}" STREQUAL "1")
+    message(FATAL_ERROR "CUDA custom consumer requires AUTOGRAD_CUDA_ENABLED=1")
 endif()
 
 add_executable(autograd_cuda_custom main.cu)

@@ -106,6 +106,15 @@ endif()
 add_library(autograd ${_AUTOGRAD_LIBRARY_TYPE} ${_AUTOGRAD_LIB_SOURCES})
 add_library(autograd::autograd ALIAS autograd)
 
+if(AUTOGRAD_USE_CUDA)
+    set(_autograd_cuda_enabled 1)
+else()
+    set(_autograd_cuda_enabled 0)
+endif()
+set_target_properties(autograd PROPERTIES
+    AUTOGRAD_CUDA_ENABLED "${_autograd_cuda_enabled}"
+    EXPORT_PROPERTIES AUTOGRAD_CUDA_ENABLED)
+
 set_target_properties(autograd PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     CXX_STANDARD ${_AUTOGRAD_CXX_STD}

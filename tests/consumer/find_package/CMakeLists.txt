@@ -7,6 +7,17 @@ project(autograd_findpkg_consumer CXX)
 # executable target `autograd_smoke` linking to `autograd::autograd`.
 find_package(autograd CONFIG REQUIRED)
 
+get_target_property(_autograd_cuda_enabled
+    autograd::autograd AUTOGRAD_CUDA_ENABLED)
+if(NOT "${_autograd_cuda_enabled}" STREQUAL "0" AND
+   NOT "${_autograd_cuda_enabled}" STREQUAL "1")
+    message(FATAL_ERROR "autograd AUTOGRAD_CUDA_ENABLED must be 0 or 1")
+endif()
+if(DEFINED AUTOGRAD_EXPECT_CUDA_ENABLED AND
+   NOT "${_autograd_cuda_enabled}" STREQUAL "${AUTOGRAD_EXPECT_CUDA_ENABLED}")
+    message(FATAL_ERROR "autograd AUTOGRAD_CUDA_ENABLED does not match expected value")
+endif()
+
 if(TARGET autograd::autograd_expert OR TARGET autograd_expert)
     message(FATAL_ERROR
         "component-free autograd package unexpectedly exposes the expert target")

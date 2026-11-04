@@ -28,6 +28,13 @@ an Eigen matrix. Both preserve logical `(row, col)` values while reordering
 between Tensor row-major and Eigen column-major storage. They do not alias
 storage, create raw views, or perform hidden device transfers.
 
+Both normal consumers require `AUTOGRAD_CUDA_ENABLED` on the normal target to
+be exactly `0` or `1`, including when embedded. Pass the independent
+`-DAUTOGRAD_EXPECT_CUDA_ENABLED=0` or `=1` to verify provider polarity. This
+metadata describes build capability only, not runtime or GPU availability.
+The CUDA custom consumer requires `1` and still links the expert target for
+its extension. The existing expert CUDA definition remains available.
+
 ## CPU Checks
 
 Build and install the library to a local prefix:
@@ -44,7 +51,9 @@ disabled. This proves the normal package does not require or export Eigen:
 ```sh
 cmake -S tests/consumer/find_package -B .scratch/findpkg_build \
     -DCMAKE_PREFIX_PATH="$PWD/.scratch/install" \
-    -DCMAKE_DISABLE_FIND_PACKAGE_Eigen3=TRUE
+    -DCMAKE_DISABLE_FIND_PACKAGE_Eigen3=TRUE \
+    -DCMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit=TRUE \
+    -DAUTOGRAD_EXPECT_CUDA_ENABLED=0
 cmake --build .scratch/findpkg_build
 .scratch/findpkg_build/autograd_smoke
 ```
@@ -78,7 +87,7 @@ embedded `add_subdirectory` call cannot recurse into itself:
 ```sh
 cp -r tests/consumer/add_subdir .scratch/addsub_consumer
 cmake -S .scratch/addsub_consumer -B .scratch/addsub_build \
-    -DAUTOGRAD_SRC_DIR="$PWD"
+    -DAUTOGRAD_SRC_DIR="$PWD" -DAUTOGRAD_EXPECT_CUDA_ENABLED=0
 cmake --build .scratch/addsub_build
 .scratch/addsub_build/autograd_smoke
 ```
@@ -89,6 +98,12 @@ or example targets leak into the consumer.
 Hosted CI runs the CPU build, install, normal and expert installed consumers,
 and source-tree consumer. It does not claim to run CUDA without a CUDA runner
 and device.
+
+For a CUDA-built normal package, use `-DAUTOGRAD_EXPECT_CUDA_ENABLED=1`.
+Eigen discovery can still be disabled for either library type; toolkit
+package discovery can also be disabled for CUDA SHARED, but CUDA STATIC
+requires its existing link-only `CUDA::cudart` dependency. Use
+`-DBUILD_SHARED_LIBS=ON` when building the shared provider.
 
 ## Manual CUDA Check
 
