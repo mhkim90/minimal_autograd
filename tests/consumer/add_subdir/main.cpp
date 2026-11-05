@@ -1,3 +1,5 @@
+#include "autograd.h"
+#include "autograd/autograd.h"
 #include "autograd/tensor.h"
 #include "autograd/core/variable.h"
 #include "autograd/core/ops.h"
@@ -13,7 +15,7 @@
     defined(CUDA_VERSION) || defined(__CUDA_RUNTIME_H__)
 #error "OOP consumer headers must not include CUDA runtime headers"
 #endif
-#if defined(AUTOGRAD_USE_CUDA)
+#if defined(AUTOGRAD_USE_CUDA) || defined(AUTOGRAD_TEST_CUDA_ENABLED)
 #error "normal OOP consumer must not receive AUTOGRAD_USE_CUDA"
 #endif
 

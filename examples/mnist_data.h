@@ -3,8 +3,7 @@
 //
 // Reads MNIST `train-images-idx3-ubyte`, `train-labels-idx1-ubyte`,
 // `t10k-images-idx3-ubyte`, `t10k-labels-idx1-ubyte` from the directory
-// passed to `load_mnist()` and returns them as Eigen matrices in the
-// same `Mat` typedef convention used throughout the library.
+// passed to `load_mnist()` and returns owned row-major Tensors.
 //
 // IDX layout (big endian):
 //   offset 0..3   : magic   (0x00000803 for images, 0x00000801 for labels)
@@ -13,10 +12,11 @@
 //   rest          : raw ubyte pixels, or ubyte labels
 //
 // Returns:
-//   images : Mat(N, 784), pixel values in [0, 1] (uint8 / 255.f)
-//   labels : Mat(N, 10), one-hot float
+//   images : Tensor{N, 784}, pixel values in [0, 1] (uint8 / 255.f)
+//   labels : Tensor{N, 10}, one-hot float
 
-#include "autograd/extension/eigen.h"
+#include "autograd/tensor.h"
+#include <algorithm>
 
 #include <cstdint>
 #include <cstdio>
@@ -38,7 +38,7 @@ inline uint32_t read_be_u32(const std::vector<unsigned char>& buf, std::size_t o
 }
 
 inline void read_idx_images(const std::string& path,
-                            Mat& out_images, int& out_n) {
+                            Tensor& out_images, int& out_n) {
     std::ifstream f(path, std::ios::binary);
     if (!f) throw std::runtime_error("cannot open " + path);
     std::vector<unsigned char> buf((std::istreambuf_iterator<char>(f)),
@@ -57,18 +57,19 @@ inline void read_idx_images(const std::string& path,
         throw std::runtime_error("IDX image file truncated: " + path);
     }
 
-    out_images.resize(N, H * W);
+    std::vector<float> values(static_cast<std::size_t>(N) * H * W);
     for (int n = 0; n < N; ++n) {
         for (int p = 0; p < H * W; ++p) {
-            out_images(n, p) =
+            values[n * H * W + p] =
                 static_cast<float>(buf[16 + n * H * W + p]) / 255.f;
         }
     }
+    out_images = Tensor::from_host(values.data(), Shape{N, H * W});
     out_n = N;
 }
 
 inline void read_idx_labels(const std::string& path,
-                            Mat& out_labels_oh) {
+                            Tensor& out_labels_oh) {
     std::ifstream f(path, std::ios::binary);
     if (!f) throw std::runtime_error("cannot open " + path);
     std::vector<unsigned char> buf((std::istreambuf_iterator<char>(f)),
@@ -84,11 +85,12 @@ inline void read_idx_labels(const std::string& path,
         throw std::runtime_error("IDX label file truncated: " + path);
     }
 
-    out_labels_oh = Mat::Zero(N, 10);
+    std::vector<float> values(static_cast<std::size_t>(N) * 10, 0.f);
     for (int i = 0; i < N; ++i) {
         unsigned char lbl = buf[8 + i];
-        if (lbl < 10) out_labels_oh(i, static_cast<int>(lbl)) = 1.f;
+        if (lbl < 10) values[i * 10 + lbl] = 1.f;
     }
+    out_labels_oh = Tensor::from_host(values.data(), Shape{N, 10});
 }
 
 }  // namespace
@@ -97,10 +99,10 @@ inline void read_idx_labels(const std::string& path,
 // directory containing the `train-*-idx?-ubyte` files). Returns N counts
 // as a sanity check.
 struct MnistData {
-    Mat train_images;
-    Mat train_labels;
-    Mat test_images;
-    Mat test_labels;
+    Tensor train_images;
+    Tensor train_labels;
+    Tensor test_images;
+    Tensor test_labels;
 };
 
 inline MnistData load_mnist(const std::string& root) {
@@ -112,22 +114,26 @@ inline MnistData load_mnist(const std::string& root) {
     read_idx_images(root + sep + "t10k-images-idx3-ubyte",  d.test_images,  n_te_i);
     read_idx_labels(root + sep + "t10k-labels-idx1-ubyte",  d.test_labels);
 
-    if (d.train_images.rows() != d.train_labels.rows() ||
-        d.test_images.rows()  != d.test_labels.rows()) {
+    if (d.train_images.shape()[0] != d.train_labels.shape()[0] ||
+        d.test_images.shape()[0]  != d.test_labels.shape()[0]) {
         throw std::runtime_error("MNIST image/label row count mismatch");
     }
     return d;
 }
 
 // argmax accuracy: pred_cols is (N, 10) class scores, target_oh is (N, 10) one-hot.
-inline float accuracy_argmax(const Mat& pred_cols, const Mat& target_oh) {
+inline float accuracy_argmax(const Tensor& pred_cols, const Tensor& target_oh) {
     int correct = 0;
-    int N = pred_cols.rows();
-    Eigen::VectorXi predicted(N), truth(N);
+    int N = pred_cols.shape()[0];
+    std::vector<float> pred(pred_cols.elements()), target(target_oh.elements());
+    pred_cols.copy_to_host(pred.data(), pred.size());
+    target_oh.copy_to_host(target.data(), target.size());
+    const int cols = pred_cols.shape()[1];
     for (int i = 0; i < N; ++i) {
-        pred_cols.row(i).maxCoeff(&predicted(i));
-        target_oh.row(i).maxCoeff(&truth(i));
-        if (predicted(i) == truth(i)) ++correct;
+        auto p = pred.begin() + i * cols;
+        auto t = target.begin() + i * cols;
+        if (std::max_element(p, p + cols) - p ==
+            std::max_element(t, t + cols) - t) ++correct;
     }
     return static_cast<float>(correct) / static_cast<float>(N);
 }

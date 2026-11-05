@@ -2,11 +2,8 @@
 // core/complex.h — minimal complex-valued wrapper over pairs of real
 // ag::Variable components.
 //
-// The free functions real / imag / conj / complex_mul / complex_scale
-// / abs2 / make_complex / real_to_complex overload the legacy
-// ag::ComplexVar surface; this file uses ag::ComplexVariable. The
-// real and imag accessors return ag::Variable by value (a cheap
-// handle) so they are safe to bind to the result of a temporary.
+// The real and imag accessors return ag::Variable by value (a cheap
+// handle), safe to bind to the result of a temporary.
 //
 // Header hygiene:
 //   * No Eigen include.

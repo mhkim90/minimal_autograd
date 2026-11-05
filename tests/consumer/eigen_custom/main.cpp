@@ -92,3 +92,7 @@ int main() {
     std::printf("OK: Eigen custom op forward/backward with copied 2x3 layout\n");
     return 0;
 }
+
+#if defined(AUTOGRAD_USE_CUDA) || defined(AUTOGRAD_TEST_CUDA_ENABLED)
+#error "expert consumers must not receive private backend/test macros"
+#endif

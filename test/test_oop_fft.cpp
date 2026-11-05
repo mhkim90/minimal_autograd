@@ -41,6 +41,12 @@
 // CUDA device parity is exercised below when this target is built with the
 // optional CUDA backend; CPU-only builds retain the replacement CPU coverage.
 
+#ifndef AUTOGRAD_TEST_CUDA_ENABLED
+#error "AUTOGRAD_TEST_CUDA_ENABLED must be defined as 0 or 1"
+#elif AUTOGRAD_TEST_CUDA_ENABLED != 0 && AUTOGRAD_TEST_CUDA_ENABLED != 1
+#error "AUTOGRAD_TEST_CUDA_ENABLED must be 0 or 1"
+#endif
+
 #include "autograd/core/complex.h"
 #include "autograd/core/fft.h"
 #include "autograd/core/fft_norm.h"
@@ -696,7 +702,7 @@ void test_fft_invalid_arguments() {
     report("fft2 / ifft2 reject invalid arguments");
 }
 
-#ifdef AUTOGRAD_USE_CUDA
+#if AUTOGRAD_TEST_CUDA_ENABLED
 bool replacement_fft_cuda_available() {
     try {
         (void)ag::Tensor::empty(ag::Shape{0}, ag::Device::cuda(0));
@@ -787,7 +793,7 @@ int main() {
     test_fft_spectral_filter_gradient_finite_diff();
     test_fft_repeated_branch_gradient_accumulates();
     test_fft_invalid_arguments();
-#ifdef AUTOGRAD_USE_CUDA
+#if AUTOGRAD_TEST_CUDA_ENABLED
     if (replacement_fft_cuda_available()) {
         test_cuda_replacement_fft_rank4_parity();
     } else {

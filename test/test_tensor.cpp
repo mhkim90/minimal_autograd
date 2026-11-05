@@ -9,6 +9,12 @@
 // FIRST include; if it pulled in Eigen or a CUDA runtime header, the
 // preprocessor check at the top of this file would #error out.
 
+#ifndef AUTOGRAD_TEST_CUDA_ENABLED
+#error "AUTOGRAD_TEST_CUDA_ENABLED must be defined as 0 or 1"
+#elif AUTOGRAD_TEST_CUDA_ENABLED != 0 && AUTOGRAD_TEST_CUDA_ENABLED != 1
+#error "AUTOGRAD_TEST_CUDA_ENABLED must be 0 or 1"
+#endif
+
 #include "autograd/tensor.h"
 
 #if defined(EIGEN_WORLD_VERSION) || defined(EIGEN_MAJOR_VERSION) || \
@@ -30,6 +36,7 @@
 #include "autograd/device.h"
 #include "autograd/shape.h"
 #include "autograd.h"
+#include "autograd/core/ops.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -357,9 +364,9 @@ void test_device_cuda_rejected_cpu_only() {
     // device throws std::runtime_error with a clear message. On a
     // CUDA-enabled build, these calls succeed; the GPU-side behavior
     // is verified in test_cuda_tensor.cpp. We gate the assertions
-    // on the absence of AUTOGRAD_USE_CUDA so the same binary works
+    // on the private numeric test selector so the same binary works
     // for both build configurations.
-#ifndef AUTOGRAD_USE_CUDA
+#if !AUTOGRAD_TEST_CUDA_ENABLED
     CHECK_THROWS_ANY(Tensor::empty(Shape{2, 3}, Device::cuda(0)));
     CHECK_THROWS_ANY(Tensor::zeros(Shape{2, 3}, Device::cuda(1)));
     CHECK_THROWS_ANY(Tensor::ones(Shape{2, 3}, Device::cuda()));
@@ -412,19 +419,33 @@ void test_extension_cuda_header_rejected_on_cpu() {
     report("Tensor: extension/cuda.h is CUDA-header-free; view throws on CPU tensors");
 }
 
-void test_extension_eigen_legacy_aliases() {
-    // extension/eigen.h is the opt-in path for the legacy Mat / Mats /
-    // shape(Mat) / numel(Mat) aliases. It must still provide them
-    // alongside the new Tensor type.
-    ag::Mat m = ag::Mat::Constant(2, 3, 1.f);
-    ag::Mats v;
-    v.push_back(m);
-    auto sh = ag::shape(m);
-    CHECK(sh.size() == 2);
-    CHECK(sh[0] == 2 && sh[1] == 3);
-    CHECK(ag::numel(m) == 6);
-    (void)v;
-    report("Tensor: extension/eigen.h still exposes Mat/Mats/shape(Mat)/numel(Mat)");
+void test_extension_eigen_copy_helpers() {
+    Eigen::MatrixXf m(2, 3);
+    m << 1.f, 2.f, 3.f, 4.f, 5.f, 6.f;
+    Tensor t = ag::tensor_from_eigen(m);
+    CHECK((t.shape() == Shape{2, 3}));
+    m(0, 0) = 9.f;
+    Eigen::MatrixXf copied = ag::tensor_to_eigen(t);
+    CHECK(copied.rows() == 2 && copied.cols() == 3);
+    float row_major[6] = {};
+    t.copy_to_host(row_major, 6);
+    for (int r = 0; r < 2; ++r)
+        for (int c = 0; c < 3; ++c) {
+            CHECK(copied(r, c) == float(r*3+c+1));
+            CHECK(row_major[r*3+c] == copied(r, c));
+        }
+    copied(1, 2) = -7.f;
+    CHECK(ag::tensor_to_eigen(t)(1, 2) == 6.f);
+    ag::Variable x(t, true);
+    const float upstream[] = {.5f, -1.f, 2.f, -3.f, 4.f, -.25f};
+    x.backward(Tensor::from_host(upstream, Shape{2,3}));
+    Eigen::MatrixXf gradient = ag::tensor_to_eigen(x.grad());
+    CHECK(gradient.rows() == 2 && gradient.cols() == 3);
+    for (int r = 0; r < 2; ++r)
+        for (int c = 0; c < 3; ++c) CHECK(gradient(r,c) == upstream[r*3+c]);
+    gradient(0, 0) = -4.f;
+    CHECK(ag::tensor_to_eigen(x.grad())(0, 0) == .5f);
+    report("Tensor: explicit Eigen matrix helpers copy logical values and gradients");
 }
 
 void test_umbrella_exposes_tensor() {
@@ -432,7 +453,6 @@ void test_umbrella_exposes_tensor() {
     Tensor t = Tensor::zeros(Shape{2, 3});
     CHECK(!t.empty());
     CHECK(t.elements() == 6);
-    (void)ag::Mat{};
     report("Tensor: autograd.h umbrella re-exports ag::Tensor");
 }
 
@@ -442,8 +462,6 @@ void test_standalone_header_hygiene_smoke() {
     // smoke on top of it.
     static_assert(std::is_copy_constructible<Tensor>::value, "");
     static_assert(std::is_copy_assignable<Tensor>::value, "");
-    static_assert(!std::is_same<Tensor, ag::Mat>::value,
-                  "Tensor must be a distinct type from ag::Mat");
     report("Tensor: header independence is a preprocessor check; ABI smoke");
 }
 
@@ -623,7 +641,7 @@ int main() {
     test_device_cuda_descriptor_intact();
     test_device_cuda_rejected_cpu_only();
     test_extension_cuda_header_rejected_on_cpu();
-    test_extension_eigen_legacy_aliases();
+    test_extension_eigen_copy_helpers();
     test_umbrella_exposes_tensor();
     test_standalone_header_hygiene_smoke();
     test_rank2_row_major_byte_order();

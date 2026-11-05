@@ -1,6 +1,6 @@
-// test/test_conv.cpp — im2col/col2im, Conv2dFn, MaxPool2dFn, end-to-end.
+// test_conv.cpp — public NCHW packing/overlap, convolution, pooling and composition.
 
-#include "autograd.h"
+#include "autograd/core/module.h"
 #include "grad_check.h"
 
 #include <cstdio>
@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 using namespace ag;
+using namespace ag_test;
 
 static int passed = 0, failed = 0;
 
@@ -16,6 +17,24 @@ static int passed = 0, failed = 0;
     if (cond) { ++passed; std::printf("  ok   %s\n", msg); } \
     else      { ++failed; std::printf("  FAIL %s\n", msg); } \
 } while (0)
+
+void test_conv_packing_and_overlap() {
+    auto w = Variable(Tensor::ones(Shape{1,1,2,2}), true);
+    auto b = Variable(Tensor::zeros(Shape{1}), true);
+    auto nonoverlap = Variable(Tensor::ones(Shape{1,1,4,4}), true);
+    auto packed = conv2d(nonoverlap, w, b, 2, 0);
+    CHECK((packed.value().shape() == Shape{1,1,2,2}), "public conv packing shape, stride=kernel");
+    sum(packed).backward();
+    CHECK(max_diff(nonoverlap.grad(), Tensor::ones(Shape{1,1,4,4})) < 1e-5f,
+          "non-overlapping patch coverage is exactly one");
+    auto x = Variable(Tensor::ones(Shape{1,1,3,3}), true);
+    auto y = conv2d(x, w, b, 1, 0);
+    CHECK(max_diff(y.value(), filled(y.value().shape(), 4.f)) < 1e-5f,
+          "unit 2x2 filter on 3x3 ones gives four in every output");
+    sum(y).backward();
+    CHECK(max_diff(x.grad(), tensor(Shape{1,1,3,3}, {1,2,1,2,4,2,1,2,1})) < 1e-5f,
+          "overlapping patch gradients: corners1 edges2 center4");
+}
 
 int main() {
     std::printf("== test_conv ==\n");
@@ -28,92 +47,60 @@ int main() {
         const int out_ch = 1, stride = 1, pad = 0;
         const int oH = H - K + 1, oW = W - K + 1;
 
-        Mat input  = Mat::Random(N, C * H * W);
-        Mat weight = Mat::Random(out_ch, C * K * K);
-        Mat bias   = Mat::Random(1, out_ch);
+        Tensor input  = random_tensor(Shape{N, C, H, W});
+        Tensor weight = random_tensor(Shape{out_ch, C, K, K});
+        Tensor bias   = random_tensor(Shape{out_ch});
 
         // Our op
-        auto y = conv2d_op(Var::make(input), Var::make(weight), Var::make(bias),
-                           N, C, H, W, K, K, stride, pad);
+        auto y = conv2d(Variable(input, true), Variable(weight, true), Variable(bias, true), stride, pad);
 
         // Naive reference
-        Mat ref = Mat::Zero(N, out_ch * oH * oW);
+        std::vector<float> ref(N*out_ch*oH*oW, 0.f);
         for (int n = 0; n < N; ++n) {
             for (int oc = 0; oc < out_ch; ++oc) {
                 for (int oh = 0; oh < oH; ++oh) {
                     for (int ow = 0; ow < oW; ++ow) {
-                        float s = bias(0, oc);
+                        float s = at(bias, oc);
                         for (int c = 0; c < C; ++c) {
                             for (int kh = 0; kh < K; ++kh) {
                                 for (int kw = 0; kw < K; ++kw) {
                                     int ih = oh + kh;
                                     int iw = ow + kw;
-                                    s += weight(oc, c * K * K + kh * K + kw)
-                                       * input(n, c * H * W + ih * W + iw);
+                                    s += at(weight, oc, c * K * K + kh * K + kw)
+                                       * at(input, n, c * H * W + ih * W + iw);
                                 }
                             }
                         }
-                        ref(n, oc * oH * oW + oh * oW + ow) = s;
+                        ref[((n*out_ch+oc)*oH+oh)*oW+ow] = s;
                     }
                 }
             }
         }
-        float diff = (y->data - ref).cwiseAbs().maxCoeff();
-        CHECK(diff < 1e-4f, "Conv2d forward matches naive reference");
+        float diff = max_diff(y.value(), tensor(y.value().shape(), ref));
+        CHECK(diff < 1e-4f, "nn::Conv2d forward matches naive reference");
     }
 
-    // -----------------------------------------------------------------
-    // im2col/col2im round-trip (non-overlapping patches)
-    // -----------------------------------------------------------------
-    {
-        Mat input(1, 16);
-        for (int i = 0; i < 16; ++i) input(0, i) = static_cast<float>(i);
-        Mat col = im2col(input, 1, 1, 4, 4, 2, 2, 2, 0);
-        CHECK(col.rows() == 4 && col.cols() == 4, "im2col shape: stride=kH");
-
-        Mat recovered = col2im(col, 1, 1, 4, 4, 2, 2, 2, 0);
-        float diff = (recovered - input).cwiseAbs().maxCoeff();
-        CHECK(diff < 1e-5f, "im2col/col2im round-trip (non-overlapping)");
-    }
-
-    // -----------------------------------------------------------------
-    // col2im accumulates overlapping patches
-    // -----------------------------------------------------------------
-    {
-        // 1 image, 1 channel, 3x3 input, 2x2 kernel, stride 1.
-        // Each input pixel is hit by multiple patches; col2im must use +=.
-        Mat col = Mat::Ones(4, 4);  // 4 patches x 4 output positions... wait,
-                                    // C*kH*kW=4, N*oH*oW=4 for N=1, oH=oW=2.
-        Mat out = col2im(col, 1, 1, 3, 3, 2, 2, 1, 0);
-
-        // Hits: corners=1, edges=2, center=4.
-        Mat expected = (Mat(1, 9) <<
-            1, 2, 1,
-            2, 4, 2,
-            1, 2, 1).finished();
-        float diff = (out - expected).cwiseAbs().maxCoeff();
-        CHECK(diff < 1e-5f, "col2im accumulates overlapping patches");
-    }
+    test_conv_packing_and_overlap();
 
     // -----------------------------------------------------------------
     // grad_check on Conv2dFn
     // -----------------------------------------------------------------
     {
         const int N = 1, C = 1, H = 4, W = 4, K = 2;
-        auto x = Var::make(Mat::Random(N, C * H * W));
-        auto w = Var::make(Mat::Random(2, C * K * K));
-        auto b = Var::make(Mat::Random(1, 2));
+        auto x = Variable(random_tensor(Shape{N, C, H, W}), true);
+        auto w = Variable(random_tensor(Shape{2, C, K, K}), true);
+        auto b = Variable(random_tensor(Shape{2}), true);
 
-        CHECK(grad_check([&](VarPtr v) {
-                  return sum(conv2d_op(v, w, b, N, C, H, W, K, K, 1, 0));
+        CHECK(grad_check([&](Variable v) {
+                  return sum(conv2d(v, w, b, 1, 0));
               }, x, 1e-3f, 5e-2f),
               "grad_check: Conv2dFn dInput");
-        CHECK(grad_check([&](VarPtr v) {
-                  return sum(conv2d_op(x, v, b, N, C, H, W, K, K, 1, 0));
+        CHECK(grad_check([&](Variable v) {
+                  return sum(conv2d(x, v, b, 1, 0));
               }, w, 1e-3f, 5e-2f),
               "grad_check: Conv2dFn dWeight");
-        CHECK(grad_check([&](VarPtr v) {
-                  return sum(conv2d_op(x, w, v, N, C, H, W, K, K, 1, 0));
+        CHECK(grad_check([&](Variable v) {
+                  return sum(conv2d(x, w, v, 1, 0));
               }, b, 1e-3f, 5e-2f),
               "grad_check: Conv2dFn dBias");
     }
@@ -123,41 +110,43 @@ int main() {
     // -----------------------------------------------------------------
     {
         const int N = 1, C = 2, H = 4, W = 4, K = 2;
-        auto x = Var::make(Mat::Random(N, C * H * W));
-        CHECK(grad_check([&](VarPtr v) {
-                  return sum(maxpool2d_op(v, N, C, H, W, K, K, 2));
+        auto x = Variable(random_tensor(Shape{N, C, H, W}), true);
+        CHECK(grad_check([&](Variable v) {
+                  return sum(max_pool2d(v, K, K, 2));
               }, x, 1e-3f, 5e-2f),
               "grad_check: MaxPool2dFn");
     }
 
     // -----------------------------------------------------------------
-    // End-to-end: Conv -> MaxPool -> Reshape -> Linear forward + backward
+    // End-to-end: Conv -> MaxPool -> Reshape -> nn::Linear forward + backward
     // -----------------------------------------------------------------
     {
         const int N = 2, C = 1, H = 8, W = 8;
-        Conv2d conv(C, 4, 3, 3, 1, 0);   // -> 4 x 6 x 6
-        MaxPool2d pool(2, 2, 2);          // -> 4 x 3 x 3
-        Linear lin(4 * 3 * 3, 2);
+        nn::Conv2d conv(C, 4, 3, 3, 1, 0);   // -> 4 x 6 x 6
+        nn::MaxPool2d pool(2, 2, 2);          // -> 4 x 3 x 3
+        nn::Linear lin(4 * 3 * 3, 2);
 
-        Mat x = Mat::Random(N, C * H * W);
-        auto xv = Var::make(x);
-        auto h1 = conv.forward(xv, H, W);
-        auto h2 = pool.forward(h1, 6, 6);
-        // h2 is already (N, 4*3*3); reshape confirms the API.
+        CHECK(max_abs(conv.weight().value()) <= std::sqrt(1.f/(C*3*3)), "Conv initializer Kaiming bound");
+        CHECK(max_abs(conv.bias().value()) == 0.f, "Conv initializer zero bias");
+        Tensor x = random_tensor(Shape{N, C, H, W});
+        auto xv = Variable(x, true);
+        auto h1 = conv.forward(xv);
+        auto h2 = pool.forward(h1);
+        // Explicitly flatten NCHW before the Linear boundary.
         auto flat = reshape(h2, N, 4 * 3 * 3);
         auto out = lin.forward(flat);
 
         auto loss = sum(out);
-        for (auto& p : conv.parameters()) p->grad.setZero();
-        for (auto& p : lin.parameters())  p->grad.setZero();
-        loss->backward();
+        for (auto& p : conv.parameters()) p.zero_grad();
+        for (auto& p : lin.parameters())  p.zero_grad();
+        loss.backward();
 
         bool all_ok =
-            conv.W->grad.cwiseAbs().maxCoeff() > 0.f &&
-            conv.b->grad.cwiseAbs().maxCoeff() > 0.f &&
-            lin.W->grad.cwiseAbs().maxCoeff()  > 0.f &&
-            lin.b->grad.cwiseAbs().maxCoeff()  > 0.f;
-        CHECK(all_ok, "Conv+Pool+Linear: every parameter got a non-zero gradient");
+            max_abs(conv.weight().grad()) > 0.f &&
+            max_abs(conv.bias().grad()) > 0.f &&
+            max_abs(lin.weight().grad())  > 0.f &&
+            max_abs(lin.bias().grad())  > 0.f;
+        CHECK(all_ok, "Conv+Pool+nn::Linear: every parameter got a non-zero gradient");
     }
 
     // -----------------------------------------------------------------
@@ -165,19 +154,19 @@ int main() {
     // -----------------------------------------------------------------
     {
         const int N = 2, C = 1, H = 8, W = 8;
-        Conv2d conv(C, 4, 3, 3, 1, 0);   // -> 4 x 6 x 6
-        MaxPool2d pool(2, 2, 2);          // -> 4 x 3 x 3
+        nn::Conv2d conv(C, 4, 3, 3, 1, 0);   // -> 4 x 6 x 6
+        nn::MaxPool2d pool(2, 2, 2);          // -> 4 x 3 x 3
 
-        auto x = Var::make4d(Mat::Random(N, C * H * W), N, C, H, W);
+        auto x = Variable(random_tensor(Shape{N, C, H, W}), true);
         auto y = conv.forward(x);
-        CHECK(y->is4d(), "Conv2d inferred 4D input and returned 4D metadata");
-        CHECK(y->dim(0) == N && y->dim(1) == 4 && y->dim(2) == 6 && y->dim(3) == 6,
-              "Conv2d output shape metadata is N,OC,oH,oW");
+        CHECK(y.value().shape().rank() == 4, "nn::Conv2d inferred 4D input and returned 4D metadata");
+        CHECK(y.value().shape()[0] == N && y.value().shape()[1] == 4 && y.value().shape()[2] == 6 && y.value().shape()[3] == 6,
+              "nn::Conv2d output shape metadata is N,OC,oH,oW");
 
         auto z = pool.forward(y);
-        CHECK(z->is4d(), "MaxPool2d inferred 4D input and returned 4D metadata");
-        CHECK(z->dim(0) == N && z->dim(1) == 4 && z->dim(2) == 3 && z->dim(3) == 3,
-              "MaxPool2d output shape metadata is N,C,oH,oW");
+        CHECK(z.value().shape().rank() == 4, "nn::MaxPool2d inferred 4D input and returned 4D metadata");
+        CHECK(z.value().shape()[0] == N && z.value().shape()[1] == 4 && z.value().shape()[2] == 3 && z.value().shape()[3] == 3,
+              "nn::MaxPool2d output shape metadata is N,C,oH,oW");
     }
 
     // -----------------------------------------------------------------
@@ -186,78 +175,78 @@ int main() {
     {
         bool conv_threw = false;
         try {
-            Conv2d conv(2, 4, 3, 3, 1, 0);
-            (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5));
-        } catch (const std::runtime_error&) {
+            nn::Conv2d conv(2, 4, 3, 3, 1, 0);
+            (void)conv.forward(Variable(random_tensor(Shape{1,1,5,5}), true));
+        } catch (const std::invalid_argument&) {
             conv_threw = true;
         }
-        CHECK(conv_threw, "Conv2d rejects 4D input channel mismatch without assert");
+        CHECK(conv_threw, "nn::Conv2d rejects 4D input channel mismatch without assert");
 
         bool depthwise_threw = false;
         try {
-            DepthwiseConv2d conv(2, 3, 3, 1, 0);
-            (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5));
-        } catch (const std::runtime_error&) {
+            nn::DepthwiseConv2d conv(2, 3, 3, 1, 0);
+            (void)conv.forward(Variable(random_tensor(Shape{1,1,5,5}), true));
+        } catch (const std::invalid_argument&) {
             depthwise_threw = true;
         }
         CHECK(depthwise_threw,
-              "DepthwiseConv2d rejects 4D input channel mismatch without assert");
+              "nn::DepthwiseConv2d rejects 4D input channel mismatch without assert");
 
         bool explicit_threw = false;
         try {
-            Conv2d conv(2, 4, 3, 3, 1, 0);
-            (void)conv.forward(Var::make(Mat::Random(1, 25)), 5, 5);
-        } catch (const std::runtime_error&) {
+            nn::Conv2d conv(2, 4, 3, 3, 1, 0);
+            (void)conv.forward(Variable(random_tensor(Shape{1, 25}), true));
+        } catch (const std::invalid_argument&) {
             explicit_threw = true;
         }
-        CHECK(explicit_threw, "Conv2d explicit H,W rejects flat shape mismatch");
+        CHECK(explicit_threw, "nn::Conv2d rejects non-NCHW input");
 
         bool depthwise_explicit_threw = false;
         try {
-            DepthwiseConv2d conv(2, 3, 3, 1, 0);
-            (void)conv.forward(Var::make(Mat::Random(1, 25)), 5, 5);
-        } catch (const std::runtime_error&) {
+            nn::DepthwiseConv2d conv(2, 3, 3, 1, 0);
+            (void)conv.forward(Variable(random_tensor(Shape{1, 25}), true));
+        } catch (const std::invalid_argument&) {
             depthwise_explicit_threw = true;
         }
         CHECK(depthwise_explicit_threw,
-              "DepthwiseConv2d explicit H,W rejects flat shape mismatch");
+              "nn::DepthwiseConv2d rejects non-NCHW input");
 
         bool maxpool_shape_threw = false;
         try {
-            MaxPool2d pool(2, 2, 2);
-            (void)pool.forward(Var::make(Mat::Random(1, 25)), 4, 4);
-        } catch (const std::runtime_error&) {
+            nn::MaxPool2d pool(2, 2, 2);
+            (void)pool.forward(Variable(random_tensor(Shape{1, 25}), true));
+        } catch (const std::invalid_argument&) {
             maxpool_shape_threw = true;
         }
-        CHECK(maxpool_shape_threw, "MaxPool2d explicit H,W rejects flat shape mismatch");
+        CHECK(maxpool_shape_threw, "nn::MaxPool2d rejects non-NCHW input");
 
         bool avgpool_shape_threw = false;
         try {
-            AvgPool2d pool(2, 2, 2);
-            (void)pool.forward(Var::make(Mat::Random(1, 25)), 4, 4);
-        } catch (const std::runtime_error&) {
+            nn::AvgPool2d pool(2, 2, 2);
+            (void)pool.forward(Variable(random_tensor(Shape{1, 25}), true));
+        } catch (const std::invalid_argument&) {
             avgpool_shape_threw = true;
         }
-        CHECK(avgpool_shape_threw, "AvgPool2d explicit H,W rejects flat shape mismatch");
+        CHECK(avgpool_shape_threw, "nn::AvgPool2d rejects non-NCHW input");
 
         bool upsample_shape_threw = false;
         try {
-            NearestUpsample2d upsample(2);
-            (void)upsample.forward(Var::make(Mat::Random(1, 25)), 4, 4);
-        } catch (const std::runtime_error&) {
+            nn::NearestUpsample2d upsample(2);
+            (void)upsample.forward(Variable(random_tensor(Shape{1, 25}), true));
+        } catch (const std::invalid_argument&) {
             upsample_shape_threw = true;
         }
         CHECK(upsample_shape_threw,
-              "NearestUpsample2d explicit H,W rejects flat shape mismatch");
+              "nn::NearestUpsample2d rejects non-NCHW input");
 
         bool conv_geometry_threw = false;
         try {
-            Conv2d conv(1, 1, 2, 2, 2, 0);
-            (void)conv.forward(Var::make4d(Mat::Random(1, 25), 1, 1, 5, 5));
-        } catch (const std::runtime_error&) {
+            nn::Conv2d conv(1, 1, 2, 2, 2, 0);
+            (void)conv.forward(Variable(random_tensor(Shape{1,1,5,5}), true));
+        } catch (const std::invalid_argument&) {
             conv_geometry_threw = true;
         }
-        CHECK(conv_geometry_threw, "Conv2d rejects invalid kernel/stride geometry");
+        CHECK(conv_geometry_threw, "nn::Conv2d rejects invalid kernel/stride geometry");
     }
 
     std::printf("--\n%d passed, %d failed\n", passed, failed);

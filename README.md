@@ -1,522 +1,197 @@
 # autograd
 
-A small reverse-mode automatic differentiation library in C++17, built on top
-of [Eigen3](https://eigen.tuxfamily.org/). The library implements a tape-based
-autograd engine, a small module system (`Linear`, `Sequential`, `Conv2d`,
-`MaxPool2d`, `AvgPool2d`, `DepthwiseConv2d`, `NearestUpsample2d`, `GroupNorm`),
-a few losses (`mse_loss`, `cross_entropy`), and two optimizers (`SGD`, `Adam`).
-It is intended for teaching and small experiments — not production. The default
-build focuses on the beginner CPU core; advanced experimental helpers and the
-minimal CUDA core are opt-in.
+Small C++17 reverse-mode automatic differentiation library for teaching and
+experiments. Owned `Tensor` values use dense row-major storage; `Variable`
+handles share a private graph. CPU is the default; CUDA is optional.
 
-## Features
+## Build and dependencies
 
-- Reverse-mode autograd via a shared-`Var` graph with a topological-sort
-  backward pass (no double-counting of shared nodes).
-- Lightweight logical shape metadata, including 4D `(N, C, H, W)` views over
-  the existing flat Eigen matrix layout.
-- Element-wise ops (`add`, `mul`, `scale`, `sub`, `div_op`), matmul, ReLU,
-  broadcast bias-add with correct bias gradient, `sum`, `mean`, softmax,
-  log-softmax, transpose, reshape, concat, `hcat` (column-wise /
-  channel-dim cat).
-- Activation ops: `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`,
-  `silu`, `softplus` — all gradient-checked.
-- Sequence ops: `cumsum` (axis 0 or 1) and `flip` (axis 0 or 1) with
-  correct suffix-sum / reverse backward passes.
-- Trig / clamp ops: `sin_op`, `cos_op`, `clamp`
-  (element-wise with zero gradient at the boundary).
-- Slice ops: `col_slice(x, start, len)`, `row_slice(x, start, len)`, and
-  `split(x)` (even column split returning `std::pair<VarPtr, VarPtr>`).
-- Complex / FFT helpers: `ComplexVar` as paired real/imag `Var` nodes,
-  `make_complex`, `real_to_complex`, `real`, `imag`, `conj`, `complex_mul`,
-  `complex_scale`, `abs2`, and differentiable `fft2` / `ifft2`.
-- Module system with `Linear` (Xavier init), `ReLUModule`, `SiLUModule`,
-  `SigmoidModule`, `Sequential`.
-- Losses: `mse_loss`, `cross_entropy`.
-- Optimizers: `SGD`, `Adam` (with bias correction).
-- 2D conv stack: `im2col` / `col2im` (with correct overlap accumulation),
-  `Conv2d` (Kaiming uniform init), `MaxPool2d`, `AvgPool2d`,
-  `DepthwiseConv2d` (groups = channels), `NearestUpsample2d` — all
-  gradient-checked.
-- Normalisation: `GroupNorm` (inference-only; normalises over C/G × HW groups).
-- Numerical `grad_check` helper (central finite differences).
-- Single static library, no required runtime dependencies beyond Eigen for the
-  default CPU build.
-
-## Dependencies
-
-- **Eigen3** (header-only)
-- **CMake 3.14+**
-- **C++17** compiler (GCC 9+, Clang 10+ tested)
-- Optional: **OpenMP** (Eigen uses it for parallelism when enabled)
-- Optional: **CUDA Toolkit** and CMake 3.18+ for `AUTOGRAD_USE_CUDA=ON`
-
-## Build
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
-```
-
-The default artifact is static. Use CMake's standard
-`-DBUILD_SHARED_LIBS=ON` to build a shared library instead.
-
-This produces the static library `libautograd.a` and the core test binaries:
-
-```bash
-./build/test_core        # core op correctness + grad_check
-./build/test_nn          # end-to-end net training (XOR with Adam)
-./build/test_conv        # im2col / col2im / Conv2d / MaxPool2d + grad_check
-./build/test_fft         # complex ops + differentiable CPU FFT checks
-```
-
-Advanced experimental tests are opt-in:
-
-```bash
-cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
-cmake --build build-advanced --parallel
-./build-advanced/test_extensions  # 37 checks for the extension ops
-./build-advanced/test_smoke       # 35 end-to-end smoke checks
-```
-
-The optional CUDA backend has its own build flags, supported-op surface, and
-host/device sync rules; see *CUDA backend (optional)* below.
-
-`test_core`, `test_nn`, `test_fft`, `test_cuda_core`, and `test_cuda_fft`
-print `ALL ... TESTS PASSED`. `test_conv` prints `21 passed, 0 failed`.
-`test_extensions` prints `37/37 passed`, and `test_smoke` prints
-`35/35 passed`.
-
-### Smoke test (`test_smoke`)
-
-`test/test_smoke.cpp` is a single-file end-to-end smoke test that exercises the
-advanced op set through both real **training loops** (forward → loss → backward
-→ Adam step, repeated until convergence) and a **forward-only inference loop**.
-It is the fastest sanity check that the advanced operators can still be wired
-into a working model.
-
-| # | Group                       | Mode                              | Ops exercised                                                                 |
-|---|-----------------------------|-----------------------------------|--------------------------------------------------------------------------------|
-| 1 | sigma schedule convergence  | **training loop** (200 steps)     | `softmax`, `cumsum`, `scale`, `sub`, `mul`, `sum`, `Adam`                     |
-| 2 | beta schedule convergence   | **training loop** (200 steps)     | `tanh_op`, `scale`, `sub`, `mul`, `sum`, `Adam`                               |
-| 3 | spatial forward             | forward-only                      | `Conv2d`, `AvgPool2d`, `NearestUpsample2d`, `hcat`                            |
-| 4 | GroupNorm + SiLU            | forward-only                      | `GroupNorm` (mean≈0, var≈1 per group), `silu`                                 |
-| 5 | split consistency           | forward-only                      | `sin_op`, `cos_op`, `hcat`, `split` round-trip                                |
-| 6 | mini inference loop         | **inference loop** (10 steps)     | `Linear`, `hcat`, `clamp`, `scale`, `add`                                     |
-
-The training-loop tests deliberately avoid `GroupNorm` in the backward path
-since its backward is inference-only. The mini inference loop uses a small
-`Linear` model and verifies that all outputs stay finite and properly clamped
-to `[0, 1]`.
-
-Build and run:
-
-```bash
-cmake -S . -B build-advanced -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
-cmake --build build-advanced --parallel
-./build-advanced/test_smoke
-```
-
-## CUDA backend (optional)
-
-CUDA is opt-in via `AUTOGRAD_USE_CUDA=ON`. The default build is CPU-only and
-unchanged; users without a CUDA Toolkit or GPU see no CUDA requirement.
-
-### Building with CUDA
-
-```bash
-cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_USE_CUDA=ON
-cmake --build build-cuda --parallel
-./build-cuda/test_cuda_core
-./build-cuda/test_cuda_fft
-```
-
-If `nvcc` is not on `PATH`, point CMake at the toolkit explicitly, for example:
-
-```bash
-cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release \
-  -DAUTOGRAD_USE_CUDA=ON \
-  -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
-```
-
-CUDA builds require CMake 3.18+ and default to `AUTOGRAD_CUDA_ARCHITECTURES=75`
-unless `CMAKE_CUDA_ARCHITECTURES` or `AUTOGRAD_CUDA_ARCHITECTURES` is set by the
-caller. Override it for a specific deployment target, for example
-`-DAUTOGRAD_CUDA_ARCHITECTURES=86`.
-
-### No-device behavior
-
-At startup `test_cuda_core` prints the CUDA driver/runtime versions and the
-selected device. If the CUDA backend is compiled but no CUDA device is visible,
-the test prints `SKIP CUDA CORE TESTS` and exits successfully. Runtime errors
-after a device is selected still fail the test.
-
-### Supported CUDA surface
-
-`Var::cuda()` / `Var::cpu()` plus on-device forward and gradient accumulation
-for:
-
-- Arithmetic: `add`, `sub`, `mul`, `div_op`, `matmul`, `broadcast_add`,
-  `scale`.
-- Activations: `relu`, `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`,
-  `silu`, `softplus`.
-- Probabilities / loss: `softmax`, `log_softmax`, `cross_entropy`.
-- Slices/reductions: `sum`, `mean`, `col_slice`, `row_slice`.
-- Conv stack: `Conv2d`, `MaxPool2d`.
-- Complex / FFT: paired-real `ComplexVar` helpers plus `fft2` / `ifft2`.
-- Optimizers: `SGD`, `Adam` (device-resident moment buffers; CPU/CUDA mixed
-  parameter lists supported).
-
-CUDA `fft2` / `ifft2` currently use the pure-CUDA v1 backend. It supports
-power-of-two row and column counts up to 256 and throws for unsupported shapes.
-cuFFT is intentionally not a dependency; it can be added later behind an option
-if broader shape support or performance becomes necessary.
-
-`AvgPool2d`, `DepthwiseConv2d`, `NearestUpsample2d`, and sequence/trig/clamp
-helpers such as `cumsum`, `flip`, `sin_op`, `cos_op`, and `clamp` remain
-CPU-only in this hardening pass and throw on CUDA input. Unsupported CUDA ops
-throw instead of silently falling back to stale host data.
-
-### Host/device sync
-
-CUDA `Var` objects keep host `data`/`grad` matrices and device buffers as
-separate mirrors. After CUDA ops, `backward()`, `SGD::step()`, or
-`Adam::step()`, the device buffers are authoritative and the host matrices may
-be stale. Use `x->cpu()` to create a synchronized host copy, or call
-`sync_data_from_cuda()` / `sync_grad_from_cuda()` before reading host
-`data` / `grad` directly. If you intentionally edit host `data` or `grad` on a
-CUDA `Var`, call `sync_data_to_cuda()` or `sync_grad_to_cuda()` before running
-more CUDA work. `clear_grad()` and optimizer `zero_grad()` clear both host and
-device gradients.
-
-### Downstream consumers
-
-Downstream projects can consume `minimal_autograd` either by embedding the
-source tree via `add_subdirectory(...)` or by installing once and using
-`find_package(autograd CONFIG)`. Both modes expose the library through the
-namespaced target `autograd::autograd`. The plain `autograd` target is an
-in-tree compatibility alias created via `add_library(... ALIAS ...)`, so it
-is available to consumers via `add_subdirectory(...)` and inside the
-repository's own builds, but it is **not** exposed by an installed
-package — installed consumers must use `autograd::autograd`.
-
-#### `add_subdirectory(...)`
-
-```cmake
-add_subdirectory(minimal_autograd EXCLUDE_FROM_ALL)
-target_link_libraries(my_app PRIVATE autograd::autograd)
-```
-
-Embedded consumers default to **no inherited tests or examples** from
-`minimal_autograd`. The library is built with
-`POSITION_INDEPENDENT_CODE ON` so it can be linked into shared objects,
-and the C++17 requirement is propagated to consumers via
-`target_compile_features(... cxx_std_17)`. Because the C++17 standard is
-applied per-target, embedded consumers **do not have the parent's
-`CMAKE_CXX_STANDARD` or unrelated global build defaults overwritten**.
-
-Note: CMake `option()` cache entries necessarily live in the build cache
-the parent passes through, so the namespaced `AUTOGRAD_BUILD_TESTS`,
-`AUTOGRAD_BUILD_ADVANCED_OPS`, `AUTOGRAD_BUILD_EXAMPLES`, and
-`AUTOGRAD_USE_CUDA` options are visible in `cmake-gui` / `ccmake` and may
-be set by the parent before forwarding to the embedded `add_subdirectory`
-call. Their default values do not fire from this library.
-
-#### `find_package(autograd CONFIG)`
+Building the provider requires Eigen3, CMake 3.14+, and a C++17 compiler.
+OpenMP is used when found. CUDA builds additionally require a CUDA toolkit and
+CMake 3.18+. Installed normal consumers do not need Eigen headers or discovery.
 
 ```sh
-cmake -S minimal_autograd -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
-cmake --install build --prefix /opt/autograd
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 4
+ctest --test-dir build --output-on-failure
+cmake --install build --prefix "$PWD/install"
 ```
 
-```cmake
-# In the consumer project.
-find_package(autograd CONFIG REQUIRED)
-target_link_libraries(my_app PRIVATE autograd::autograd)
+Default builds are STATIC with 15 registered tests. Use
+`-DBUILD_SHARED_LIBS=ON` for SHARED, `-DAUTOGRAD_BUILD_ADVANCED_OPS=ON` for
+18 CPU tests (diffusion/extensions/composed training), and
+`-DAUTOGRAD_BUILD_EXAMPLES=ON` for examples. Embedded `add_subdirectory`
+builds default to no inherited tests/examples and preserve parent C++ defaults.
+
+```sh
+PATH=/usr/local/cuda/bin:$PATH CUDACXX=/usr/local/cuda/bin/nvcc \
+cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release \
+  -DAUTOGRAD_USE_CUDA=ON -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+  -DAUTOGRAD_BUILD_ADVANCED_OPS=ON
+PATH=/usr/local/cuda/bin:$PATH cmake --build build-cuda --parallel 4
+ctest --test-dir build-cuda --output-on-failure
 ```
 
-The installed normal target intentionally does not propagate Eigen,
-`AUTOGRAD_USE_CUDA`, CUDA headers, or raw CUDA types. Its CPU configuration can
-therefore be used with `CMAKE_DISABLE_FIND_PACKAGE_Eigen3=TRUE`. OpenMP remains
-a recorded optional dependency when it was enabled at library build time. A
-CUDA-built static normal target records only the link-time `CUDA::cudart`
-requirement; a shared CUDA library resolves that runtime itself.
+CUDA advanced builds register 21 tests. Architecture defaults to 75 unless
+`CMAKE_CUDA_ARCHITECTURES` or `AUTOGRAD_CUDA_ARCHITECTURES` is supplied. Device
+qualification requires actual execution on a visible GPU, not a capability
+probe or a no-device skip.
 
-The normal target also exposes build-capability metadata in both installed and
-embedded builds, for static and shared libraries:
+## Public API
 
-```cmake
-get_target_property(cuda_enabled autograd::autograd AUTOGRAD_CUDA_ENABLED)
-# Exactly "0" for a CPU build, or "1" for a CUDA build.
-```
+Include `autograd/autograd.h` (canonical) or `autograd.h` (forwarder).
+Both include the normal API, custom-op construction, and complex/FFT, without
+Eigen or CUDA headers. Existing `autograd/core/*.h`, `tensor.h`, `shape.h`, and
+`device.h` include paths remain supported.
 
-This describes what was compiled, not device visibility, runtime availability,
-architecture support, or CPU exclusivity. Missing or other values are not a
-valid capability result. The legacy expert definition remains supported for
-compatibility; its retirement is not part of this change.
+- `Tensor`: owned storage, explicit `from_host`/`copy_to_host`/
+  `copy_from_host`, shape/device, clone and transfer. No writable raw normal
+  view or Eigen alias. Tensor copies share storage; use `clone` for isolation.
+- `Variable`: `value()`, `grad()`, `has_grad()`, `requires_grad()`, `backward`,
+  `zero_grad`, `detach`, `to`. Graph fields are private. `zero_grad` clears
+  only its receiver; module/optimizer clearing visits registered parameters.
+  Backward uses a fresh propagation seed, accumulates committed gradients,
+  and restores gradients if propagation fails.
+- Arithmetic, activations, reductions, N-D shape/slice/broadcast ops, matrix
+  multiplication, losses, NCHW spatial operations and differentiable GroupNorm
+  are declared in `core/ops.h` and `core/loss.h`.
+- `ag::nn`: `NamedParameter`, `Module`, `Linear`, `ReLU`, `Sequential`,
+  `Conv2d`, `MaxPool2d`, `DepthwiseConv2d`, `AvgPool2d`,
+  `NearestUpsample2d`, `GroupNorm`.
+- `ag::optim`: `SGD`, `Adam`, `AdamState`; one portable optimizer state with
+  deep-copied snapshot/load semantics, not host/device mirror states.
+- `ag::diffusion`: seeded `randn`, `randn_like`, rank-1 odd-safe
+  `sinusoidal_time_embedding`, and differentiable `q_sample`.
+- Every listed nn/optim type also has a flat `ag` **identity alias**; the four
+  diffusion functions have flat using-declarations, retaining default args.
+  Declarations and symbols still belong to their existing namespaces.
+- `ComplexVariable` pairs real/imaginary Variables. `fft2`/`ifft2` apply to the
+  final two axes, with arbitrary positive extents, CPU/CUDA support and
+  `FftNorm::Backward` normalization. No cuFFT dependency.
 
-Legacy or custom Eigen/CUDA consumers must opt in explicitly:
-
-```cmake
-find_package(autograd CONFIG REQUIRED COMPONENTS expert)
-target_link_libraries(my_app PRIVATE autograd::autograd_expert)
-```
-
-The `expert` component loads a separate `autograd::autograd_expert` export,
-provides Eigen, and on CUDA builds provides the legacy `AUTOGRAD_USE_CUDA`
-definition and CUDA runtime dependency needed by that consumer. A component-free
-package does not create the expert target; unknown required components fail.
-
-The package records `cxx_std_17` via `INTERFACE_COMPILE_FEATURES`; PIC
-is applied to the installed library artifact at build time and does not
-need to be propagated through `INTERFACE_*` properties (consumer
-targets do not need to compile with `-fPIC` to link a static library
-that was already built with `-fPIC`). There is currently no semantic
-project version (the architecture refactor reserves that for
-Phase 11); consumers use `find_package(autograd)` unversioned.
-
-Whether CUDA is present in the installed package is decided at install
-time on the autograd side. To consume CUDA-enabled autograd via
-`find_package`, build a CUDA-enabled autograd with
-`-DAUTOGRAD_USE_CUDA=ON` on the autograd side and install it to a
-separate prefix (or any prefix the consumer passes via
-`-DCMAKE_PREFIX_PATH=...`). The normal shared package does not discover
-`CUDAToolkit`; the static package and explicit CUDA expert consumers do when
-needed. The consumer cannot enable CUDA by passing
-`-DAUTOGRAD_USE_CUDA=ON` to its own configure step under `find_package` — that
-flag belongs only to the autograd build itself. The `add_subdirectory(...)` mode is different:
-because the consumer's configure step builds autograd itself, passing
-`-DAUTOGRAD_USE_CUDA=ON` to the parent project does enable CUDA on the
-embedded autograd build.
-
-Minimal replacement-API consumer smoke projects live in
-`tests/consumer/find_package/` and `tests/consumer/add_subdir/`. They include
-the canonical Tensor/Variable, module, optimizer, and free-function headers
-directly rather than the legacy umbrella surface. The two programs are
-identical deterministic compile/link/run checks covering forward/backward,
-registered parameter traversal, Adam, and AdamState snapshot/load_state. The
-`add_subdirectory` smoke project's own `CMakeLists.txt` enforces the
-no-inheritance contract at configure time by failing if any known autograd
-test/example target is visible to the consumer.
-
-The installed `tests/consumer/eigen_custom/`, `cuda_custom/`, and
-`legacy_expert/` fixtures request `COMPONENTS expert` and link only
-`autograd::autograd_expert`. The latter deliberately retains the legacy
-`autograd.h`/`Mat`/`VarPtr` source shape for the separate migration spike.
-
-For CPU interoperation, include the opt-in `autograd/extension/eigen.h` header.
-Its `tensor_from_eigen` and `tensor_to_eigen` helpers copy values between
-Eigen's column-major matrices and the Tensor row-major layout while preserving
-logical `(row, col)` values. The helpers are non-aliasing, rank-2/CPU checked
-on the Tensor-to-Eigen path, and never perform a hidden device transfer. The
-standalone `tests/consumer/eigen_custom/` project exercises this boundary with
-an asymmetric 2x3 custom operation.
-
-#### Enabling CUDA as a downstream consumer
-
-For `add_subdirectory(...)` consumption, pass `-DAUTOGRAD_USE_CUDA=ON`
-in the parent configure step (along with
-`-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` if `nvcc` is not on
-`PATH`). For `find_package(...)` consumption, CUDA is selected on the
-autograd side at install time; install a CUDA-enabled autograd into a
-prefix and point the consumer at that prefix via `CMAKE_PREFIX_PATH`.
-The CPU default build is unaffected when CUDA is left off.
-
-Hosted CPU automation covers installation plus the normal `find_package`,
-explicit Eigen/legacy expert, and `add_subdirectory` consumers. The standalone
-CUDA custom consumer is a manual gate because hosted CI does not provide a CUDA device.
-Its exact build and run commands, including the CUDA-enabled install prefix,
-are documented in `tests/consumer/README.md`.
-
-## Quick start
-
-The README example builds when the examples option is enabled:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAUTOGRAD_BUILD_EXAMPLES=ON
-cmake --build build --parallel
-./build/linear_regression
-```
-
-It trains a 2-layer ReLU MLP to fit `y = 2*x1 + 3*x2` with Adam. The source is
-`examples/linear_regression.cpp`:
+### Minimal forward/backward
 
 ```cpp
-#include "autograd.h"
-#include <iostream>
-using namespace ag;
+#include <autograd/autograd.h>
 
 int main() {
-    // Tiny dataset: y = 2*x1 + 3*x2
-    Mat X(4, 2); X << 1, 1,  1, 0,  0, 1,  0, 0;
-    Mat Y(4, 1); Y << 5,  2,  3,  0;
-
-    auto net = std::make_shared<Sequential>();
-    net->add(std::make_shared<Linear>(2, 8));
-    net->add(std::make_shared<ReLUModule>());
-    net->add(std::make_shared<Linear>(8, 1));
-    Adam opt(net->parameters(), 0.05f);
-
-    for (int epoch = 0; epoch < 200; ++epoch) {
-        opt.zero_grad();
-        auto pred = net->forward(Var::make(X));
-        auto loss = mse_loss(pred, Y);
-        loss->backward();
-        opt.step();
-        if (epoch % 50 == 0)
-            std::cout << "epoch " << epoch << "  loss=" << loss->data(0, 0) << "\n";
-    }
-    std::cout << "final pred:\n" << net->forward(Var::make(X))->data << "\n";
-    return 0;
+    const float values[] = {2.f, 3.f};
+    ag::Variable x(ag::Tensor::from_host(values, ag::Shape{1, 2}), true);
+    auto loss = ag::sum(ag::scale(x, 2.f));
+    loss.backward();
+    float result = 0.f, gradient[2];
+    loss.value().copy_to_host(&result, 1);  // 10
+    x.grad().copy_to_host(gradient, 2);     // 2, 2
 }
 ```
 
-Expected end-of-training output is approximately:
+## CUDA boundaries
 
-```
-epoch 0    loss=<initial value>
-epoch 50   loss=...
-...
-final pred: ~[[5], [2], [3], [0]]
-```
+Use explicit `Tensor::to` / `Variable::to` with `Device::cuda()` or
+`Device::cpu()`. A cross-device Variable transfer creates a fresh leaf; value
+and stored-gradient Tensor transfers are separate. There are no host/device
+public mirror fields or sync methods. CUDA-built providers still execute CPU
+Tensor operations on CPU. Compiled capability is not GPU availability.
 
-### Differentiable FFT example
+CUDA supports core arithmetic/activations, matrix multiplication, reductions,
+softmax/losses, slices/concat/flip/reshape, Conv2d/MaxPool2d, complex FFT, and
+SGD/Adam. Not every CPU operation has a CUDA implementation: transpose, cumsum,
+sin/cos/clamp, DepthwiseConv2d, AvgPool2d, NearestUpsample2d and GroupNorm remain
+CPU-only and reject CUDA inputs. See operation tests for precise validation;
+there is no silent CPU fallback or new device feature in this retirement.
+Modules have no general `Module::to`; the GPU example registers device-owned
+parameters and uses public functional ops.
 
-`autograd.h` also exposes complex-valued helpers built from pairs of real
-`Var` nodes. FFTs are differentiable, so frequency-domain expressions can
-participate in the same reverse-mode graph:
+## Consumers and explicit extensions
 
-```cpp
-#include "autograd.h"
-#include <iostream>
-using namespace ag;
-
-Mat x0 = Mat::Random(8, 8);
-auto x = Var::make(x0);
-
-auto z = real_to_complex(x);
-auto spectrum = fft2(z);
-auto field = ifft2(spectrum);
-auto loss = mean(abs2(field));
-loss->backward();
-
-std::cout << "loss = " << loss->data(0, 0) << "\n";
-std::cout << "max |grad| = " << x->grad.cwiseAbs().maxCoeff() << "\n";
+```cmake
+find_package(autograd 1.0 CONFIG REQUIRED) # unversioned also supported
+# or: add_subdirectory(minimal_autograd)
+target_link_libraries(my_app PRIVATE autograd::autograd)
+get_target_property(cuda_enabled autograd::autograd AUTOGRAD_CUDA_ENABLED)
+# Literal "0" or "1" describes the compiled provider only.
 ```
 
-The same API works for CUDA inputs when `AUTOGRAD_USE_CUDA=ON`, subject to the
-pure-CUDA FFT shape limits documented above.
+Installed normal SHARED consumption needs no Eigen/toolkit discovery. CUDA
+STATIC consumption retains link-only `CUDA::cudart`; recorded OpenMP dependency
+semantics remain. Source/embedded provider compilation still needs its build
+dependencies. Neither normal nor expert consumers receive `AUTOGRAD_USE_CUDA`
+or the private in-tree test selector.
 
-## Architecture
-
-A `Var` is a node in a directed acyclic graph. It holds the result of a forward
-computation (`data`) and, after `backward()`, its gradient (`grad`). Each
-non-input `Var` also stores its parents and a `back_fn` (a closure that knows
-how to push its own gradient back into its parents' gradients).
-
-```
-                       forward
-       input  ─────────────────►  ops  ─────────────►  Var graph
-       (Var)        apply<Fn>      build nodes        (root = loss)
-                                                            │
-                                                            │  loss->backward()
-                                                            ▼
-                       ┌────────────────────────────────────────────┐
-                       │  1. seed grad on loss = ones(1, 1)         │
-                       │  2. DFS from root to build topo order      │
-                       │  3. walk topo in REVERSE; at each node:    │
-                       │       node->back_fn()                      │
-                       │     → reads node->grad                     │
-                       │     → calls fn->backward(grad)             │
-                       │     → accumulates into parents[i]->grad    │
-                       └────────────────────────────────────────────┘
-                                                            │
-                                                            ▼
-                                                  parameters with .grad
+```cmake
+find_package(autograd CONFIG REQUIRED COMPONENTS expert)
+target_link_libraries(my_custom_op PRIVATE autograd::autograd_expert)
 ```
 
-`Function` subclasses (`AddFn`, `MatMulFn`, `Conv2dFn`, `SiLUFn`, …) implement
-`forward(Mats)` and `backward(Mat)`. The free template `apply<Fn>(inputs,
-extra_args...)` wraps them: it constructs the function, runs forward, and
-captures a `back_fn` lambda that holds a `shared_ptr<Fn>` and the parent
-`VarPtr`s. Calling `loss->backward()` on a scalar (1x1) `Var` performs the
-topo-sort, then invokes each captured `back_fn` in reverse order.
+The explicit expert target supplies Eigen and, for CUDA providers, cudart.
+`extension/eigen.h` exposes `tensor_from_eigen(const Eigen::MatrixXf&)` and
+`tensor_to_eigen`: rank-2 CPU copies with logical-index reordering and no
+aliasing or implicit device transfer. `extension/cuda.h` supplies borrowed
+expert views, not owning raw normal storage; callers retain ownership and
+synchronization/lifetime responsibility. `extension/custom_op.h` supplies
+validated forward/backward construction and is also in the normal umbrella.
+Unknown package components reject. Standalone commands and installed
+positive/negative controls: [tests/consumer/README.md](tests/consumer/README.md).
 
-A `Module` is anything with `forward(VarPtr) → VarPtr` and a list of
-`parameters() → vector<VarPtr>`. `Sequential` composes modules; optimizers
-iterate over `parameters()` and call `step()` / `zero_grad()`.
-`zero_grad()` clears both CPU gradients and CUDA device gradients when CUDA is
-enabled.
+## Current examples
 
-### Logical 4D Shape
-
-This is important and non-obvious: **`Var::data` is always a 2D
-`Eigen::MatrixXf`**. For conv layers a `(N, C, H, W)` batch is stored as
-`Mat(N, C*H*W)`, with channels contiguous along the column axis. `Var` can now
-carry logical shape metadata, so beginner code can write:
-
-```cpp
-auto x = Var::make4d(Mat::Random(N, C * H * W), N, C, H, W);
-Conv2d conv(C, 4, 3, 3);
-auto y = conv.forward(x);   // infers H and W from x->shape()
+```sh
+cmake -S . -B build-examples -DCMAKE_BUILD_TYPE=Release \
+  -DAUTOGRAD_BUILD_EXAMPLES=ON
+cmake --build build-examples --parallel 4
+./build-examples/linear_regression
+./build-examples/mnist_classify_cpu data/MNIST/raw 4 2 1 2
+# CUDA-enabled example build only:
+./build-cuda/mnist_classify_gpu data/MNIST/raw 4 2 1 2
 ```
 
-The older expert API still works:
+Linear regression trains the two-layer ReLU MLP on `y=2*x1+3*x2` using Adam.
+MNIST examples keep the CNN, IDX `/255` row-major values, mini-batches and
+train/test evaluation; CPU uses Adam, GPU uses SGD. Arguments are data directory,
+train count, test count, epochs, batch size. Data must already exist; these
+commands do not download it. Enable examples in the CUDA build for the GPU
+binary. Bounded execution is not an accuracy or speedup claim.
 
-```cpp
-auto y = conv.forward(x, H, W);
-```
+## Migration and 1.0 policy/status
 
-## Public API Overview
+This is an intentional legacy **source break**. Removed: `Var`, `VarPtr`,
+`Function`, `Mat`/`Mats`, old activation wrappers, public graph/mirror fields,
+legacy constructor/forward adapters, and the twelve old top-level
+`autograd/{variable,function,ops,module,loss,optim,conv,norm,diffusion,complex,fft,cuda_core}.h`
+headers, including the removed `CudaRuntimeInfo` / `cuda_runtime_info` diagnostics
+from `cuda_core.h`. No expert opt-in restores these names. Migrate to owned Tensor values,
+Variable handles, registered modules and explicit transfers/copies; rebuild
+legacy binaries. Spatial values are true NCHW, not flat Eigen plus metadata;
+flatten explicitly at a Linear boundary. Complex values use `ComplexVariable`.
 
-Most users can include `autograd.h`, which re-exports the public headers below.
+The candidate declares project/package VERSION **1.0.0**, shared VERSION
+**1.0.0** and SOVERSION **1**. Generated `SameMajorVersion` selection accepts
+unversioned, 1.0 and exact 1.0.0 requests and rejects newer unsatisfied requests
+or other majors. Source-compatible evolution is intended within 1.x; breaking
+source changes require a new major. This is **not** a universal ABI promise
+across compiler/stdlib, static/shared or CPU/CUDA variants, nor established
+future same-major binary compatibility. No release/tag is published here.
 
-| Header | Public surface |
-|--------|----------------|
-| `variable.h` | `Var`, `VarPtr`, `Var::make`, `Var::make4d`, logical shape helpers, `backward()`, `zero_grad()`, `cuda()`, `cpu()` |
-| `ops.h` | `add`, `mul`, `matmul`, `relu`, `sum`, `mean`, `broadcast_add`, `scale`, `softmax`, `log_softmax`, `transpose`, `reshape`, `concat`, `hcat`, `sigmoid`, `tanh_op`, `exp_op`, `log_op`, `sqrt_op`, `silu`, `softplus`, `sub`, `div_op`, `cumsum`, `flip`, `sin_op`, `cos_op`, `clamp`, `col_slice`, `row_slice`, `split` |
-| `module.h` | `Module`, `Linear`, `Sequential`, `ReLUModule`, `SiLUModule`, `SigmoidModule` |
-| `loss.h` | `mse_loss`, `cross_entropy` |
-| `optim.h` | `SGD`, `Adam` |
-| `conv.h` | `im2col`, `col2im`, `conv2d_op`, `maxpool2d_op`, `avgpool2d_op`, `nearest_upsample2d_op`, `depthwise_conv2d_op`, `Conv2d`, `MaxPool2d`, `AvgPool2d`, `NearestUpsample2d`, `DepthwiseConv2d` |
-| `norm.h` | `GroupNorm` |
-| `complex.h` | `ComplexVar`, `make_complex`, `real_to_complex`, `real`, `imag`, `conj`, `complex_mul`, `complex_scale`, `abs2` |
-| `fft.h` | `FftNorm`, `fft2`, `ifft2` |
-
-CUDA support is intentionally exposed through the same high-level ops where it
-exists. Move a `Var` to device with `x->cuda()`, run supported ops, and call
-`cpu()` when host data is needed.
+Local qualification completed all eight default/advanced CPU/CUDA STATIC/SHARED
+configurations, installed/embedded normal consumers, explicit Eigen expert and
+actual CUDA device consumers, and versioned downstream 32/32/41. The downstream
+checks use the corrected consumer driver merged separately in
+[CppResist #174](https://github.com/mhkim90/CppResist/pull/174) at `befe0e5`;
+its merged tree matches the qualified consumer candidate.
+Final controller review and local commit/publication status are recorded in the
+root plan and controller journal; no provider merge/release is claimed here.
+Actual minimum CMake 3.14 execution has not been tested on the current 3.28 host;
+the minimum is unchanged.
+Historical guarantees and explicit retirement mapping are appended to
+[the Phase0 contract](docs/PHASE0_BEHAVIOR_CONTRACT.md).
 
 ## Limitations
 
-These are the same items called out in the design plan. They are not bugs;
-they are scope decisions.
-
-- **Single-threaded by default.** Eigen is single-threaded unless you link
-  OpenMP and call `Eigen::setNbThreads(n)`. The CMakeLists in this repo
-  picks up OpenMP automatically when available.
-- **No `retain_graph`.** Each forward pass may be backwarded exactly once.
-  If you call `backward()` twice on the same graph, gradients will
-  accumulate on top of the previous run. If a `back_fn` throws during
-  `backward()`, gradients touched by that backward attempt are restored before
-  the exception is rethrown.
-- **No inplace ops.** Every op allocates a new `Var`. Mutating a leaf
-  parameter is fine, but mutating a non-leaf `Var->data` will silently
-  invalidate the graph.
-- **Limited CUDA.** CUDA is opt-in and covers only the supported surface listed
-  in *CUDA backend (optional)*. Some advanced helpers remain CPU-only, and the
-  pure-CUDA FFT backend is intentionally limited to supported power-of-two
-  shapes. Unsupported ops should stay on CPU until explicit CUDA kernels are
-  added.
-- **No dilated / transposed conv.** `Conv2d` is the standard
-  cross-correlation. `DepthwiseConv2d` is available (groups = channels).
-  Dilated or transposed variants are not implemented.
-- **Conv storage is flat (2D).** Values still live in `Mat(N, C*H*W)`, but
-  logical 4D metadata lets `Conv2d::forward(x)` infer `(H, W)` when `x` was
-  created with `Var::make4d(...)`. The explicit `forward(x, H, W)` API remains.
-- **GroupNorm is inference-only.** Use `GroupNorm::forward(x, C, HW)`.
-  Backward is not implemented.
+Teaching-scale implementation, no production/performance guarantee. No dilated
+or transposed convolution. Only Backward FFT normalization is implemented.
+Mutating aliased Tensor data between forward and backward invalidates saved
+values; build fresh graphs after such mutation. Explicit expert borrowed views
+require the documented ownership and synchronization discipline.
 
 ## License
 

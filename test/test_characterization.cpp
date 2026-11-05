@@ -8,7 +8,9 @@
 //
 // Coverage mapping lives in docs/PHASE0_BEHAVIOR_CONTRACT.md.
 
-#include "autograd.h"
+#include "autograd/core/module.h"
+#include "autograd/core/optim.h"
+#include "grad_check.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +20,7 @@
 #include <vector>
 
 using namespace ag;
+using namespace ag_test;
 
 namespace {
 
@@ -34,18 +37,18 @@ int failed = 0;
 
 #define CHECK_NEAR(a, b, tol) do { \
     float _a = (a), _b = (b); \
-    if (std::fabs(_a - _b) > (tol)) { \
+    if (!std::isfinite(_a) || !std::isfinite(_b) || std::fabs(_a - _b) > (tol)) { \
         std::fprintf(stderr, "FAIL: %s (%g) vs %s (%g) at %s:%d\n", \
                      #a, _a, #b, _b, __FILE__, __LINE__); \
         std::exit(1); \
     } \
 } while (0)
 
-#define CHECK_EQ_MAT(a, b) do { \
+#define CHECK_EQ_TENSOR(a, b) do { \
     auto _A = (a); auto _B = (b); \
-    if (_A.rows() != _B.rows() || _A.cols() != _B.cols() || \
-        (_A - _B).cwiseAbs().maxCoeff() > 1e-5f) { \
-        std::fprintf(stderr, "FAIL: mat mismatch at %s:%d\n", __FILE__, __LINE__); \
+    if (_A.shape() != _B.shape() || \
+        max_diff(_A, _B) > 1e-5f) { \
+        std::fprintf(stderr, "FAIL: tensor mismatch at %s:%d\n", __FILE__, __LINE__); \
         std::exit(1); \
     } \
 } while (0)
@@ -55,271 +58,269 @@ void report(const char* name) {
     ++passed;
 }
 
-// ── §2 Variable: backward accumulation, Var::zero_grad ─────────────────────
+// ── §2 Variable: fresh-seed backward accumulation and node-local zero_grad ─────────────────────
 
 void test_backward_accumulates_without_zero() {
-    // Contract: backward() called repeatedly on the same scalar loss
-    // accumulates gradients on every visited node, including intermediate
-    // activations. This is the natural behavior of the current
-    // apply<Fn> + topo traversal design (no implicit intermediate-grad
-    // reset).
-    //
-    // Use a graph with no intermediates between loss and the leaf
-    // (`sum(x)`) so the leaf-gradient growth is exactly 2x per pass.
-    auto x = Var::make(Mat::Constant(2, 2, 3.f));
-    auto y = sum(x);                  // loss = sum(x), 1x1
-    y->backward();
-    // First backward: dy/dx = 1.
-    CHECK_NEAR(x->grad(0, 0), 1.f, 1e-5f);
-
-    y->backward();                    // No zero_grad in between.
-    // Second backward: x.grad doubles.
-    CHECK_NEAR(x->grad(0, 0), 2.f, 1e-5f);
-    CHECK_NEAR(x->grad(1, 1), 2.f, 1e-5f);
-
-    // Var::zero_grad() on the loss zeros the whole reachable graph,
-    // including intermediate activations.
-    y->zero_grad();
-    CHECK_NEAR(x->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
-
-    // After zero_grad, a fresh backward reproduces the first pass.
-    y->backward();
-    CHECK_NEAR(x->grad(0, 0), 1.f, 1e-5f);
-    report("backward() accumulates grad; zero_grad() resets the graph");
+    auto x = Variable(filled(Shape{2, 2}, 3.f), true);
+    auto y = sum(x);
+    y.backward();
+    CHECK_NEAR(at(x.grad(), 0, 0), 1.f, 1e-5f);
+    y.backward();
+    CHECK_NEAR(at(x.grad(), 0, 0), 2.f, 1e-5f);
+    CHECK_NEAR(at(x.grad(), 1, 1), 2.f, 1e-5f);
+    y.zero_grad();
+    CHECK(!y.has_grad());
+    CHECK_NEAR(at(x.grad(), 0, 0), 2.f, 1e-7f); // node-local, not recursive
+    x.zero_grad();
+    CHECK(!x.has_grad());
+    y.backward();
+    CHECK_NEAR(at(x.grad(), 0, 0), 1.f, 1e-5f);
+    report("backward accumulates fresh seeds; explicitly cleared leaves reset");
 }
 
 void test_var_zero_grad_reaches_all_reachable() {
-    // Contract: Var::zero_grad() on a node zeros every node reachable
-    // through its parents, including intermediate activations and the
-    // loss node itself (not only the leaf parameters).
-    auto x = Var::make(Mat::Random(2, 3));
-    auto h = relu(x);                    // intermediate activation
-    auto y = sum(h);                      // scalar loss
-
-    y->backward();
-    // Sanity: every reachable node carries a non-zero gradient before
-    // zero_grad.
-    CHECK(x->grad.cwiseAbs().maxCoeff() > 0.f);
-    CHECK(h->grad.cwiseAbs().maxCoeff() > 0.f);
-    CHECK_NEAR(y->grad(0, 0), 1.f, 1e-7f);   // set by backward()
-
-    y->zero_grad();
-
-    // All reachable nodes — leaf, intermediate, and loss — are zeroed.
-    CHECK_NEAR(x->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
-    CHECK_NEAR(h->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
-    CHECK_NEAR(y->grad(0, 0),                0.f, 1e-7f);
-
-    report("Var::zero_grad() zeros every reachable node (leaf + intermediate + loss)");
+    auto x = Variable(random_tensor(Shape{2, 3}), true);
+    auto h = relu(x);
+    auto y = sum(h);
+    y.backward();
+    CHECK(max_abs(x.grad()) > 0.f);
+    CHECK(max_abs(h.grad()) > 0.f);
+    CHECK_NEAR(at(y.grad()), 1.f, 1e-7f);
+    const Tensor x_before = x.grad().clone(), h_before = h.grad().clone();
+    y.zero_grad();
+    CHECK(!y.has_grad());
+    CHECK_EQ_TENSOR(x.grad(), x_before);
+    CHECK_EQ_TENSOR(h.grad(), h_before);
+    h.zero_grad();
+    CHECK(!h.has_grad());
+    CHECK_EQ_TENSOR(x.grad(), x_before);
+    x.zero_grad();
+    CHECK(!x.has_grad());
+    report("Variable::zero_grad clears only its receiver");
 }
 
 void test_module_zero_grad_isolates_intermediates() {
     // Module::zero_grad zeros only the registered leaf parameters.
-    // Intermediate activation Vars retain their grad fields untouched
+    // Intermediate activation Variables retain their gradients untouched
     // (they will be re-created by the next forward pass anyway).
-    auto net = std::make_shared<Sequential>();
-    net->add(std::make_shared<Linear>(3, 2));
+    auto net = std::make_shared<nn::Sequential>();
+    net->add(std::make_shared<nn::Linear>(3, 2));
 
-    auto x = Var::make(Mat::Random(4, 3));
+    auto x = Variable(random_tensor(Shape{4, 3}), true);
     auto y = net->forward(x);
     auto loss = sum(mul(y, y));
-    loss->backward();
+    loss.backward();
 
     // Sanity: every parameter got a non-zero gradient.
     for (auto& p : net->parameters()) {
-        CHECK(p->grad.cwiseAbs().maxCoeff() > 0.f);
+        CHECK(max_abs(p.grad()) > 0.f);
     }
     // Snapshot the activation's grad before module::zero_grad.
-    Mat activation_grad_before = y->grad;
+    Tensor activation_grad_before = y.grad().clone();
+    Tensor input_grad_before = x.grad().clone();
 
     net->zero_grad();
 
     for (auto& p : net->parameters()) {
-        CHECK_NEAR(p->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
+        CHECK(!p.has_grad());
     }
     // Activation's grad must be untouched by Module::zero_grad.
-    CHECK_EQ_MAT(y->grad, activation_grad_before);
+    CHECK_EQ_TENSOR(y.grad(), activation_grad_before);
+    CHECK_EQ_TENSOR(x.grad(), input_grad_before);
     report("Module::zero_grad zeros only registered parameter leaves");
 }
 
 void test_optimizer_zero_grad_semantics() {
-    // SGD::zero_grad zeros only `grad` on every parameter; it must not
-    // touch `data`. Adam::zero_grad zeros only `grad`; the per-parameter
+    // optim::SGD::zero_grad zeros only `grad` on every parameter; it must not
+    // touch `data`. optim::Adam::zero_grad zeros only `grad`; the per-parameter
     // first/second moments (`m`, `v`) and the step counter `t` must be
-    // preserved. Phase 0 inspects these public fields directly; Phase 6
-    // replaces them with explicit `AdamState`.
-    auto p1 = Var::make(Mat::Random(2, 2));
-    auto p2 = Var::make(Mat::Random(2, 2));
+    // preserved in the public AdamState snapshot.
+    auto p1 = Variable(random_tensor(Shape{2, 2}), true);
+    auto p2 = Variable(random_tensor(Shape{2, 2}), true);
     auto loss = sum(mul(p1, p2));
-    loss->backward();
-    for (auto& p : {p1, p2}) CHECK(p->grad.cwiseAbs().maxCoeff() > 0.f);
+    loss.backward();
+    for (auto& p : {p1, p2}) CHECK(max_abs(p.grad()) > 0.f);
 
-    Mat p1_data_before = p1->data;
-    Mat p2_data_before = p2->data;
-    SGD sgd({p1, p2}, 0.01f);
+    Tensor p1_data_before = p1.value().clone();
+    Tensor p2_data_before = p2.value().clone();
+    optim::SGD sgd({p1, p2}, 0.01f);
     sgd.zero_grad();
     for (auto& p : {p1, p2}) {
-        CHECK_NEAR(p->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
+        CHECK(!p.has_grad());
     }
-    CHECK_EQ_MAT(p1->data, p1_data_before);
-    CHECK_EQ_MAT(p2->data, p2_data_before);
+    CHECK_EQ_TENSOR(p1.value(), p1_data_before);
+    CHECK_EQ_TENSOR(p2.value(), p2_data_before);
 
-    // Adam: snapshot the public optimizer state, run a step to populate
+    // optim::Adam: snapshot the public optimizer state, run a step to populate
     // m/v/t, call zero_grad(), and verify m/v/t are bit-for-bit preserved
     // while grad is cleared.
-    auto q = Var::make(Mat::Constant(1, 1, 1.f));
-    Adam adam({q}, 0.1f);
-    q->grad = Mat::Constant(1, 1, 0.5f);
+    auto q = Variable(filled(Shape{1, 1}, 1.f), true);
+    optim::Adam adam({q}, 0.1f);
+    seed_grad(q, filled(Shape{1, 1}, 0.5f));
     adam.step();                                // t=1, populates m[0], v[0]
-    CHECK(adam.t == 1);
-    Mat m_snapshot = adam.m[0];
-    Mat v_snapshot = adam.v[0];
-    int t_snapshot = adam.t;
+    CHECK(adam.step_count() == 1);
+    Tensor m_snapshot = adam.state().first_moments[0];
+    Tensor v_snapshot = adam.state().second_moments[0];
+    int t_snapshot = adam.step_count();
 
     adam.zero_grad();
-    CHECK_EQ_MAT(adam.m[0],  m_snapshot);      // m preserved
-    CHECK_EQ_MAT(adam.v[0],  v_snapshot);      // v preserved
-    CHECK(adam.t == t_snapshot);               // t preserved
-    CHECK_NEAR(q->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
+    CHECK_EQ_TENSOR(adam.state().first_moments[0],  m_snapshot);      // m preserved
+    CHECK_EQ_TENSOR(adam.state().second_moments[0],  v_snapshot);      // v preserved
+    CHECK(adam.step_count() == t_snapshot);               // t preserved
+    CHECK(!q.has_grad());
 
     // Discriminating step with a different gradient: m/v must reflect
     // carry-over from the previous step (β1·m + (1-β1)·g_new), not a
     // reset state (which would be just (1-β1)·g_new). The expected
     // values pin the recurrence exactly.
-    q->grad = Mat::Constant(1, 1, -0.3f);
+    seed_grad(q, filled(Shape{1, 1}, -0.3f));
     adam.step();                                // t=2
     // m_new = 0.9·m_prev + 0.1·(-0.3) = 0.9·0.05 + (-0.03) = 0.015
-    CHECK_NEAR(adam.m[0](0, 0), 0.015f, 1e-5f);
+    CHECK_NEAR(at(adam.state().first_moments[0], 0, 0), 0.015f, 1e-5f);
     // v_new = 0.999·v_prev + 0.001·(-0.3)² = 0.999·0.00025 + 0.00009
     //       = 0.00024975 + 0.00009 = 0.00033975
-    CHECK_NEAR(adam.v[0](0, 0), 0.00033975f, 1e-7f);
-    CHECK(adam.t == 2);
+    CHECK_NEAR(at(adam.state().second_moments[0], 0, 0), 0.00033975f, 1e-7f);
+    CHECK(adam.step_count() == 2);
 
-    report("Optimizer::zero_grad zeros only grad; Adam m/v/t are preserved");
+    report("Optimizer::zero_grad zeros only grad; optim::Adam m/v/t are preserved");
 }
 
 // ── §4 Module parameter order ─────────────────────────────────────────────
 
+bool observable_alias(Variable a, Variable b) {
+    if (a.value().shape() != b.value().shape()) return false;
+    const float original = at(a.value());
+    put(a.value(), 0, original + 3.f);
+    const bool shared_value = at(b.value()) == original + 3.f;
+    put(a.value(), 0, original);
+    a.zero_grad(); b.zero_grad();
+    sum(a).backward();
+    const bool shared_node = b.has_grad() && max_diff(a.grad(), b.grad()) == 0.f;
+    b.zero_grad();
+    return shared_value && shared_node && !a.has_grad();
+}
+
 void test_module_parameter_order() {
-    // Linear: [W, b].
-    Linear lin(3, 5);
+    // nn::Linear: [W, b].
+    nn::Linear lin(3, 5);
     auto lp = lin.parameters();
     CHECK(lp.size() == 2);
-    CHECK(lp[0].get() == lin.W.get());
-    CHECK(lp[1].get() == lin.b.get());
-    CHECK(lp[0]->data.rows() == 3 && lp[0]->data.cols() == 5);
-    CHECK(lp[1]->data.rows() == 1 && lp[1]->data.cols() == 5);
+    CHECK(observable_alias(lp[0], lin.weight()));
+    CHECK(observable_alias(lp[1], lin.bias()));
+    CHECK(lp[0].value().shape()[0] == 3 && lp[0].value().shape()[1] == 5);
+    CHECK(lp[1].value().shape()[0] == 1 && lp[1].value().shape()[1] == 5);
 
     // Same ordering across repeated calls (identity, not just equality).
+    CHECK(lin.named_parameters()[0].name == "weight");
+    CHECK(lin.named_parameters()[1].name == "bias");
     auto lp2 = lin.parameters();
     CHECK(lp2.size() == lp.size());
     for (size_t i = 0; i < lp.size(); ++i) {
-        CHECK(lp[i].get() == lp2[i].get());
+        CHECK(observable_alias(lp[i], lp2[i]));
     }
 
-    // Sequential: children in add() insertion order, each with its own
+    // nn::Sequential: children in add() insertion order, each with its own
     // per-child parameter order. Public fields like `layers` are NOT
     // pinned (Phase 11 removes them) — only the public `add()` API and
     // the resulting `parameters()` traversal are.
-    auto net = std::make_shared<Sequential>();
-    auto lin_a = std::make_shared<Linear>(4, 6);
-    auto relu  = std::make_shared<ReLUModule>();
-    auto lin_b = std::make_shared<Linear>(6, 2);
+    auto net = std::make_shared<nn::Sequential>();
+    auto lin_a = std::make_shared<nn::Linear>(4, 6);
+    auto relu  = std::make_shared<nn::ReLU>();
+    auto lin_b = std::make_shared<nn::Linear>(6, 2);
 
     net->add(lin_a);
     net->add(relu);
     net->add(lin_b);
 
     auto params = net->parameters();
-    CHECK(params.size() == 4);                // ReLUModule has none.
-    CHECK(params[0].get() == lin_a->W.get());
-    CHECK(params[1].get() == lin_a->b.get());
-    CHECK(params[2].get() == lin_b->W.get());
-    CHECK(params[3].get() == lin_b->b.get());
+    CHECK(params.size() == 4);                // nn::ReLU has none.
+    CHECK(observable_alias(params[0], lin_a->weight()));
+    CHECK(observable_alias(params[1], lin_a->bias()));
+    CHECK(observable_alias(params[2], lin_b->weight()));
+    CHECK(observable_alias(params[3], lin_b->bias()));
 
     // Repeated traversal returns the same parameter sequence (identity).
+    const auto names = net->named_parameters();
+    CHECK(names[0].name == "0.weight" && names[1].name == "0.bias");
+    CHECK(names[2].name == "2.weight" && names[3].name == "2.bias");
     auto params2 = net->parameters();
     for (size_t i = 0; i < params.size(); ++i) {
-        CHECK(params[i].get() == params2[i].get());
+        CHECK(observable_alias(params[i], params2[i]));
     }
 
     report("Module::parameters() order is deterministic and stable across calls");
 }
 
 void test_module_parameter_order_with_conv() {
-    // Conv2d params are also [W, b] in that order.
-    auto conv = std::make_shared<Conv2d>(2, 4, 3, 3, 1, 0);
-    auto lin  = std::make_shared<Linear>(16, 3);
-    auto net  = std::make_shared<Sequential>();
+    // nn::Conv2d params are also [W, b] in that order.
+    auto conv = std::make_shared<nn::Conv2d>(2, 4, 3, 3, 1, 0);
+    auto lin  = std::make_shared<nn::Linear>(16, 3);
+    auto net  = std::make_shared<nn::Sequential>();
     net->add(conv);
     net->add(lin);
 
     auto params = net->parameters();
     CHECK(params.size() == 4);
-    CHECK(params[0].get() == conv->W.get());
-    CHECK(params[1].get() == conv->b.get());
-    CHECK(params[2].get() == lin->W.get());
-    CHECK(params[3].get() == lin->b.get());
+    CHECK(observable_alias(params[0], conv->weight()));
+    CHECK(observable_alias(params[1], conv->bias()));
+    CHECK(observable_alias(params[2], lin->weight()));
+    CHECK(observable_alias(params[3], lin->bias()));
 
     // Check shape matchers so the order is clearly tied to data shapes.
-    CHECK(params[0]->data.rows() == 4);   // out_ch
-    CHECK(params[0]->data.cols() == 2 * 3 * 3);
-    CHECK(params[1]->data.rows() == 1);
-    CHECK(params[1]->data.cols() == 4);
-    report("Conv2d module params: [W (out_ch, in_ch*kH*kW), b (1, out_ch)]");
+    CHECK(params[0].value().shape()[0] == 4);   // out_ch
+    CHECK((params[0].value().shape() == Shape{4, 2, 3, 3}));
+    CHECK((params[1].value().shape() == Shape{4}));
+    report("Conv2d parameter order and node identity: weight (OC,C,kH,kW), bias (OC)");
 }
 
 // ── §5 Optimizer: exact trajectories and state isolation ──────────────────
 
 void test_sgd_trajectory() {
-    auto p = Var::make((Mat(2, 2) <<
-        1.f, 2.f,
-        3.f, 4.f).finished());
-    SGD sgd({p}, 0.1f);
+    auto p = Variable(tensor(Shape{2, 2}, {1.f, 2.f,
+        3.f, 4.f}), true);
+    optim::SGD sgd({p}, 0.1f);
 
-    Mat g1 = (Mat(2, 2) <<
-        0.5f, -1.0f,
-        2.0f, -0.5f).finished();
+    Tensor g1 = tensor(Shape{2, 2}, {0.5f, -1.0f,
+        2.0f, -0.5f});
 
     // Step 1: p <- p - lr * g1.
-    p->grad = g1;
+    seed_grad(p, g1);
     sgd.step();
-    CHECK_NEAR(p->data(0, 0), 1.f - 0.05f, 1e-5f);
-    CHECK_NEAR(p->data(0, 1), 2.f + 0.1f,  1e-5f);
-    CHECK_NEAR(p->data(1, 0), 3.f - 0.2f,  1e-5f);
-    CHECK_NEAR(p->data(1, 1), 4.f + 0.05f, 1e-5f);
+    CHECK_NEAR(at(p.value(), 0, 0), 1.f - 0.05f, 1e-5f);
+    CHECK_NEAR(at(p.value(), 0, 1), 2.f + 0.1f,  1e-5f);
+    CHECK_NEAR(at(p.value(), 1, 0), 3.f - 0.2f,  1e-5f);
+    CHECK_NEAR(at(p.value(), 1, 1), 4.f + 0.05f, 1e-5f);
 
     // Step 2 (no zero_grad, same grad): another full step.
-    p->grad = g1;
+    seed_grad(p, g1);
     sgd.step();
-    CHECK_NEAR(p->data(0, 0), 1.f - 0.10f, 1e-5f);
-    CHECK_NEAR(p->data(0, 1), 2.f + 0.20f, 1e-5f);
+    CHECK_NEAR(at(p.value(), 0, 0), 1.f - 0.10f, 1e-5f);
+    CHECK_NEAR(at(p.value(), 0, 1), 2.f + 0.20f, 1e-5f);
 
     // Step 3 with a different grad (only the (1,0) element nonzero).
-    Mat g2 = (Mat(2, 2) <<
-        0.f, 0.f,
-        1.f, 0.f).finished();
+    Tensor g2 = tensor(Shape{2, 2}, {0.f, 0.f,
+        1.f, 0.f});
     sgd.zero_grad();
-    p->grad = g2;
+    seed_grad(p, g2);
     sgd.step();
     // After steps 1+2 with grad1 = [[0.5,-1.0],[2.0,-0.5]], then step 3
     // with g2 = [[0,0],[1,0]]: (1,0) gets one more -0.1, the others
     // settle at their step-2 values.
-    CHECK_NEAR(p->data(0, 0), 0.9f,  1e-5f);
-    CHECK_NEAR(p->data(0, 1), 2.2f,  1e-5f);
-    CHECK_NEAR(p->data(1, 0), 2.5f,  1e-5f);
-    CHECK_NEAR(p->data(1, 1), 4.10f, 1e-5f);
+    CHECK_NEAR(at(p.value(), 0, 0), 0.9f,  1e-5f);
+    CHECK_NEAR(at(p.value(), 0, 1), 2.2f,  1e-5f);
+    CHECK_NEAR(at(p.value(), 1, 0), 2.5f,  1e-5f);
+    CHECK_NEAR(at(p.value(), 1, 1), 4.10f, 1e-5f);
 
-    report("SGD::step() applies p -= lr * grad exactly across multiple steps");
+    report("optim::SGD::step() applies p -= lr * grad exactly across multiple steps");
 }
 
 void test_adam_trajectory() {
-    // Adam trajectory with varying signed/magnitude gradients per step.
+    // optim::Adam trajectory with varying signed/magnitude gradients per step.
     //
-    // A reference Adam recurrence (different code structure than the
+    // A reference optim::Adam recurrence (different code structure than the
     // library: out-of-place per-element temporaries vs. in-place
     // Eigen expressions, computed in scalars vs. matrices) is run in
-    // parallel. After every step the library's public m[0], v[0], t and
+    // parallel. After every step the library's AdamState moments, counter and
     // the parameter are compared element-wise against the reference.
     //
     // Varying gradients are essential: a constant-gradient trajectory
@@ -328,19 +329,19 @@ void test_adam_trajectory() {
     // gradients, the bias correction actually matters and small
     // implementation drift in m̂/v̂ would surface as a measurable
     // parameter mismatch.
-    auto p = Var::make((Mat(1, 3) << 2.f, -1.f, 0.5f).finished());
-    Adam adam({p}, /*lr=*/0.05f);
+    auto p = Variable(tensor(Shape{1, 3}, {2.f, -1.f, 0.5f}), true);
+    optim::Adam adam({p}, /*lr=*/0.05f);
 
-    std::vector<Mat> grads = {
-        (Mat(1, 3) <<  0.4f, -0.8f,  0.2f).finished(),
-        (Mat(1, 3) << -0.5f,  0.3f, -0.1f).finished(),
-        (Mat(1, 3) <<  0.2f,  0.6f, -0.3f).finished(),
+    std::vector<Tensor> grads = {
+        tensor(Shape{1, 3}, {0.4f, -0.8f,  0.2f}),
+        tensor(Shape{1, 3}, {-0.5f,  0.3f, -0.1f}),
+        tensor(Shape{1, 3}, {0.2f,  0.6f, -0.3f}),
     };
 
     // Independent reference recurrence (scalar temporaries, out-of-place).
-    Mat p_ref = p->data;
-    Mat m_ref = Mat::Zero(1, 3);
-    Mat v_ref = Mat::Zero(1, 3);
+    auto p_ref = host(p.value());
+    std::vector<float> m_ref(3, 0.f);
+    std::vector<float> v_ref(3, 0.f);
     int  t_ref = 0;
     const float lr  = 0.05f;
     const float b1  = 0.9f;
@@ -349,135 +350,122 @@ void test_adam_trajectory() {
 
     for (const auto& g : grads) {
         // Library step.
-        p->grad = g;
+        seed_grad(p, g);
         adam.step();
 
-        // Reference step: independent code path, same Adam math.
+        // Reference step: independent code path, same optim::Adam math.
         t_ref += 1;
         float bc1 = 1.f - std::pow(b1, static_cast<float>(t_ref));
         float bc2 = 1.f - std::pow(b2, static_cast<float>(t_ref));
         for (int j = 0; j < 3; ++j) {
-            float gj = g(0, j);
-            m_ref(0, j) = b1 * m_ref(0, j) + (1.f - b1) * gj;
-            v_ref(0, j) = b2 * v_ref(0, j) + (1.f - b2) * gj * gj;
-            float m_hat = m_ref(0, j) / bc1;
-            float v_hat = v_ref(0, j) / bc2;
+            float gj = at(g, 0, j);
+            m_ref[j] = b1 * m_ref[j] + (1.f - b1) * gj;
+            v_ref[j] = b2 * v_ref[j] + (1.f - b2) * gj * gj;
+            float m_hat = m_ref[j] / bc1;
+            float v_hat = v_ref[j] / bc2;
             float denom = std::sqrt(v_hat) + eps;
-            p_ref(0, j) -= lr * m_hat / denom;
+            p_ref[j] -= lr * m_hat / denom;
         }
 
         // Per-element comparison: m, v, t, parameter.
         for (int j = 0; j < 3; ++j) {
-            CHECK_NEAR(adam.m[0](0, j), m_ref(0, j), 1e-5f);
-            CHECK_NEAR(adam.v[0](0, j), v_ref(0, j), 1e-5f);
-            CHECK_NEAR(p->data(0, j),    p_ref(0, j), 1e-5f);
+            CHECK_NEAR(at(adam.state().first_moments[0], 0, j), m_ref[j], 1e-5f);
+            CHECK_NEAR(at(adam.state().second_moments[0], 0, j), v_ref[j], 1e-5f);
+            CHECK_NEAR(at(p.value(), 0, j),    p_ref[j], 1e-5f);
         }
-        CHECK(adam.t == t_ref);
+        CHECK(adam.step_count() == t_ref);
     }
-    report("Adam trajectory with varying signed grads matches reference m/v/t/p");
+    report("optim::Adam trajectory with varying signed grads matches reference m/v/t/p");
 }
 
 void test_optimizer_state_isolation() {
-    // Two Adam instances on disjoint params never see each other's state.
-    auto a = Var::make(Mat::Constant(1, 1, 1.f));
-    auto b = Var::make(Mat::Constant(1, 1, 1.f));
-    Adam adam_a({a}, 0.1f);
-    Adam adam_b({b}, 0.1f);
-    a->grad = Mat::Constant(1, 1, 1.f);
+    // Two optim::Adam instances on disjoint params never see each other's state.
+    auto a = Variable(filled(Shape{1, 1}, 1.f), true);
+    auto b = Variable(filled(Shape{1, 1}, 1.f), true);
+    optim::Adam adam_a({a}, 0.1f);
+    optim::Adam adam_b({b}, 0.1f);
+    seed_grad(a, filled(Shape{1, 1}, 1.f));
     adam_a.step();
     // b's data and grad must be untouched.
-    CHECK_NEAR(b->data(0, 0), 1.f, 1e-6f);
-    CHECK_NEAR(b->grad(0, 0), 0.f, 1e-6f);
-    CHECK_NEAR(a->data(0, 0), 0.9f, 1e-3f);
+    CHECK_NEAR(at(b.value(), 0, 0), 1.f, 1e-6f);
+    CHECK(!b.has_grad());
+    CHECK(adam_b.state().t == 0);
+    CHECK(max_abs(adam_b.state().first_moments[0]) == 0.f);
+    CHECK(max_abs(adam_b.state().second_moments[0]) == 0.f);
+    CHECK_NEAR(at(a.value(), 0, 0), 0.9f, 1e-3f);
 
-    // Rebuilding Adam on the same param resets m, v, t — current API has
-    // no snapshot/restore path, so constructing a new Adam is the only
-    // way to reinitialize state. This pins the current behavior.
-    auto c = Var::make(Mat::Constant(1, 1, 1.f));
+    // Rebuilding Adam on the same parameter starts independent zero moments/counter.
+    auto c = Variable(filled(Shape{1, 1}, 1.f), true);
     {
-        Adam adam_c_old({c}, 0.1f);
-        c->grad = Mat::Constant(1, 1, 1.f);
+        optim::Adam adam_c_old({c}, 0.1f);
+        seed_grad(c, filled(Shape{1, 1}, 1.f));
         adam_c_old.step();
-    }  // adam_c_old destroyed; c->data is ~0.9 now.
-    // New Adam on the same c: m, v, t start at zero again.
-    Adam adam_c_new({c}, 0.1f);
-    c->grad = Mat::Constant(1, 1, 1.f);
+    }  // adam_c_old destroyed; c.value() is ~0.9 now.
+    // New optim::Adam on the same c: m, v, t start at zero again.
+    optim::Adam adam_c_new({c}, 0.1f);
+    CHECK(adam_c_new.state().t == 0);
+    CHECK(max_abs(adam_c_new.state().first_moments[0]) == 0.f);
+    CHECK(max_abs(adam_c_new.state().second_moments[0]) == 0.f);
+    seed_grad(c, filled(Shape{1, 1}, 1.f));
     adam_c_new.step();
-    // Step #1 again (t=1) on a fresh Adam → same first-step update as the
+    // Step #1 again (t=1) on a fresh optim::Adam → same first-step update as the
     // single-step test in test_nn::test_adam_step.
-    CHECK_NEAR(c->data(0, 0), 0.9f - 0.1f, 1e-3f);
+    CHECK_NEAR(at(c.value(), 0, 0), 0.9f - 0.1f, 1e-3f);
     report("Optimizer state per-instance; rebuilding resets m/v/t");
 }
 
 // ── §3 Conv: repeated-backward accumulation ────────────────────────────────
 
 void test_conv_repeated_backward_accumulates() {
-    // The global accumulation rule applies to Conv2d as well: the second
-    // backward on the same scalar loss adds another full pass on top of
-    // the first. Because the conv output `y` is an intermediate, its
-    // grad also accumulates (sum's back_fn does y.grad += ones), so the
-    // second pass contributes 2x the original conv-grad to the leaf.
-    // Net: conv.W.grad after 2 passes = w1 + 2*w1 = 3*w1.
-    Conv2d conv(1, 1, 2, 2, 1, 0);
-    conv.W->data = Mat::Constant(1, 4, 0.25f);
-    conv.b->data = Mat::Zero(1, 1);
-
-    Mat ones16 = Mat::Ones(1, 16);
-    auto x = Var::make(ones16);
-    auto y = conv.forward(x, 4, 4);          // 1 x 9
-    auto loss = sum(y);                      // scalar (no extra ops)
-    loss->backward();
-    Mat w_after_first = conv.W->grad;
-    Mat x_after_first = x->grad;
-    CHECK(w_after_first.cwiseAbs().maxCoeff() > 0.f);
-    CHECK(x_after_first.cwiseAbs().maxCoeff() > 0.f);
-
-    loss->backward();
-    // Second backward: conv.W.grad grew to 3x, x.grad grew to 3x.
-    Mat w_ratio = conv.W->grad.cwiseQuotient(w_after_first);
-    CHECK_NEAR((w_ratio.array() - 3.f).abs().maxCoeff(), 0.f, 1e-4f);
-    Mat x_ratio = x->grad.cwiseQuotient(x_after_first);
-    CHECK_NEAR((x_ratio.array() - 3.f).abs().maxCoeff(), 0.f, 1e-4f);
-
-    // Var::zero_grad() on the loss resets the WHOLE graph (including the
-    // conv input x), then a fresh backward reproduces the first pass.
-    loss->zero_grad();
-    CHECK_NEAR(conv.W->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
-    CHECK_NEAR(conv.b->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
-    CHECK_NEAR(x->grad.cwiseAbs().maxCoeff(),     0.f, 1e-7f);
-    loss->backward();
-    CHECK_EQ_MAT(conv.W->grad, w_after_first);
-    CHECK_EQ_MAT(x->grad,      x_after_first);
-
-    // Module::zero_grad zeros only the leaf parameters, NOT x (the input).
-    // Re-run, then call conv.zero_grad() and verify the partial reset.
-    loss->backward();
+    nn::Conv2d conv(1, 1, 2, 2, 1, 0);
+    auto w = conv.weight(), b = conv.bias();
+    Tensor weights = w.value(), biases = b.value();
+    auto wd = host(filled(weights.shape(), .25f)); weights.copy_from_host(wd.data(), wd.size());
+    auto bd = host(Tensor::zeros(biases.shape())); biases.copy_from_host(bd.data(), bd.size());
+    auto x = Variable(Tensor::ones(Shape{1, 1, 4, 4}), true);
+    auto y = conv.forward(x);
+    auto loss = sum(y);
+    loss.backward();
+    const Tensor w_first = w.grad().clone(), x_first = x.grad().clone();
+    CHECK(max_abs(w_first) > 0.f);
+    CHECK(max_abs(x_first) > 0.f);
+    loss.backward();
+    auto twice_w = host(w_first), twice_x = host(x_first);
+    for (auto& v : twice_w) v *= 2.f;
+    for (auto& v : twice_x) v *= 2.f;
+    CHECK_NEAR(max_diff(w.grad(), tensor(w_first.shape(), twice_w)), 0.f, 1e-4f);
+    CHECK_NEAR(max_diff(x.grad(), tensor(x_first.shape(), twice_x)), 0.f, 1e-4f);
+    loss.zero_grad(); w.zero_grad(); b.zero_grad(); x.zero_grad();
+    CHECK(!w.has_grad()); CHECK(!b.has_grad()); CHECK(!x.has_grad());
+    loss.backward();
+    CHECK_EQ_TENSOR(w.grad(), w_first);
+    CHECK_EQ_TENSOR(x.grad(), x_first);
+    loss.backward();
+    const auto input_before = x.grad().clone();
     conv.zero_grad();
-    CHECK_NEAR(conv.W->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
-    CHECK_NEAR(conv.b->grad.cwiseAbs().maxCoeff(), 0.f, 1e-7f);
-    // x's grad (input, not a parameter) is NOT touched by conv.zero_grad.
-    CHECK(x->grad.cwiseAbs().maxCoeff() > 0.f);
-
-    report("Conv2d backward accumulates; zero_grad/Module::zero_grad semantics");
+    CHECK(!w.has_grad()); CHECK(!b.has_grad());
+    CHECK(max_abs(x.grad()) > 0.f);
+    CHECK_EQ_TENSOR(x.grad(), input_before);
+    report("Conv2d fresh-seed 2x accumulation, explicit leaves and parameter-only clearing");
 }
 
 // ── §2/§4 backward leaves data untouched ──────────────────────────────────
 
 void test_backward_does_not_mutate_data() {
-    auto p = Var::make((Mat(1, 1) << 7.f).finished());
-    Mat before = p->data;
+    auto p = Variable(tensor(Shape{1, 1}, {7.f}), true);
+    Tensor before = p.value().clone();
     auto y = sum(mul(p, p));
-    y->backward();
-    p->zero_grad();
+    y.backward();
+    p.zero_grad();
     // Data must be unchanged after backward + zero_grad.
-    CHECK_EQ_MAT(p->data, before);
+    CHECK_EQ_TENSOR(p.value(), before);
 
-    SGD sgd({p}, 0.1f);
-    p->grad = Mat::Constant(1, 1, 1.f);
+    optim::SGD sgd({p}, 0.1f);
+    seed_grad(p, filled(Shape{1, 1}, 1.f));
     sgd.step();
-    // SGD step mutates data; that's expected. The contract is that
+    // optim::SGD step mutates data; that's expected. The contract is that
     // backward() and zero_grad() do NOT.
-    CHECK(std::fabs(p->data(0, 0) - 7.f) > 1e-5f);
+    CHECK(std::fabs(at(p.value(), 0, 0) - 7.f) > 1e-5f);
 
     report("backward() and zero_grad() do not mutate parameter data");
 }

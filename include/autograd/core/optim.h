@@ -1,10 +1,7 @@
 #pragma once
 // Optimizer stack on the Tensor/Variable API.
 //
-// Declarations live in the ag::optim namespace to avoid colliding with
-// the legacy ag::SGD / ag::Adam declarations in autograd/optim.h. The
-// replacement stack will be exposed under flat ag::SGD / ag::Adam
-// aliases after the legacy facade is removed in Phase 11.
+// Declarations remain in ag::optim; flat ag names below are identity aliases.
 //
 // Header hygiene:
 //   * No Eigen include.
@@ -137,4 +134,9 @@ private:
 };
 
 }  // namespace optim
+
+using SGD = optim::SGD;
+using Adam = optim::Adam;
+using AdamState = optim::AdamState;
+
 }  // namespace ag

@@ -3,11 +3,11 @@
 # This file is installed to <prefix>/lib/cmake/autograd/autogradConfig.cmake.
 # It is the entry point used by `find_package(autograd)` in downstream
 # projects. The normal target intentionally has no Eigen dependency in this
-# file. Eigen and the legacy CUDA boundary are opt-in through COMPONENTS
+# file. Eigen and the explicit CUDA boundary are opt-in through COMPONENTS
 # expert.
 #
-# API version is reserved for the Phase 11 freeze; this file intentionally
-# accepts unversioned `find_package(autograd)` calls.
+# Version selection uses the adjacent SameMajorVersion package version file.
+# Unversioned find_package calls remain supported; this is not an ABI guarantee.
 
 include(CMakeFindDependencyMacro)
 
@@ -43,7 +43,7 @@ endif()
 # Static CUDA archives need cudart at the final consumer link. A shared
 # autograd library records cudart in its own DT_NEEDED list, so its normal
 # consumer must not discover the CUDA toolkit. The expert component may still
-# request cudart explicitly for legacy/custom CUDA consumers.
+# request cudart explicitly for custom CUDA consumers.
 if(_AUTOGRAD_HAS_CUDA AND
    (NOT _AUTOGRAD_IS_SHARED OR _AUTOGRAD_REQUEST_EXPERT))
     find_dependency(CUDAToolkit REQUIRED)

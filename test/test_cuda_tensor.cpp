@@ -641,10 +641,8 @@ void test_header_hygiene_preprocessor() {
 
 #include <cuda_runtime_api.h>
 
-void test_legacy_extension_eigen_aliases_still_available() {
-    // extension/eigen.h is the opt-in path for the legacy Var / Mats
-    // / shape(Mat) / numel(Mat) aliases; CUDA-enabled consumers
-    // can opt in independently of autograd/extension/cuda.h.
+void test_device_descriptors() {
+    // Device descriptors do not require the Eigen extension.
     CHECK(ag::Device::cpu().is_cpu());
     CHECK(ag::Device::cuda(0).is_cuda());
     report("Tensor CUDA: Device descriptor remains intact on a CUDA-enabled build");
@@ -2817,7 +2815,7 @@ int main(int argc, char** argv) {
     test_empty_cuda_tensor_view_and_alias();
     test_same_device_cuda_to_cuda_transfer();
     test_header_hygiene_preprocessor();
-    test_legacy_extension_eigen_aliases_still_available();
+    test_device_descriptors();
     test_oop_direct_shape_ops_cuda();
     test_oop_flip_cuda();
     test_oop_math_rejects_cuda_variable();

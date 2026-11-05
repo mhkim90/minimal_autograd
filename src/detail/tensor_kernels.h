@@ -759,7 +759,7 @@ inline Tensor tensor_depthwise_conv2d_nchw_backward_weight(
                     const int dw_off = c * dw_stride_c
                                      + kh * dw_stride_kh
                                      + kw * dw_stride_kw;
-                    dw_data[dw_off] = static_cast<float>(acc);
+                    dw_data[dw_off] += static_cast<float>(acc);
                 }
             }
         }

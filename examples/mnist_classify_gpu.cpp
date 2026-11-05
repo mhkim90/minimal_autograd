@@ -1,15 +1,16 @@
 // mnist_classify_gpu.cpp — MNIST digit classification on CUDA.
 //
-// Identical network and training loop to mnist_classify_cpu.cpp, but
-// every parameter and every per-batch input is moved to the GPU via
-// `.cuda()` so the full forward/backward runs on device.
-//
-// One deviation from the CPU version: the optimizer is SGD instead of
-// Adam because Adam::step() throws when called on CUDA parameters in
-// the current library. With the lr below both reach comparable
-// test-set accuracy on the same data slice.
+// Same architecture and CLI as the CPU example. Parameters are constructed
+// directly on CUDA and registered in this example-local functional model.
+// Keep SGD here to preserve the example's training configuration.
 
-#include "autograd.h"
+#include "autograd/core/module.h"
+#include "autograd/core/ops.h"
+#include "autograd/core/loss.h"
+#include "autograd/core/optim.h"
+#include <cstdlib>
+#include <stdexcept>
+#include <vector>
 #include "mnist_data.h"
 
 #include <chrono>
@@ -17,6 +18,32 @@
 #include <memory>
 
 using namespace ag;
+
+class MnistModel : public nn::Module {
+public:
+    MnistModel() {
+        nn::Conv2d c1(1,8,3,3,1,1), c2(8,16,3,3,1,1);
+        nn::Linear f1(16*7*7,128), f2(128,10);
+        auto parameter = [&](const char* name, const Variable& source) {
+            Variable result(source.value().to(Device::cuda()), true);
+            register_parameter(name, result);
+            return result;
+        };
+        cw1 = parameter("conv1_weight", c1.weight()); cb1 = parameter("conv1_bias", c1.bias());
+        cw2 = parameter("conv2_weight", c2.weight()); cb2 = parameter("conv2_bias", c2.bias());
+        fw1 = parameter("fc1_weight", f1.weight()); fb1 = parameter("fc1_bias", f1.bias());
+        fw2 = parameter("fc2_weight", f2.weight()); fb2 = parameter("fc2_bias", f2.bias());
+    }
+    Variable forward(const Variable& x) override {
+        auto h = max_pool2d(relu(conv2d(x, cw1, cb1, 1, 1)), 2, 2, 2);
+        h = max_pool2d(relu(conv2d(h, cw2, cb2, 1, 1)), 2, 2, 2);
+        h = reshape(h, h.value().shape()[0], 16*7*7);
+        h = relu(broadcast_add(matmul(h, fw1), fb1));
+        return broadcast_add(matmul(h, fw2), fb2);
+    }
+private:
+    Variable cw1, cb1, cw2, cb2, fw1, fb1, fw2, fb2;
+};
 
 int main(int argc, char** argv) {
     const std::string data_dir = (argc > 1 && argv[1][0] != '\0')
@@ -32,43 +59,19 @@ int main(int argc, char** argv) {
     std::cout << "loading MNIST from " << data_dir << "...\n";
     MnistData mnist = load_mnist(data_dir);
 
-    const int N_tr_full = static_cast<int>(mnist.train_images.rows());
-    const int N_te_full = static_cast<int>(mnist.test_images.rows());
+    const int N_tr_full = static_cast<int>(mnist.train_images.shape()[0]);
+    const int N_te_full = static_cast<int>(mnist.test_images.shape()[0]);
     const int N_tr = std::min(train_n, N_tr_full);
     const int N_te = std::min(test_n,  N_te_full);
 
-    Mat Xtr_full = mnist.train_images.topRows(N_tr);
-    Mat Ytr_full = mnist.train_labels.topRows(N_tr);
-    Mat Xte      = mnist.test_images.topRows(N_te);
-    Mat Yte      = mnist.test_labels.topRows(N_te);
+    Tensor Xtr_full = row_slice(Variable(mnist.train_images), 0, N_tr).value();
+    Tensor Ytr_full = row_slice(Variable(mnist.train_labels), 0, N_tr).value();
+    Tensor Xte = row_slice(Variable(mnist.test_images), 0, N_te).value();
+    Tensor Yte = row_slice(Variable(mnist.test_labels), 0, N_te).value();
     std::cout << "using " << N_tr << " train / " << N_te << " test images\n";
 
-    auto conv1 = std::make_shared<Conv2d>(1,  8, 3, 3, 1, 1);
-    auto conv2 = std::make_shared<Conv2d>(8, 16, 3, 3, 1, 1);
-    auto fc1   = std::make_shared<Linear>(16 * 7 * 7, 128);
-    auto fc2   = std::make_shared<Linear>(128, 10);
-
-    // Move each layer's own W/b to the GPU in place. Module::parameters()
-    // returns copies of the VarPtrs, so reassigning through that vector
-    // (e.g. `for (auto& p : net->parameters()) p = p->cuda();`) would not
-    // reach back into these layers' W/b members.
-    conv1->W = conv1->W->cuda(); conv1->b = conv1->b->cuda();
-    conv2->W = conv2->W->cuda(); conv2->b = conv2->b->cuda();
-    fc1->W   = fc1->W->cuda();   fc1->b   = fc1->b->cuda();
-    fc2->W   = fc2->W->cuda();   fc2->b   = fc2->b->cuda();
-
-    auto net = std::make_shared<Sequential>();
-    net->add(conv1);
-    net->add(std::make_shared<ReLUModule>());
-    net->add(std::make_shared<MaxPool2d>(2, 2));
-    net->add(conv2);
-    net->add(std::make_shared<ReLUModule>());
-    net->add(std::make_shared<MaxPool2d>(2, 2));
-    net->add(fc1);
-    net->add(std::make_shared<ReLUModule>());
-    net->add(fc2);
-
-    SGD opt(net->parameters(), lr);
+    auto net = std::make_shared<MnistModel>();
+    optim::SGD opt(net->parameters(), lr);
 
     auto t_start = std::chrono::steady_clock::now();
 
@@ -78,26 +81,33 @@ int main(int argc, char** argv) {
 
         for (int off = 0; off < N_tr; off += batch) {
             const int bs = std::min(batch, N_tr - off);
-            Mat xb = Xtr_full.middleRows(off, bs);
-            Mat yb = Ytr_full.middleRows(off, bs);
+            Tensor xb = row_slice(Variable(Xtr_full), off, bs).value();
+            Tensor yb = row_slice(Variable(Ytr_full), off, bs).value();
 
             opt.zero_grad();
 
-            auto xv = Var::make4d(xb, bs, 1, 28, 28)->cuda();
+            auto xv = Variable(xb.reshape(Shape{bs,1,28,28}).to(Device::cuda()));
             auto pred = net->forward(xv);  // (bs, 10) on CUDA
-            auto loss = cross_entropy(pred, yb);  // CUDA scalar (1x1)
+            auto loss = cross_entropy(pred, yb.to(Device::cuda()));  // CUDA scalar (1x1)
 
-            loss->backward();
+            loss.backward();
+            if (!all_finite(loss.value())) throw std::runtime_error("nonfinite loss");
+            const auto parameters = net->parameters();
+            for (const auto& p : parameters)
+                if (!p.has_grad() || !all_finite(p.grad())) throw std::runtime_error("nonfinite gradient");
             opt.step();
+            for (const auto& p : parameters)
+                if (!all_finite(p.value())) throw std::runtime_error("nonfinite update");
+            float loss_value = 0.f; loss.value().copy_to_host(&loss_value, 1);
 
             // cross_entropy stays on CUDA; pull the scalar back to host
             // only to print/log.
-            epoch_loss    += loss->cpu()->data(0, 0);
+            epoch_loss    += loss_value;
             ++epoch_batches;
         }
         const double avg = epoch_loss / std::max(1, epoch_batches);
         std::cout << "epoch " << epoch
-                  << "  loss=" << avg << "\n";
+                  << "  loss=" << avg << "  finite forward/backward/update OK\n";
     }
 
     // Test-set inference. We pull logits back to CPU once per batch
@@ -106,21 +116,25 @@ int main(int argc, char** argv) {
     const int eval_batch = 128;
     for (int off = 0; off < N_te; off += eval_batch) {
         const int bs = std::min(eval_batch, N_te - off);
-        Mat xb = Xte.middleRows(off, bs);
-        Mat yb = Yte.middleRows(off, bs);
+        Tensor xb = row_slice(Variable(Xte), off, bs).value();
+        Tensor yb = row_slice(Variable(Yte), off, bs).value();
 
-        auto xv = Var::make4d(xb, bs, 1, 28, 28)->cuda();
+        auto xv = Variable(xb.reshape(Shape{bs,1,28,28}).to(Device::cuda()));
         auto logits = net->forward(xv);  // (bs, 10) on CUDA
-        const Mat& sm = logits->cpu()->data;
+        if (!logits.device().is_cuda() || !all_finite(logits.value())) throw std::runtime_error("invalid CUDA evaluation");
+        std::vector<float> sm(logits.value().elements());
+        logits.value().copy_to_host(sm.data(), sm.size());
 
+        std::vector<float> labels(yb.elements());
+        yb.copy_to_host(labels.data(), labels.size());
         for (int i = 0; i < bs; ++i) {
             int pred_class = 0;
-            float best = sm(i, 0);
+            float best = sm[i*10];
             for (int c = 1; c < 10; ++c) {
-                if (sm(i, c) > best) { best = sm(i, c); pred_class = c; }
+                if (sm[i*10+c] > best) { best = sm[i*10+c]; pred_class = c; }
             }
             int true_class = 0;
-            for (int c = 0; c < 10; ++c) if (yb(i, c) > 0.5f) { true_class = c; break; }
+            for (int c = 0; c < 10; ++c) if (labels[i*10+c] > 0.5f) { true_class = c; break; }
             if (pred_class == true_class) ++correct;
         }
     }

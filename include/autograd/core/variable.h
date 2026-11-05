@@ -1,8 +1,7 @@
 #pragma once
 // Tensor-based autograd value handle.
 //
-// This transitional header is Eigen-free. It will become the canonical
-// autograd/variable.h after the legacy Var API is removed.
+// Existing core include paths remain supported and Eigen-free.
 
 #include "autograd/tensor.h"
 

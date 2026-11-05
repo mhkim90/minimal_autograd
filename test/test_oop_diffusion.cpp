@@ -27,7 +27,7 @@
 //     and on a zero-element shape.
 //   * Invalid argument paths.
 //   * Public-header hygiene: no Eigen / CUDA leakage from core/*.
-//   * Legacy + replacement namespace coexistence.
+//   * Replacement-only embedding shape and sin/cos values.
 
 #include "autograd/core/diffusion.h"
 #include "autograd/core/ops.h"
@@ -41,14 +41,6 @@
     defined(CUDA_VERSION) || defined(__CUDA_RUNTIME_H__)
 #error "Public diffusion/ops headers must not include CUDA runtime"
 #endif
-
-// The legacy umbrella is included AFTER the hygiene guards so the
-// guards verify that the replacement core/* headers do not leak
-// Eigen / CUDA into a clean public-API consumer TU. autograd.h
-// legitimately brings in Eigen; that is fine because it lives
-// behind a name alias for the legacy surface. Once included, the
-// coexistence test below exercises both namespaces in the same TU.
-#include "autograd.h"
 
 #include <cmath>
 #include <cstdint>
@@ -480,31 +472,14 @@ void test_q_sample_zero_element_shape() {
     report("ag::diffusion::q_sample zero-element shape (rank-3)");
 }
 
-// Legacy and replacement surfaces coexist in the same TU. This
-// helper is invoked from main() once the public-API tests have
-// already exercised the replacement. It includes the legacy umbrella
-// header and calls into both the legacy ag::sinusoidal_time_embedding
-// and the replacement ag::diffusion::sinusoidal_time_embedding. If
-// the namespaces collide, compilation of this TU would have failed
-// before reaching this point.
-static void test_legacy_and_replacement_coexist() {
-    {
-        // Legacy ag::sinusoidal_time_embedding: rank-2 (1, dim).
-        ag::VarPtr legacy_pe = ag::sinusoidal_time_embedding(
-            /*t=*/3, /*dim=*/8);
-        CHECK(legacy_pe->data.rows() == 1);
-        CHECK(legacy_pe->data.cols() == 8);
-        // Replacement ag::diffusion::sinusoidal_time_embedding: rank-1 (dim,).
-        ag::Tensor replacement_pe = ag::diffusion::sinusoidal_time_embedding(
-            /*t=*/3, /*dim=*/8);
-        CHECK((replacement_pe.shape() == ag::Shape{8}));
-        // Same value at the same position: legacy pe(0, 0) == sin(t),
-        // replacement pe[0] == sin(t).
-        CHECK(std::fabs(legacy_pe->data(0, 0) -
-                        read_values(replacement_pe)[0]) <= 1e-6f);
-    }
-    report("legacy ag::sinusoidal_time_embedding and "
-           "replacement ag::diffusion::sinusoidal_time_embedding coexist");
+// Replacement-only embedding checks; flat aliases are qualified after retirement.
+static void test_replacement_embedding_values() {
+    const ag::Tensor pe = ag::diffusion::sinusoidal_time_embedding(3, 8);
+    CHECK((pe.shape() == ag::Shape{8}));
+    const auto v = read_values(pe);
+    CHECK(std::fabs(v[0] - std::sin(3.f)) <= 1e-6f);
+    CHECK(std::fabs(v[4] - std::cos(3.f)) <= 1e-6f);
+    report("replacement embedding has rank1 shape and sin/cos values");
 }
 
 }  // namespace
@@ -534,7 +509,7 @@ int main() {
     test_q_sample_rank0_scalar();
     test_q_sample_zero_element_shape();
 
-    test_legacy_and_replacement_coexist();
+    test_replacement_embedding_values();
 
     std::printf("\nALL OOP DIFFUSION TESTS PASSED (%d)\n", passed);
     return 0;
