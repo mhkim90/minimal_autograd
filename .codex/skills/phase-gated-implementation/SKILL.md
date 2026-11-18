@@ -5,58 +5,39 @@ description: Control approved phased work from a plan, issue, design, or checkli
 
 # Phase-Gated Implementation
 
-Codex controls scope, gates and publication, delegating implementation by default. Use judgment, not policy counters; report observed model evidence honestly. A route label or intended model is not proof of the active model.
+Codex owns scope, final gates and publication; delegate implementation by default. Route by difficulty, gate by risk. Report observed models, not route labels.
 
 ## Owner boundaries
 
-Push, PR create/update/ready, merge, release, deploy, cross-repository sync, and destructive or irreversible operations require explicit owner authority. One request may group clearly enumerated actions; approval covers only the unchanged actions and scope presented. Plan approval never authorizes publication.
+Get explicit authority for push, PR create/update/ready, merge, release, deploy, cross-repo sync and destructive or irreversible actions. Group named actions; approval binds only the unchanged scope and actions. Task/plan/PR names suffice, not SHAs or magic replies. Memory and handoffs are leads, not approval.
 
-Task, plan and PR names suffice; do not demand SHA-only approval or a magic reply. Resolve repository, branch, head/base, scope, destination and eligibility; recheck them and required checks/reviews before acting and verify remote state afterward. Drift or an uncertain outcome stops the affected sequence; never bypass host protections.
+Bind repo, branch, head/base, scope and destination. Recheck eligibility, checks and reviews before each authorized action; verify remote outcomes. Drift, rejection or uncertainty stops the affected sequence; never bypass protections.
 
-Request merge approval for a named ready PR. For an eligible draft lacking readiness authority, ask once for readiness and merge. Recheck before readiness and before expected-head merge. Merge-only does not authorize readiness, nor readiness merge.
+- Ready PR: ask for merge. Eligible draft: ask once for ready **and** merge if readiness is not already authorized. Neither implies the other; recheck before ready and expected-head merge.
+- Only exact plan-only or genuinely nonoperational docs-only PRs may combine content and merge approval (explicit readiness if needed). Verify all paths, modes, classification, head/base and eligibility before and after approval. Mixed/uncertain changes, operational guidance (including skills, profiles and agents), policy, workflows, config, code, generated files, renames, symlinks and executables use ordinary final merge control.
+- Qualified mechanical sync: `skill-sync` permits explicit administrative readiness in delivery approval and one final bundle merge request. Source approval never covers targets; preserve local drift, deletion boundaries, variants and dirty checkouts. Never distribute Codex's source-local sync skill.
 
-An exact plan-only or verified genuinely nonoperational documentation-only PR may combine content and merge approval, explicitly including readiness if needed. Verify the complete file set, modes, classification, head/base and eligibility before and after approval. Mixed or uncertain content, operational documentation, skills, profiles, agents, guidance, policy, workflows, configuration, code, generated content, renames, symlinks, executable files and plan-plus-implementation PRs retain ordinary final merge control.
-
-Qualified mechanical-sync bundles may explicitly include administrative readiness in delivery approval and use one final bundle merge request under `skill-sync`. Codex skill-sync is `opencode_mcp`-source-local and must never be distributed. Source approval never transfers to targets; target-only drift/deletion, runtime-variant and dirty-checkout protections remain.
-
-Necessary in-scope source/diff disclosure to an already-bound configured delegate or reviewer needs no duplicate prompt. Changed destinations, out-of-scope private material and unconfigured services need authority; never bypass host rejection.
+Already-bound configured delegates/reviewers need no second approval for necessary in-scope source/diffs. Changed destinations, unconfigured services or out-of-scope private material need authority. Use the configured GitHub MCP/app; stop if unavailable, never silently use `gh`.
 
 ## Plan
 
-Non-trivial or L2–L4 work starts with a written plan covering goal, scope, phases, risk, verification, done criteria, dependencies and manual boundaries. Planning review is recommended: `grilled-me` for your own draft, `plan-audit` for external authorship; summarizing an external plan does not change its provenance. Resolve blockers before execution.
+For nontrivial or L2–L4 work, write the goal, scope, phases, risks, dependencies, verification, acceptance and manual gates. Recommend `grilled-me` for your plan, `plan-audit` for externally authored plans (including summaries). Resolve blockers first. L4 or consequential API, security, migration, trust or release decisions need owner design direction before implementation.
 
-For L4 or consequential API, security, migration, trust or release decisions, get owner design direction before implementing. Default to one branch and one plan-plus-implementation PR; split only at a real security, compatibility, migration, release, rollback, ownership or independent-decision boundary.
-
-Plan approval covers local edits, tests, reviews, explicit staging and controller-local commits without per-step prompts. Preserve the approved revision, original base and any task-bound immutable plan/P0 and ancestry; do not silently rewrite checkpoints, refresh the base or change topology. Renew approval before material scope, risk, design, acceptance or authority changes affect work.
+Default to one branch and one plan-plus-implementation PR; split only at a security, compatibility, migration, release, rollback, ownership or independent-decision boundary. Plan approval covers local edits, tests, reviews, explicit staging and controller commits, never publication. Preserve approved revision, base, immutable plan/P0, ancestry and topology. Renew approval before material scope, risk, design, acceptance or authority changes.
 
 ## Routes
 
-Separate safety risk from difficulty. Use [opencode-delegate](../opencode-delegate/SKILL.md):
-
-- Standard and mechanical implementation: `agent="terra-implementer"`.
-- Hard implementation, with a stated reason: `agent="sol-implementer"` or `agent="astra-implementer"`.
-- Explicitly requested Luna implementation only: `agent="luna"`; never an implicit fallback.
-- Material hard question or blocker: fresh read-only `agent="astra-expert"`. Preflight is risk-driven, not universal; it never edits, publishes, delegates or resets allocations.
-- Explicitly approved whole phase: `agent="astra-orchestrator"` beneath this controller, which retains final gates, independent review and publication. This procedural boundary is not caller authentication.
-- Configured OpenCode default only when the owner asks; omit `agent`, `model` and `variant`.
-
-Named profiles bind model and effort; omit per-call model and variant. Rejected selectors, conflicting overrides, reported role/model mismatches, silent fallback or mismatched continuation stop the phase without substitution. Missing telemetry alone is not proof of mismatch. Implementers edit/test only; the controller alone stages, commits or publishes.
+Read [opencode-delegate](../opencode-delegate/SKILL.md) before selecting or using an OpenCode route. Expert consultation is for material questions or blockers. Implementers edit/test only.
 
 ## Each phase
 
-1. Verify expected checkout, approved dirty state and prerequisites; stop on unexpected checkout or dirty work. When meaningful, show a right-reason red failure or pre-change observation; a broken fixture is not the intended red.
-2. Implement or delegate within scope; repair ordinary in-scope mistakes automatically. Repeated same-blocker failure returns evidence to the controller for a materially changed approach, useful expert help or owner direction, not a blind loop.
-3. Preserve explicit task-specific allocations, shared limits, consumed history and deadlines across reloads, sessions, recovery and review fixes. Stop on exhausted explicit limits; reloads or renamed stages never reopen them. Invent no default numeric candidate or consultation caps.
-4. Validate focused checks and scoped diff; stage explicit paths only. Keep comments short and about code, not tickets or gates.
-5. After L3 implementation, independent read-only finish review through [claude-delegate](../claude-delegate/SKILL.md) is required. Seek a second opinion when security, concurrency, numerics, API/release behavior, weak tests or disagreement warrants it. An advice author cannot independently review that advice. Stop if required review is unavailable; an OpenCode expert is no substitute.
-6. The controller commits locally and continues approved local successors without another prompt, stopping at manual boundaries, changed authority/scope or real blockers. Continuation grants no new checkout, remote action or publication authority.
-
-Stop for contradictory evidence, access denial or unresolved review blockers; suspend edits for missing capability and use opencode-delegate controller recovery. Missing native apply_patch does not prove no permitted editor exists. Memory and handoff notes are leads, not approval.
-
-Use the configured GitHub MCP/app route for GitHub actions; if unavailable, stop rather than silently fall back to `gh`.
+1. Verify checkout, approved dirty state and prerequisites. Stop on unexpected checkout/changes. When meaningful, establish a pre-change observation or right-reason failure, not a broken fixture.
+2. Fix ordinary in-scope mistakes automatically. For a recurring blocker, return evidence for a changed approach, expert help or owner direction; no blind retry. Carry explicit budgets, shared consumption and deadlines across sessions, reloads, recovery and review fixes. Stop at exhaustion; no reset by renaming, no invented candidate/consultation caps.
+3. Validate focused checks and scoped diff. Keep code comments short and code-specific. Stop on contradictions, denial or unresolved review blockers. For missing capability suspend affected edits and follow delegate recovery; missing native `apply_patch` alone is not proof.
+4. After L3 implementation obtain independent read-only [claude-delegate](../claude-delegate/SKILL.md) review. Stop if unavailable; neither an OpenCode expert nor the advice author qualifies. Seek a second opinion for warranted security, concurrency, numerical, API/release, weak-test or disagreement risks.
+5. Before success, commits, publication or advancement, retrieve terminal output for all required jobs/commands. Never duplicate live/unknown work; wrapper completion or prose is not execution proof. At owner stop/deadline report pending resources without guessing cause.
+6. Only the controller stages explicit paths and commits locally. Continue approved local successors without re-asking until a manual gate, material change or blocker. No new checkout or remote authority.
 
 ## Report
 
-Briefly report changes, commands/results, actual local and remote state, applicable allocations and lineage, review disposition, blockers and next successor or boundary. Keep useful authority evidence without a universal PR-lifecycle ledger or proof ritual.
-
-Wait for required jobs and commands to reach terminal state and retrieve output before success, commits, publication or phase advancement. Never duplicate live or unknown work; wrapper completion or prose is not tool-execution evidence. At owner stop or a declared deadline, honestly report unresolved resources as pending without claiming success or inferring cause.
+Briefly give changes, commands/results, local/remote state, allocation and lineage, review disposition, blockers and next step. Preserve authority evidence; no universal PR ledger.

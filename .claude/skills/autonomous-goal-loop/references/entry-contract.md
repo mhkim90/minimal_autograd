@@ -1,8 +1,14 @@
-# Entry Contract
+# Entry Contract — future policy only
 
-Read before approving unattended entry, changing entry or iteration-start code,
-or explaining an entry refusal. The parent skill retains its repository-local
-runtime status, authority, budgets, and stop rules; this extraction changes none.
+Historical design note: statements about absent artifacts describe the specification-only checkout, not the pinned external P4 implementation. For current Evidence eligibility use the [skill entry point](../SKILL.md); this note grants no authority to run or recover anything.
+
+The specification-only checkout lacked the runtime, parser fixtures and
+recovery tests. It therefore refused even probes and charter/ledger operations;
+owner approval alone could not make it runnable. For the pinned external P4
+runtime, the [current admission gate](../SKILL.md#admit-a-run) governs read-only
+verification and dispatch. The design constraints below grant no authority.
+
+Read before separately authorized unattended entry approval, entry or iteration-start changes, or explaining an entry refusal. This note never grants authority to bootstrap a charter.
 
 ## Unattended entry conditions
 
@@ -53,7 +59,7 @@ runtime status, authority, budgets, and stop rules; this extraction changes none
   subject (tracked-tree/source drift), but does not isolate or roll them back;
   only approval-owned durable state is absent after refusal.
 
-## Iteration start (step 1 in full)
+## Iteration start (step 1 in full; not executable here)
 
 1. Take the lease. Immediately after locked-FD identity/anchor validation,
    verify runtime identity, then the exact source manifest and all digests.

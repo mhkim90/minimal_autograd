@@ -1,4 +1,4 @@
 interface:
   display_name: "Caveman"
   short_description: "Ultra-compressed technical communication"
-  default_prompt: "Use  to answer with ultra-compressed technical prose."
+  default_prompt: "Use $caveman to answer with ultra-compressed technical prose."

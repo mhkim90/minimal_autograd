@@ -5,102 +5,26 @@ description: Audit an externally authored implementation plan before execution. 
 
 # Plan Audit
 
-Find the smallest repairs that make an externally authored plan
-executable, and produce a structured handoff for
-`phase-gated-implementation`. Read-only: do not edit the plan, approve
-proposed boundaries, begin implementation, or silently fill consequential
-gaps.
+Audit an external plan once per material revision; do not loop with `grilled-me`. This is a read-only preflight, not approval, implementation or permission to edit. Report consequential gaps rather than inventing scope or gates. Proposed globs, risk levels and sequencing remain drafts until approved; audit output alone never advances a phase.
 
-It is a one-time preflight per artifact revision, not a per-phase review
-and not a loop with `grilled-me`. Implementation starts only after
-blocking findings are resolved and the owner approves any required phase
-boundaries and gates.
+## Establish the audited revision
 
-## Authority Boundary
+Identify the artifact, source, revision (when available) and authoritative constraints. Without a stable revision, bind findings to the visible conversation content. Re-audit material changes to scope, contracts, sequencing, acceptance, risk, rollback or strategy, not editorial changes.
 
-The audit reports evidence and proposes repairs. It does not authorize them.
+## Audit procedure
 
-- Candidate scope globs are drafts until explicitly approved by the user or
-  repository owner.
-- Candidate gates, sequencing changes, and risk levels are also drafts.
-- Unapproved audit output must not enable automatic phase continuation.
-- If the plan lacks enough information to define a narrow boundary or
-  falsifiable gate, report the gap instead of inventing a broad substitute.
-- Do not modify the audited artifact unless the user separately requests an
-  edit.
+Before evaluating, read the [audit procedure](references/audit-procedure.md). Apply relevant checks and mark others not applicable. Stop and clarify ambiguous artifact identity, conflicting authority, unclear outcomes/contracts, destructive or irreversible steps without approved rollback, unbounded scope, wrong-reason gates or missing evidence, credentials, tools or human authority.
 
-## Establish the Audited Revision
+## Severity and disposition
 
-Before reviewing, identify:
-
-- artifact title and path, URL, issue, PR, or conversation reference;
-- revision, commit, blob, version, or other stable identifier when available;
-- how the content was obtained;
-- related artifacts that are authoritative for scope or constraints.
-
-If no stable revision exists, state that the audit applies only to the content
-visible in the current conversation.
-
-Treat the audit as stale when a later revision materially changes scope,
-contracts, sequencing, acceptance criteria, risk, rollback, or implementation
-strategy. Editorial changes alone do not require a new audit.
-
-## Audit Procedure
-
-Read [`references/audit-procedure.md`](references/audit-procedure.md)
-immediately before evaluating the plan. Apply all applicable checks and mark
-irrelevant checks as not applicable.
-
-## Severity and Disposition
-
-Order findings by severity:
-
-- **Critical**: implementation would be unsafe, destructive, or directed at the
-  wrong outcome.
-- **Major**: a phase cannot be executed or verified as written.
-- **Moderate**: the plan is executable only with a manual gate, narrower scope,
-  or clarified contract.
-- **Minor**: useful precision or maintainability improvement that can be
-  handled later.
-
-For each finding include:
-
-- evidence or exact plan location;
-- what breaks and when;
-- affected phase;
-- smallest adequate repair;
-- disposition: blocking before a named phase, manual-gate required, or
-  non-blocking follow-up.
-
-Praise only load-bearing strengths: constraints or decisions that materially
-reduce risk.
+Order findings by severity: **critical** (unsafe, destructive or wrong outcome), **major** (phase cannot run or be verified), **moderate** (requires a manual gate, narrower scope or clarified contract), **minor** (deferrable precision or maintainability). Give the smallest adequate repair; distinguish blockers before a named phase, manual gates and nonblocking follow-up.
 
 ## Verdict
 
-Use exactly one:
+Choose one:
 
-- `ready`: no blocking findings; proposed boundaries and gates still require
-  approval if the plan did not already contain approved ones.
-- `ready-with-manual-gates`: execution may begin, but named phases must stop for
-  a human decision or because a predicate is not mechanically decidable.
-- `blocked`: implementation must not begin, or must stop before the named
-  phase, until blocking findings are resolved.
+- `ready`: no blockers; newly proposed boundaries and gates still need approval.
+- `ready-with-manual-gates`: execution may begin within existing authority, stopping at named human decisions or predicates that cannot be checked mechanically.
+- `blocked`: do not begin the affected phase until its blockers are resolved.
 
-## Output Format
-
-Read [`references/output-format.md`](references/output-format.md) immediately
-before writing findings or the phase-gate handoff.
-
-## Stop Rules
-
-Stop and request clarification rather than guessing when:
-
-- the artifact or authoritative revision cannot be identified;
-- two sources of truth conflict;
-- the intended outcome or externally visible contract is ambiguous;
-- a destructive or irreversible step lacks an approved rollback;
-- scope cannot be bounded narrowly enough to detect drift;
-- a phase gate cannot distinguish the intended change from a wrong-reason
-  result;
-- the plan depends on unavailable evidence, credentials, tooling, or human
-  authority.
+Before writing findings and the phase-gate handoff, read the [output format](references/output-format.md) for the required evidence, fields and owner decisions. Resolve blocking findings and obtain required owner approvals before implementation.
