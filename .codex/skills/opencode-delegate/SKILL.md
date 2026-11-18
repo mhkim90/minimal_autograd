@@ -58,6 +58,8 @@ Fix routine in-scope path typos, malformed patches and fixtures without ceremony
 
 Repeated same-blocker failure returns evidence to the controller for a materially revised approach, useful expert help or owner direction, not a blind loop. Keep one bounded phase/subphase per same-role session and end at its acceptance milestone; preparation RED is not implementation GREEN.
 
+For approved host-side Nsight profiling, the controller captures and converts on the host, then passes verified report/SQLite outputs to the confined delegate for analysis. Use repository-local profiling notes when available. Host conversion of a sandbox capture is not equivalent; delegates never disable the sandbox or widen permissions.
+
 Honor explicit task-specific limits, shared allocations, consumed history and deadlines across reloads, recovery and review fixes. No default numeric interactive candidate or consultation cap applies. Count honestly where an explicit allocation requires it; renamed stages, sessions or roles never reopen exhausted limits. A separately approved successor inherits only limits that bind it.
 
 ## Waiting and reporting

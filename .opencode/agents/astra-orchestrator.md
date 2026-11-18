@@ -1,7 +1,7 @@
 ---
-description: Controller-bound GPT-6 Astra planning and gate recommendation.
+description: Controller-bound GPT-6.2 Astra planning and gate recommendation.
 mode: all
-model: openai/gpt-6-astra#high
+model: openai/gpt-6.2-astra#high
 steps: 20
 permission:
   external_directory: deny
