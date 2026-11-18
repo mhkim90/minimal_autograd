@@ -32,13 +32,13 @@ Before target writes:
 - Validate `git diff --check`, trusted `quick_validate.py` for each copied skill, relative links and exact manifest scope. Failed validation or unresolved required review blocks delivery; never substitute an untrusted target validator.
 - Use local Git for local inspection and authorized local work; stage explicit paths only. Use the repository's authorized GitHub route (GitHub MCP/app or authenticated `gh`). A workflow specifically requiring GitHub MCP permits no silent fallback. Neither route grants publication authority or expands a read-only reviewer's permissions.
 
-For source changes, follow `phase-gated-implementation`: normally one plan-plus-implementation PR, with approved local phases/reviews/controller commits covered by plan approval. Pure target copying skips source implementation, not target preflight. Explicitly authorized local-only preparation stops locally and reports unpublished state; do not invent a remote branch or PR.
+For source changes, follow [phase-gated-implementation](../phase-gated-implementation/SKILL.md) for planning, local work and PR gates. Pure copies skip source implementation, not target preflight. Local-only preparation ends unpublished: no remote branch or PR.
 
 ## Approval
 
-A scoped delivery request may group named copy, validation, commit, push and PR actions. Resolve source revision, configured destination, target, base, worktree/branch, exact payload, metadata and actions before requesting approval. Task/plan/PR names suffice; the controller resolves concrete revisions. No SHA-only approval or duplicate disclosure prompt for already-bound in-scope payloads. Local or source authority never implicitly authorizes target publication, readiness or merge.
+One delivery approval may group named copy, validation, commit, push and PR actions. Before asking, bind source revision, destination, target/base, worktree/branch, payload, metadata and actions. Names suffice for the owner; the controller resolves revisions. No duplicate disclosure prompt for an already-bound payload. Source or local approval never implies target publication, readiness or merge.
 
-For an eligible draft lacking readiness authority, one explicit request may cover marking the named PR ready and merging it; request merge approval for an already-ready PR. Merge-only never implies readiness. Recheck scope, head/base, eligibility and required checks/reviews before readiness and before expected-head merge. Drift invalidates affected approval; never bypass protections. Eligible exact plan-only or genuinely nonoperational documentation-only content may use the combined content-and-merge route in `phase-gated-implementation`; skills, profiles, policy, mixed, uncertain or operational content do not qualify.
+For ordinary PRs, apply the [owner boundaries](../phase-gated-implementation/SKILL.md#owner-boundaries) before readiness and expected-head merge. Ask once for both when needed; neither approval implies the other. Drift invalidates affected approval. Skills and policy are operational, not documentation-only exceptions.
 
 ### Qualified mechanical shared-skill bundle
 

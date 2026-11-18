@@ -5,67 +5,48 @@ description: Delegate approved work through OpenCode MCP. Use Terra by default, 
 
 # OpenCode Delegate
 
-Use `mcp__opencode__opencode_run_async` for non-trivial work, blocking calls only for known-short work. Delegate execution, iteration and long test runs, not ambiguous design decisions or single commands.
+Use `mcp__opencode__opencode_run_async` for substantive execution, iteration and long tests; block only for known-short work. Don't delegate single commands or ambiguous design decisions.
 
 ## Boundary
 
-OpenCode MCP has no selectable `cwd`; explicit-cwd tools cannot widen the caller-directory boundary. External paths, including arbitrary `/tmp` worktrees, remain denied. Controller and target repositories may differ; approved contained checkouts need no repeat approval. This grants no checkout, clone, edit or publication authority.
+No selectable `cwd`. Even explicit-cwd tools cannot escape the caller directory (including to `/tmp`). Approved contained checkouts, including other repos, need no repeat approval; containment authorizes no checkout, clone, edit or publication. A requested configured delegate may receive necessary in-scope source/diffs. Changed destinations, unconfigured services, out-of-scope private material, destructive acts and publication need separate authority.
 
-Explicitly requesting a configured delegate authorizes necessary in-scope source/diff disclosure to it without a duplicate prompt. Changed destinations, out-of-scope private material, unconfigured services, destructive actions and publication retain their own authority requirements.
+Before editing, verify checkout and needed capabilities **inside the delegate**. Containment doesn't guarantee linked/common Git metadata access. No universal marker/hash test. Missing native `apply_patch`? Discover an existing permitted shell editor and verify the authorized edit; no installs, probe writes or wider permissions.
 
-Before editing, confirm expected checkout and task-relevant capabilities using tools actually available to the delegate. Contained worktrees may depend on inaccessible linked/common Git metadata; controller visibility does not prove delegate access. Check what the task needs, not a universal marker/hash ritual.
+- **Unavailable capability:** suspend affected edits. A reported absence isn't observed failure or denial; wrapper/prose/JSON isn't native execution evidence. After terminal output and scoped state/diff checks, only the controller may start a fresh same-role session under unchanged authority. Preserve pending effects, provenance, history and limits; reverify capabilities. No repeat approval, blind replay or scope/model switch. Repeated unavailability stops for diagnosis.
+- **Denied access:** stop affected work; never relaunch to evade denial or copy/redirect Git metadata via git-dir, work-tree or symlinks. Only after metadata denial may the owner separately authorize an independent clone. Bind its source/ref/revision, destination, task branch and allowed scope/actions. Preserve dirty originals and plan/P0 provenance; reverify capabilities. Never substitute automatically.
 
-Missing native `apply_patch` does not prove editing impossible: discover an existing permitted shell editor rather than assuming tool names, and verify an authorized edit. Do not install tools, widen permissions or invent probe writes.
-
-Reported absence is not observed failure or denial; wrapper/prose/JSON is not native execution proof. Suspend affected edits. After terminal result retrieval and scoped state/diff checks, controller recovery may use a fresh same-role session within existing authorization, preserving pending work/effects, history, limits and provenance and verifying capabilities. Unchanged local recovery needs no repeat approval. No delegate self-relaunch, model/scope switch, denial workaround or blind replay; repeated unavailability stops for diagnosis.
-
-Access denial stops affected work. For denied Git metadata, do not copy or redirect metadata, change git-dir/work-tree or symlinks, widen permissions or relaunch to evade controls. Only after that failure may a separately owner-approved independent clone be used: bind source/ref/revision, destination, task branch, scope and actions; preserve original dirty work and plan/P0 provenance and reverify capabilities. Never create or substitute it automatically.
-
-Implementers edit and test only: no planning, review, staging, commits, pushes, PR actions, further delegation, subagents or publication. The explicitly approved controller-bound orchestrator is a planning/gate-recommendation exception, not an editor or publisher. Permissions are guardrails, not scope or a complete sandbox. Never access or expose credentials or secrets.
+Implementers only edit/test: no planning, review, staging, commit, publication, PRs or subdelegation. Permissions aren't authorization or a complete sandbox. Never access/expose secrets or credentials.
 
 ## Routes
 
 - Standard and mechanical work: `agent="terra-implementer"`.
-- Hard implementation, with a stated reason: `agent="sol-implementer"` or `agent="astra-implementer"`.
-- Explicitly requested Luna implementation only: `agent="luna"`; never an implicit fallback.
-- Hard question or blocker: fresh read-only `agent="astra-expert"`. Return findings, proposed approach, acceptance gate and stop/go. Inspect only evidence needed for the decision; stop if evidence is missing or further inspection cannot make meaningful progress. Never edit, delegate, publish or review its own advice.
-- Explicitly approved whole phase: `agent="astra-orchestrator"` beneath an external Codex/Claude controller retaining final gates, independent review and publication.
-- Configured default only when the owner asks: omit `agent`, `model` and `variant`.
+- Hard implementation, with justification: `agent="sol-implementer"` or `agent="astra-implementer"`.
+- Explicitly requested Luna only: `agent="luna"`; never an implicit fallback.
+- Hard question/blocker: fresh read-only `agent="astra-expert"`. Inspect only decision-relevant evidence; return findings, approach, acceptance gate and stop/go. Stop on missing evidence or no meaningful progress. No edits, publication, delegation, allocation resets or self-review.
+- Explicitly approved whole phase: `agent="astra-orchestrator"` advises on plans/gates only. The external controller retains gates, independent review and publication; this is not caller authentication.
+- Owner-requested configured default: omit `agent`, `model`, `variant`.
 
-Named agents bind exact model and high effort; omit model and variant on calls, continuations and forks. Rejected selectors, conflicting overrides, reported role/model mismatches, fallback or broken session lineage stop the phase without substitution. Record requested route, job/session lineage and observed model when available. Missing model/usage telemetry alone after an honored selector and terminal requested-role response is an observability warning, not proof of mismatch.
+Named profiles pin model and high effort: omit model/variant on launches, continuations and forks. On selector rejection, conflicting overrides, reported role/model mismatch, fallback or broken lineage, stop the phase without substitution. Record requested route, job/session and observed model if available. Missing telemetry alone after a terminal response honoring the selector is not a mismatch.
 
-Expert preflight is risk-driven, not universal. Independent review uses the runtime reviewer skill, not an implementation agent. L3 independent finish review remains required through `codex-delegate` for a Claude controller or `claude-delegate` for a Codex controller; expert advice never replaces it.
+Use expert preflight by risk. For phase approvals and finish review read [phase-gated-implementation](../phase-gated-implementation/SKILL.md); L3 requires the independent runtime reviewer (`codex-delegate` for Claude, `claude-delegate` for Codex), never an implementer or expert.
 
 ## Prompt
 
-Give a cold, self-contained task:
-
-```text
-Context: project, one bounded phase, relevant files and prior evidence
-Task: approved change or run loop
-Checkout: expected worktree, approved dirty state, governing plan
-Scope: allowed paths/actions; no stage/commit/publish/delegation
-Red and done: right-reason pre-change signal, focused checks and acceptance
-Limits: task-specific limits/deadline and approved recovery, if any
-Return: changed files, commands/results, blockers, job/session and observed route
-```
-
-Do not invent default allocations or extra approval gates. For Astra expert, provide one focused question, relevant diff/test evidence, expected evidence and meaningful progress/stop conditions. Read-only experts need authorized read capability, not an editor gate.
+Give one self-contained phase/subphase per same-role session: outcome, plan, checkout/dirty state, allowed paths/actions, relevant evidence, meaningful pre-change signal, checks, acceptance/stop criteria, limits and authorized recovery. For experts, give one question, diff/test evidence and evidence needed to decide; verify read access, not editing.
 
 ## Failures and bounded lifecycle
 
-Fix routine in-scope path typos, malformed patches and fixtures without ceremony within unchanged scope, acceptance and remaining allocation. An incidental typo in an intended approved path is not authoritative checkout drift; never search outside scope to repair a guess or call a broken fixture the intended red gate.
+Fix ordinary typos, patches and fixtures within scope, acceptance and budget. A path typo isn't checkout drift; don't search outside scope. A broken fixture isn't valid RED; preparation RED isn't implementation GREEN. End at acceptance. Return recurring blockers with evidence for a changed approach, expert help or owner direction.
 
-Repeated same-blocker failure returns evidence to the controller for a materially revised approach, useful expert help or owner direction, not a blind loop. Keep one bounded phase/subphase per same-role session and end at its acceptance milestone; preparation RED is not implementation GREEN.
+Carry explicit shared limits, consumption and deadlines across sessions, roles, reloads, recovery and review fixes. Stop at exhaustion; renamed stages don't reset budgets. Successors inherit only binding limits. Invent no caps or approval gates.
 
-For approved host-side Nsight profiling, the controller captures and converts on the host, then passes verified report/SQLite outputs to the confined delegate for analysis. Use repository-local profiling notes when available. Host conversion of a sandbox capture is not equivalent; delegates never disable the sandbox or widen permissions.
-
-Honor explicit task-specific limits, shared allocations, consumed history and deadlines across reloads, recovery and review fixes. No default numeric interactive candidate or consultation cap applies. Count honestly where an explicit allocation requires it; renamed stages, sessions or roles never reopen exhausted limits. A separately approved successor inherits only limits that bind it.
+For approved Nsight profiling, the controller captures **and converts on the host**; the confined delegate analyzes verified report/SQLite outputs. Follow local profiling notes if available. Host conversion of a sandbox capture is not equivalent; never disable the sandbox or widen permissions.
 
 ## Waiting and reporting
 
-Declare realistic task-specific checkpoints, maximum wait and synthesis time within any overall deadline. Track required job/command IDs and statuses, separating actual launch-to-terminal time from controller/owner wait. Poll the same job to terminal and retrieve output before a verdict or gate. Advancing events can show progress without partial text; `running` alone is liveness, not failure or no-progress evidence.
+Set checkpoints, maximum wait and synthesis time within any overall deadline. Track required job/command IDs and status; separate runtime from controller/owner wait. Poll the same job to terminal and retrieve output before a verdict, commit, publication or phase advancement. Events without text may show progress; `running` proves only liveness.
 
-Never duplicate or silently abandon live/unknown work. Cancel only for a stated error, owner/controller stop or declared deadline procedure. A cancellation request is not terminal proof: confirm terminal state and retrieve output before any authorized replacement. Required live/unknown resources block success, commits, publication and phase advancement. At owner stop or hard deadline, honestly report each pending resource, retrieval state and next decision.
+Never duplicate or silently abandon live/unknown work. Cancel only for a stated error, owner/controller stop or declared deadline procedure. Confirm terminal state and retrieve output before authorized replacement. At owner stop/hard deadline report each pending resource, retrieval state and next decision.
 
-Return concise changes, commands/results, applicable allocation history, lineage and blockers. Report authorized invocation/exit/readback evidence, not private provider logs or fabricated usage. Usage is observational, never a quality gate; do not revive `usage_mcp`. Cross-repository delivery follows `skill-sync`; Claude remains approved-manifest based, while the Codex skill is `opencode_mcp`-source-local and never distributed. Follow the repository's authorized GitHub route; workflows specifically requiring MCP/app never silently fall back to `gh`.
+Return changed files, commands/results, allocation history, lineage and blockers. Use authorized invocation/exit/readback evidence, never private logs or fabricated usage. Usage is observational; no quality gate or `usage_mcp`. Cross-repo delivery follows `skill-sync`; never distribute the Codex source-local skill. Claude uses the approved manifest. Use the repository-authorized GitHub route. Where MCP/app is required, never silently use `gh`; reviewers remain read-only.
