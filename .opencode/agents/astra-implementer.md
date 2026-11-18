@@ -1,7 +1,7 @@
 ---
-description: Bounded GPT-6 Astra implementer for justified hard tasks.
+description: Bounded GPT-6.2 Astra implementer for justified hard tasks.
 mode: all
-model: openai/gpt-6-astra#high
+model: openai/gpt-6.2-astra#high
 steps: 60
 permission:
   external_directory: deny

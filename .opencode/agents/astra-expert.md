@@ -1,7 +1,7 @@
 ---
 description: Bounded read-only Astra expert for named correctness and safety questions.
 mode: all
-model: openai/gpt-6-astra#high
+model: openai/gpt-6.2-astra#high
 steps: 20
 permission:
   external_directory: deny
