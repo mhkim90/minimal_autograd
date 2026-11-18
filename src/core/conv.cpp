@@ -150,13 +150,14 @@ Variable conv2d(const Variable& input,
 
     validate_bias(bias.value(), OC, "ag::conv2d");
 
-    Tensor saved_col;
-    Tensor out = detail::tensor_conv2d_nchw_forward(
-        input.value(), weight.value(), bias.value(), stride, pad, saved_col);
-
     const bool any_requires_grad =
         input.requires_grad() || weight.requires_grad() ||
         bias.requires_grad();
+    Tensor saved_col;
+    Tensor out = detail::tensor_conv2d_nchw_forward(
+        input.value(), weight.value(), bias.value(), stride, pad,
+        any_requires_grad, saved_col);
+
     auto node = std::make_shared<detail::VariableNode>(
         std::move(out), any_requires_grad);
     if (any_requires_grad) {

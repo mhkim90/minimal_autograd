@@ -7,6 +7,7 @@ Tensor tensor_conv2d_nchw_forward(const Tensor& input,
                                   const Tensor& weight,
                                   const Tensor& bias,
                                   int stride, int pad,
+                                  bool /*save_col*/,
                                   Tensor& saved_col) {
     return cpu_ops::tensor_conv2d_nchw_forward(
         input, weight, bias, stride, pad, saved_col);

@@ -1642,17 +1642,72 @@ void test_oop_optimizer_unsupported_cuda_constructs_reject() {
     report("Tensor CUDA: optim::Adam hyperparameter validation rejects invalid values");
 }
 
-void test_oop_conv2d_cuda_inputs() {
-    Variable input(Tensor::ones(Shape{1, 1, 4, 4}, Device::cuda(0)), true);
-    Variable weight(Tensor::ones(Shape{1, 1, 3, 3}, Device::cuda(0)), true);
-    Variable bias(Tensor::zeros(Shape{1}, Device::cuda(0)), true);
-    Variable out = ag::conv2d(input, weight, bias, 1, 0);
-    CHECK(out.value().device().is_cuda());
-    out.backward(Tensor::ones(out.value().shape(), Device::cuda(0)));
-    CHECK(input.grad().device().is_cuda());
-    CHECK(weight.grad().device().is_cuda());
-    CHECK(bias.grad().device().is_cuda());
-    report("Tensor CUDA: ag::conv2d supports CUDA inputs and gradients");
+void test_oop_conv2d_cuda_grad_masks() {
+    const Device device = Device::cuda(0);
+    const Shape output_shape{2, 3, 3, 3};
+    const auto fixture = [](const Shape& shape, int step) {
+        std::vector<float> data(shape.numel());
+        for (std::size_t i = 0; i < data.size(); ++i) {
+            data[i] = (static_cast<int>((i * step) % 17) - 8) / 11.f;
+        }
+        return Tensor::from_host(data.data(), shape);
+    };
+    const auto values = [](const Tensor& tensor) {
+        std::vector<float> data(tensor.elements());
+        read_host(tensor, data.data());
+        return data;
+    };
+    const std::array<Tensor, 3> cpu_values{
+        fixture(Shape{2, 2, 5, 4}, 5), fixture(Shape{3, 2, 3, 2}, 7),
+        fixture(Shape{3}, 4),
+    };
+    const std::array<Tensor, 3> cuda_values{
+        cpu_values[0].to(device), cpu_values[1].to(device),
+        cpu_values[2].to(device),
+    };
+    std::array<Variable, 3> cpu{
+        Variable(cpu_values[0], true), Variable(cpu_values[1], true),
+        Variable(cpu_values[2], true),
+    };
+    Variable reference = ag::conv2d(cpu[0], cpu[1], cpu[2], 2, 1);
+    CHECK(reference.value().shape() == output_shape);
+    const auto expected = values(reference.value());
+    const Tensor upstream = fixture(output_shape, 3);
+    reference.backward(upstream);
+    const Tensor cuda_upstream = upstream.to(device);
+
+    std::vector<float> inference;
+    for (int mask = 0; mask < 8; ++mask) {
+        std::array<Variable, 3> args{
+            Variable(cuda_values[0], (mask & 1) != 0),
+            Variable(cuda_values[1], (mask & 2) != 0),
+            Variable(cuda_values[2], (mask & 4) != 0),
+        };
+        Variable out = ag::conv2d(args[0], args[1], args[2], 2, 1);
+        CHECK(out.value().device() == device);
+        CHECK(out.value().shape() == output_shape);
+        CHECK(out.requires_grad() == (mask != 0));
+        const auto actual = values(out.value());
+        check_close(actual, expected, 5e-5f);
+        if (mask == 0) {
+            inference = actual;
+            CHECK_THROWS_AS(std::runtime_error, out.backward(cuda_upstream));
+            CHECK(!out.has_grad());
+        } else {
+            check_close(actual, inference, 0.f);
+            out.backward(cuda_upstream);
+        }
+        for (std::size_t i = 0; i < args.size(); ++i) {
+            const bool requested = (mask & (1 << i)) != 0;
+            CHECK(args[i].has_grad() == requested);
+            if (requested) {
+                CHECK(args[i].grad().device() == device);
+                CHECK(args[i].grad().shape() == cpu[i].grad().shape());
+                check_close(values(args[i].grad()), values(cpu[i].grad()), 5e-5f);
+            }
+        }
+    }
+    report("Tensor CUDA: Conv2d all 8 grad masks match CPU; inference forward matches grad forward");
 }
 
 void test_oop_loss_mixed_device_rejects() {
@@ -2833,7 +2888,7 @@ int main(int argc, char** argv) {
     test_oop_backward_cuda_accumulates_and_matmul_works();
     test_oop_diffusion_rejects_cuda_tensor();
     test_oop_optimizer_unsupported_cuda_constructs_reject();
-    test_oop_conv2d_cuda_inputs();
+    test_oop_conv2d_cuda_grad_masks();
     test_oop_loss_mixed_device_rejects();
     test_oop_matmul_rank2_cuda_parity();
     test_oop_matmul_batched_rank3_cuda_parity();

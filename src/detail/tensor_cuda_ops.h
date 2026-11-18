@@ -82,6 +82,7 @@ Tensor cuda_tensor_conv2d_nchw_forward(const Tensor& input,
                                        const Tensor& bias,
                                        int stride,
                                        int pad,
+                                       bool save_col,
                                        Tensor& saved_col);
 Tensor cuda_tensor_conv2d_nchw_backward_input(const Tensor& g,
                                               const Tensor& weight,

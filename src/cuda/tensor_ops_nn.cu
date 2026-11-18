@@ -249,7 +249,8 @@ int spatial_extent(int input, int kernel, int stride, int pad,
 Tensor cuda_tensor_conv2d_nchw_forward(const Tensor& input,
                                        const Tensor& weight,
                                        const Tensor& bias, int stride,
-                                       int pad, Tensor& saved_col) {
+                                       int pad, bool save_col,
+                                       Tensor& saved_col) {
     const int N = static_cast<int>(input.shape()[0]);
     const int C = static_cast<int>(input.shape()[1]);
     const int H = static_cast<int>(input.shape()[2]);
@@ -259,13 +260,15 @@ Tensor cuda_tensor_conv2d_nchw_forward(const Tensor& input,
     const int kW = static_cast<int>(weight.shape()[3]);
     const int oH = spatial_extent(H, kH, stride, pad, "cuda_conv2d");
     const int oW = spatial_extent(W, kW, stride, pad, "cuda_conv2d");
-    const int K = C * kH * kW;
-    const int P = oH * oW;
-    saved_col = Tensor::empty(Shape{N, K, P}, input.device());
+    if (save_col) {
+        const int K = C * kH * kW;
+        const int P = oH * oW;
+        saved_col = Tensor::empty(Shape{N, K, P}, input.device());
+    }
     Tensor out = Tensor::empty(Shape{N, OC, oH, oW}, input.device());
     if (out.elements() == 0) return out;
     set_device(input, "cuda_tensor_conv2d_nchw_forward");
-    if (saved_col.elements() > 0) {
+    if (save_col && saved_col.elements() > 0) {
         conv2d_im2col_kernel<<<blocks(saved_col.elements()), 256>>>(
             tensor_data(input), tensor_data(saved_col),
             static_cast<int>(saved_col.elements()), N, C, H, W,
